@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "state": {
+      "type": "string",
+      "enum": [
+        "thanked",
+        "already-thanked"
+      ]
+    },
+    "note": {
+      "type": "string",
+      "description": "What happened, in one plain sentence."
+    }
+  },
+  "required": [
+    "state",
+    "note"
+  ],
+  "additionalProperties": false
+}

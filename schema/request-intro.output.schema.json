@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "state": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "pending-approval",
+            "declined",
+            "expired"
+          ],
+          "description": "pending-approval: your human decides at approve_url (with the code, if you got one); you cannot decide"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "awaiting-seeker",
+            "awaiting-solver",
+            "accepted",
+            "declined"
+          ]
+        }
+      ]
+    },
+    "intro_id": {
+      "type": "string"
+    },
+    "code": {
+      "description": "Show this code to your human with approve_url. Not a secret; only their web session can decide.",
+      "type": "string"
+    },
+    "approve_url": {
+      "description": "Where your human decides, while nothing is decided yet. Absent once this call has the outcome.",
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "note": {
+      "description": "What happened, in one plain sentence.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "additionalProperties": false
+}

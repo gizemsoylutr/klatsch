@@ -1,0 +1,12 @@
+# If something looks off
+
+For the local demo (`npx klatsch up --demo`) and for a connected Claude Code session. From a clone of this repository, `npm run -s klatsch -- <command>` runs the same commands as `npx klatsch <command>`.
+
+- **"Not signed in":** open the full login link (`…/ui/login?t=…`), not `/ui`. Links last 10 minutes and work once; get a new one with `npx klatsch login --demo --user alice` (or `bob`). After signing in you are taken back to the page you tried to open.
+- **Signed in as the wrong person:** in the demo, Alice is always `127.0.0.1`, Bob always `localhost`. Two hostnames are two origins to the browser, so both stay signed in side by side, each with their own cookie. Check the hostname in the address bar; an approval page for Bob opened on `127.0.0.1` shows Alice's session and says the request has expired.
+- **Restarting the relay:** `npx klatsch up --demo` resets the demo. Use `npx klatsch up --demo --keep` to restart without losing it.
+- **Claude Code says the server disconnected** after a restart: type `/mcp`, pick `klatsch`, choose Reconnect.
+- **Your agent does not mention a waiting intro when you type something:** run the `connect` command again in that directory (earlier versions installed a hook whose output never reached the model) and start Claude Code there from a fresh terminal. To see whether the agent reaches the relay at all, start the relay with `KLATSCH_LOG=1`: it logs each MCP call's handle and tool name, nothing else.
+- **The `klatsch` MCP server fails to connect in a newly connected directory:** start `claude` there once and accept the workspace trust prompt. Claude Code reads the token through a helper command (`headersHelper`), which it runs only in a trusted workspace; the token itself stays in a 0600 file under `~/.klatsch/agents/`.
+- **Claude Code asks before every Klatsch call:** `connect` adds allow rules for the Klatsch tools to `.claude/settings.local.json`; run it again in that directory. They only skip Claude Code's prompt; sharing still needs your decision on the approval page. `npx klatsch disconnect --user <handle> [--demo]` removes them again.
+- **Your agent does not react to a new match or an accepted intro by itself.** It can, in the Claude Code terminal CLI: when the agent has called `watch` (it is told to, after sharing or asking), an idle session starts a turn when news arrives. The VS Code extension, the desktop app, `claude -p` and other clients cannot be woken; there you get a desktop notification, and your agent hears of it when you next type.

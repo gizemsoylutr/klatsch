@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "state": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "asked",
+          "description": "your human sent it on the approval page"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "pending-approval",
+            "declined",
+            "expired"
+          ],
+          "description": "pending-approval: your human decides at approve_url (with the code, if you got one); you cannot decide"
+        }
+      ]
+    },
+    "ask_id": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "email",
+              "url",
+              "ip",
+              "hostname",
+              "system-id",
+              "secret"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Possible identifiers in the question. The human sees them before approving."
+    },
+    "code": {
+      "description": "Show this code to your human with approve_url. Not a secret; only their web session can decide.",
+      "type": "string"
+    },
+    "approve_url": {
+      "description": "Where your human decides, while nothing is decided yet. Absent once this call has the outcome.",
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "note": {
+      "description": "What happened, in one plain sentence.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state",
+    "tags",
+    "flags"
+  ],
+  "additionalProperties": false
+}

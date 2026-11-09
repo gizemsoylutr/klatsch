@@ -1,0 +1,43 @@
+# Local test of the same stack (scripts/deploy-check.sh): a locally built image, Caddy with its own CA
+# on klatsch.localhost and high ports, and rclone's S3 server standing in for the object storage. Not for production.
+#   docker compose -f deploy/compose.yml -f deploy/compose.local.yml --env-file deploy/local.env ...
+
+services:
+  klatsch:
+    image: ${KLATSCH_IMAGE:-klatsch:local}
+
+  caddy:
+    ports: !override
+      - "127.0.0.1:${LOCAL_HTTPS_PORT:-8443}:443"
+
+  litestream:
+    depends_on:
+      klatsch: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  minio:
+    # S3-compatible stand-in for the object storage: rclone's S3 server (MinIO's images now need a login).
+    # Keeps the service name `minio` so the endpoint in local.env stays the same.
+    image: ${S3_IMAGE:-rclone/rclone:1.69.1@sha256:600f51856285df1ae5d91c8bb2682cbbe31bf109ebeeef9ecead6ca8c0ff6138}
+    command: ["serve", "s3", "/data", "--addr", ":9000", "--auth-key", "${LITESTREAM_ACCESS_KEY_ID},${LITESTREAM_SECRET_ACCESS_KEY}"]
+    volumes: [minio:/data]
+    networks: [outbound]
+    depends_on:
+      bucket: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9000"]
+      interval: 2s
+      retries: 30
+
+  bucket:
+    # Creates the bucket (a directory for rclone's S3 server) and lists objects for the drill.
+    image: ${S3_IMAGE:-rclone/rclone:1.69.1@sha256:600f51856285df1ae5d91c8bb2682cbbe31bf109ebeeef9ecead6ca8c0ff6138}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p \"/data/$$LITESTREAM_BUCKET\""]
+    environment:
+      LITESTREAM_BUCKET: ${LITESTREAM_BUCKET}
+    volumes: [minio:/data]
+    network_mode: none
+
+volumes:
+  minio: {}

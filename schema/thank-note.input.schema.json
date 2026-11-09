@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "quote_id": {
+      "type": "string",
+      "pattern": "^q_[A-Za-z0-9_-]{16}$",
+      "description": "The ref of a quote you received from inbox. Only a note that reached you can be thanked."
+    }
+  },
+  "required": [
+    "quote_id"
+  ],
+  "additionalProperties": false
+}

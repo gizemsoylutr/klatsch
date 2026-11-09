@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env*
+!deploy/.env.example
+*.db
+*.db-*
+*.sqlite*
+ops/
+.klatsch/
+test/ui/screenshots/
+test-results/
+playwright-report/
+blob-report/
+docs/flows/*.png
+.claude/worktrees/

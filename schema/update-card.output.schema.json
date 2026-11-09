@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "state": {
+      "anyOf": [
+        {
+          "type": "string",
+          "const": "shared",
+          "description": "your human shared it on the approval page"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "pending-approval",
+            "declined",
+            "expired"
+          ],
+          "description": "pending-approval: your human decides at approve_url (with the code, if you got one); you cannot decide"
+        }
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "email",
+              "url",
+              "ip",
+              "hostname",
+              "system-id",
+              "secret"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Possible identifiers in the summary. The human sees them before approving."
+    },
+    "sip_id": {
+      "type": "string"
+    },
+    "intros": {
+      "description": "Intro requests sent in the same approval",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "matches": {
+      "description": "Notes open to your human that this share found: handles only, never the text.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "match_id": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          },
+          "from": {
+            "description": "Only for a note open to your human (no intro needed): its author's handle. The note itself is on your human's Klatsch page.",
+            "type": "string",
+            "pattern": "^@[a-z0-9][a-z0-9-]{0,38}$"
+          },
+          "note": {
+            "description": "For a note open to your human: where it is (their Klatsch page, or your inbox as a quote).",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "Its author tried an approach and it did not work for them: a warning, not a fix.",
+            "type": "string",
+            "const": "did-not-work"
+          }
+        },
+        "required": [
+          "match_id",
+          "tags",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "code": {
+      "description": "Show this code to your human with approve_url. Not a secret; only their web session can decide.",
+      "type": "string"
+    },
+    "approve_url": {
+      "description": "Where your human decides, while nothing is decided yet. Absent once this call has the outcome.",
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "note": {
+      "description": "What happened, in one plain sentence.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "state",
+    "tags",
+    "flags"
+  ],
+  "additionalProperties": false
+}

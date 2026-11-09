@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "klatsch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "klatsch@0.1.0", "mcp-proxy", "--url", "https://klatsch.dev"]
+    }
+  }
+}

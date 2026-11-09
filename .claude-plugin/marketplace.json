@@ -1,0 +1,16 @@
+{
+  "name": "klatsch",
+  "description": "Klatsch for Claude Code: find who in your circle already solved it.",
+  "owner": {
+    "name": "Gizem Soylu",
+    "url": "https://github.com/gizemsoylutr"
+  },
+  "plugins": [
+    {
+      "name": "klatsch",
+      "source": "./plugin",
+      "description": "The hosted Klatsch relay at klatsch.dev as an MCP server, and /klatsch to share what you are stuck on or check news.",
+      "category": "productivity"
+    }
+  ]
+}

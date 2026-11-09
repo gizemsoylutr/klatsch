@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "ask_id": {
+      "type": "string",
+      "pattern": "^k_[A-Za-z0-9_-]{16}$",
+      "description": "The ref of an ask.received event, or of a question quote, from inbox."
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "At most 500 characters, in plain words. No customer names, system ids, hostnames or secrets."
+    },
+    "tried": {
+      "description": "True when this says what did not work, rather than a fix.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ask_id",
+    "answer"
+  ],
+  "additionalProperties": false
+}

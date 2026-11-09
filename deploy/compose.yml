@@ -1,0 +1,107 @@
+# Klatsch reference stack: the relay, Caddy in front (automatic TLS), Litestream replicating the
+# SQLite database to S3-compatible storage. Self-hosters run exactly this. Settings: .env (see .env.example).
+name: klatsch
+
+services:
+  klatsch:
+    image: ${KLATSCH_IMAGE:-ghcr.io/gizemsoylutr/klatsch:latest}
+    restart: unless-stopped
+    # A minimal init as PID 1 passes SIGTERM on; the relay then closes its server and database.
+    init: true
+    environment:
+      KLATSCH_PUBLIC_URL: https://${KLATSCH_DOMAIN:?set KLATSCH_DOMAIN in .env}
+      KLATSCH_SMTP_URL: ${KLATSCH_SMTP_URL:-}
+      KLATSCH_MAIL_FROM: ${KLATSCH_MAIL_FROM:-}
+      # Optional "Sign in with GitHub" (docs/self-hosting.md): an OAuth App's id, and its secret or a file holding it.
+      KLATSCH_GITHUB_CLIENT_ID: ${KLATSCH_GITHUB_CLIENT_ID:-}
+      KLATSCH_GITHUB_CLIENT_SECRET: ${KLATSCH_GITHUB_CLIENT_SECRET:-}
+      # Optional "Sign in with Google" (docs/self-hosting.md): an OAuth client's id and secret.
+      KLATSCH_GOOGLE_CLIENT_ID: ${KLATSCH_GOOGLE_CLIENT_ID:-}
+      KLATSCH_GOOGLE_CLIENT_SECRET: ${KLATSCH_GOOGLE_CLIENT_SECRET:-}
+      # Who runs this relay, for its /privacy and /terms pages (docs/self-hosting.md). All or none.
+      KLATSCH_OPERATOR_NAME: ${KLATSCH_OPERATOR_NAME:-}
+      KLATSCH_OPERATOR_EMAIL: ${KLATSCH_OPERATOR_EMAIL:-}
+      KLATSCH_OPERATOR_PROCESSORS: ${KLATSCH_OPERATOR_PROCESSORS:-}
+    volumes:
+      - data:/data
+    # No published port: only Caddy reaches it, over the internal network. `outbound` is only for SMTP and
+    # GitHub sign-in: without both, remove it here and the relay has no way out at all.
+    networks: [internal, outbound]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M, pids: 128 }
+    stop_grace_period: 10s
+
+  litestream:
+    image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    restart: unless-stopped
+    # The relay's user (node, 1000), so a restored database is one the relay can open.
+    user: "1000:1000"
+    environment:
+      LITESTREAM_BUCKET: ${LITESTREAM_BUCKET:?set LITESTREAM_BUCKET in .env}
+      LITESTREAM_PATH: ${LITESTREAM_PATH:-klatsch}
+      LITESTREAM_ENDPOINT: ${LITESTREAM_ENDPOINT:?set LITESTREAM_ENDPOINT in .env}
+      LITESTREAM_REGION: ${LITESTREAM_REGION:-eu-central-1}
+      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:?set LITESTREAM_ACCESS_KEY_ID in .env}
+      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:?set LITESTREAM_SECRET_ACCESS_KEY in .env}
+    volumes:
+      - data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    networks: [outbound]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+    depends_on:
+      klatsch: { condition: service_healthy }
+
+  caddy:
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    restart: unless-stopped
+    environment:
+      KLATSCH_DOMAIN: ${KLATSCH_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [internal, outbound]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+    healthcheck:
+      # Caddy's admin API, on localhost inside the container only.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      klatsch: { condition: service_healthy }
+
+networks:
+  # Caddy <-> relay only; no route out.
+  internal:
+    internal: true
+  # Outgoing: ACME for Caddy, object storage for Litestream, SMTP and GitHub sign-in for the relay.
+  outbound: {}
+
+volumes:
+  data: {}
+  caddy_data: {}
+  caddy_config: {}

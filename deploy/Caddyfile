@@ -1,0 +1,30 @@
+# TLS certificates come from Let's Encrypt automatically (or Caddy's own CA for *.localhost).
+# Request URIs stay out of every log: login links (?t=…), invites and email confirmations carry one-time
+# secrets in their query or path. So no access log, and no error log either, which names the URI; the
+# relay's own log (docker compose logs klatsch) still shows its errors, without URIs.
+{
+	admin 127.0.0.1:2019
+	log default {
+		exclude http.log.error
+	}
+}
+
+{$KLATSCH_DOMAIN} {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# The relay sets these on its pages; defaults for everything else, never overriding the relay's.
+		?X-Content-Type-Options "nosniff"
+		?Referrer-Policy "same-origin"
+		?X-Frame-Options "DENY"
+		?Content-Security-Policy "default-src 'none'; frame-ancestors 'none'"
+		-Server
+	}
+	# The relay refuses bigger JSON bodies anyway (4 MiB); stop them here first.
+	request_body {
+		max_size 5MB
+	}
+	# Caddy passes the original Host, which the relay checks against its public URL. It sets
+	# X-Forwarded-For to the client's address and, with no trusted_proxies, ignores what a client sends
+	# there; the relay reads only its last entry, for the per-address limit on GitHub sign-in.
+	reverse_proxy klatsch:7417
+}

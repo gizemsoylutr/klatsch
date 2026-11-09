@@ -1,0 +1,72 @@
+{
+  "name": "klatsch",
+  "version": "0.1.0",
+  "description": "Your circle already knows: share what you learn and find what people you know figured out. Your AI coding agent asks, people decide.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "github-copilot",
+    "ai-agents",
+    "knowledge-sharing",
+    "consent",
+    "privacy"
+  ],
+  "homepage": "https://klatsch.dev",
+  "bugs": {
+    "url": "https://github.com/gizemsoylutr/klatsch/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gizemsoylutr/klatsch.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Gizem Soylu (https://github.com/gizemsoylutr)",
+  "mcpName": "dev.klatsch/klatsch",
+  "type": "module",
+  "bin": {
+    "klatsch": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.map",
+    "!dist/schema/generate.js",
+    "schema/",
+    "CHANGELOG.md",
+    "SECURITY.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "schema": "node src/schema/generate.ts",
+    "schema:check": "node src/schema/generate.ts --check",
+    "demo": "node src/cli.ts up --demo",
+    "e2e": "node --test \"test/e2e/**/*.e2e.ts\" test/e2e/coverage.test.ts",
+    "test:ui": "playwright test",
+    "flows": "node scripts/flows.ts",
+    "flows:check": "node scripts/flows.ts --check",
+    "klatsch": "node src/cli.ts",
+    "pack:check": "npm run build && node scripts/pack-check.ts",
+    "demo:record": "node scripts/record-demo.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "@modelcontextprotocol/hono": "2.0.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "@simplewebauthn/server": "14.0.3",
+    "hono": "4.13.14",
+    "nodemailer": "10.1.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  }
+}

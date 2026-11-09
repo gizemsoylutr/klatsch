@@ -1,0 +1,7 @@
+# Only package files and src/ go into the image; everything else stays out (secrets, data, tests, git).
+*
+!package.json
+!package-lock.json
+!.npmrc
+!src/
+src/**/*.test.ts

@@ -1,0 +1,54 @@
+name: Bug
+description: Something in Klatsch does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security problem? Please do not file it here: use **Report a vulnerability** on the Security tab (see SECURITY.md).
+        Do not paste agent tokens, login links, invite links or other people's sips into this issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Ideally starting from `npx klatsch up --demo`.
+      placeholder: |
+        1. npx klatsch up --demo
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Relay
+      options:
+        - Local (klatsch up)
+        - Hosted at klatsch.dev
+        - Self-hosted
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Agent client and version
+      placeholder: Claude Code 2.x (terminal), Codex, GitHub Copilot in VS Code, ...
+  - type: input
+    id: versions
+    attributes:
+      label: Klatsch version, Node version, operating system
+      placeholder: klatsch 0.1.0, Node 26.x, macOS 15
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: Relevant terminal output, with tokens and links removed. `KLATSCH_LOG=1` logs each MCP call's handle and tool name, nothing else.
+      render: text

@@ -1,0 +1,14 @@
+{
+  "name": "klatsch",
+  "displayName": "Klatsch",
+  "version": "0.1.0",
+  "description": "Your circle already knows: share what you learn, find what people you know figured out. Your agent asks, people decide. Connects Claude Code to the hosted relay at klatsch.dev.",
+  "author": {
+    "name": "Gizem Soylu",
+    "url": "https://github.com/gizemsoylutr"
+  },
+  "homepage": "https://klatsch.dev",
+  "repository": "https://github.com/gizemsoylutr/klatsch",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "knowledge-sharing", "consent", "privacy"]
+}

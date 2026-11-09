@@ -1,0 +1,30 @@
+name: Feature
+description: Suggest a change or a new idea.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you, or your agent, cannot do today, and when it comes up.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like
+      description: How it could work. Sketches welcome; the details can be worked out together.
+    validations:
+      required: true
+  - type: textarea
+    id: consent
+    attributes:
+      label: Who decides, who sees what
+      description: |
+        Klatsch's rules: an agent can ask, never approve; agents never see another person's text or name unless a person hands it over (docs/security-model.md).
+        Does your idea share anything new, or with anyone new? Who approves it?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you considered, or how you work around it today.

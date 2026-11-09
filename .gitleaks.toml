@@ -1,0 +1,31 @@
+# Secret scanning for the whole history (CI job `secrets` in .github/workflows/ci.yml; locally:
+# `gitleaks git --config .gitleaks.toml --redact`). Gitleaks' default rules, plus Klatsch's own token format.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "klatsch-agent-token"
+description = "Klatsch agent token (klt_ and 32 random bytes in base64url)"
+# Exactly 43 base64url characters, not part of a longer run on either side (`\b` would let `-` and `_` through).
+regex = '''(?:^|[^A-Za-z0-9_-])(klt_[A-Za-z0-9_-]{43})(?:[^A-Za-z0-9_-]|$)'''
+secretGroup = 1
+keywords = ["klt_"]
+
+# Each allowlist names one file and, where it is about one value, that value: nothing else is waved through.
+
+[[allowlists]]
+description = "Lockfile integrity hashes are not secrets"
+paths = ['''^package-lock\.json$''']
+
+[[allowlists]]
+description = "The throwaway object-store key of the local test stack (scripts/deploy-check.sh)"
+condition = "AND"
+paths = ['''^deploy/local\.env$''']
+regexes = ['''klatsch-local-only-not-a-secret''']
+
+[[allowlists]]
+description = "The fake OAuth client secret of the GitHub sign-in tests"
+condition = "AND"
+paths = ['''^test/github\.test\.ts$''']
+regexes = ['''gh-secret-value-0123456789''']

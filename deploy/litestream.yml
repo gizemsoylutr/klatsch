@@ -1,0 +1,27 @@
+# Litestream 0.5: continuous replication of the relay's SQLite database (WAL mode) to S3-compatible
+# object storage. Values come from the environment (see .env.example); credentials are read from
+# LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY and never written here.
+dbs:
+  - path: /data/klatsch.db
+    replica:
+      type: s3
+      bucket: ${LITESTREAM_BUCKET}
+      path: ${LITESTREAM_PATH}
+      endpoint: ${LITESTREAM_ENDPOINT}
+      region: ${LITESTREAM_REGION}
+      force-path-style: true
+
+# A full snapshot every day, kept for a week: any point in the last 7 days can be restored.
+snapshot:
+  interval: 24h
+  retention: 168h
+
+# Compaction of the incremental (LTX) files; L0 is continuous. Every compaction and every L0
+# retention check lists the bucket, and Backblaze's free tier allows 2,500 list calls a day: the
+# defaults (a check every 15s, L1 every 5m) need about 6,000 and stop at the cap. Hourly steps need
+# under 100. Uploads are not affected either way; restoring to the minute still works from L0.
+l0-retention: 1h
+l0-retention-check-interval: 1h
+levels:
+  - interval: 1h
+  - interval: 24h
