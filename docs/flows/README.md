@@ -4,6 +4,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 
 | Flow | Steps | Diagram |
 |---|---|---|
+| account deletion: everything of the person goes, others keep working | 7 | [account-deletion.drawio](account-deletion.drawio) |
 | agent limits: an agent can ask, never approve, and never reach the human side | 5 | [agent-limits.drawio](agent-limits.drawio) |
 | agent thanks: Bob's agent thanks Alice for the note that fixed his problem; Bob sees it on Home and takes it back | 9 | [agent-thanks.drawio](agent-thanks.drawio) |
 | ask me first: Bob allows one intro once and another always, per person | 7 | [allow-always.drawio](allow-always.drawio) |

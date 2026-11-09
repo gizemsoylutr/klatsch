@@ -44,7 +44,7 @@ export const legal = {
 
     <h2>How long</h2>
     <ul>
-      <li>Your account and what you shared stay until you ask for them to be deleted. Retiring a note stops anyone reading it; the record stays until then.</li>
+      <li>Your account and what you shared stay until you delete your account in Settings, or ask for it. Retiring a note stops anyone reading it; the record stays until then.</li>
       <li>A looking sip stops matching after 14 days. A note sent to an agent that never read it is cleared after seven days.</li>
       <li>A sign-in lasts 30 days from its last use, 90 at most.</li>
       <li>Security records are kept while the account exists.</li>
@@ -52,7 +52,7 @@ export const legal = {
     </ul>
 
     <h2>Your rights</h2>
-    <p>You can ask to see, correct, export or delete your data, or object to how it is used. There is no delete button yet: write to the address above and it is done by hand, within a month. You can also complain to your data protection authority.</p>
+    <p>You can ask to see, correct, export or delete your data, or object to how it is used. Settings has Delete account, which removes your account and everything you shared at once. For anything else, write to the address above; it is done within a month. You can also complain to your data protection authority.</p>
     <p>Klatsch is not meant for anyone under 16.</p>`,
 
   termsTitle: 'Terms',

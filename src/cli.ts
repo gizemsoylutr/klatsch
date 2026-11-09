@@ -59,6 +59,9 @@ const USAGE = `Usage:
   klatsch token --user <handle> [--demo] [--data ...]      issue a new agent token
   klatsch revoke --user <handle> [--demo] [--data ...]     revoke all of a user's agent tokens
   klatsch login --user <handle> [--demo] [--data ...]      print a new web login link (valid 10 minutes)
+  klatsch delete --user <handle> --yes [--data ...]        delete that person's account and everything they
+                                                           shared, at once, as the privacy page promises when
+                                                           they ask by email (the same as Settings, Delete account)
   klatsch harvest --repo <dir> [--since "90 days"] [--limit 20]
                                                            list your own fix commits in that one repository as
                                                            candidates for solved sips, as JSON; runs on this
@@ -425,6 +428,7 @@ function main(): void {
       title: { type: 'string' },
       body: { type: 'string' },
       'status-line': { type: 'boolean', default: false },
+      yes: { type: 'boolean', default: false },
     },
   });
   // The environment (a container) first, flags over it.
@@ -601,6 +605,14 @@ function main(): void {
       if (owner && owner.id !== id) throw new Error('That address already belongs to another person here.');
       klatsch.setVerifiedEmail(id, address, 'cli');
       console.log(`@${values.user} can now sign in by email at that address.`);
+      return;
+    }
+    case 'delete': {
+      if (!values.user || !values.yes) throw new Error(USAGE);
+      const { klatsch, secret } = open(base);
+      klatsch.useSecret(secret);
+      klatsch.deleteAccount(userId(klatsch, values.user), 'cli');
+      console.log(`Deleted @${values.user} and everything they shared. Backups keep it until they roll over.`);
       return;
     }
     case 'revoke': {

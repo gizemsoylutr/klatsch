@@ -1774,6 +1774,47 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     return c.redirect('/ui/settings', 303);
   });
 
+  web.get('/settings/delete', (c) => c.html(deletePage(c.get('userId'), c.get('csrf'), viewer(c))));
+
+  web.post('/settings/delete', async (c) => {
+    const userId = c.get('userId');
+    const form = await c.req.parseBody();
+    const typed = String(form.handle ?? '').trim().replace(/^@/, '').toLowerCase();
+    if (typed !== klatsch.user(userId).handle.toLowerCase()) return c.html(deletePage(userId, c.get('csrf'), viewer(c), true), 400);
+    klatsch.deleteAccount(userId, 'web');
+    deleteCookie(c, COOKIE, { path: '/ui' });
+    return c.html(notice(copy.settings.deletedTitle, html`<p class="sub">${copy.settings.deletedLine}</p>`, false));
+  });
+
+  /** What deleting takes, the circles that change hands, and a field for the handle: a second look, not a speed bump. */
+  function deletePage(userId: string, csrf: string, who: ReturnType<typeof viewer>, mismatch = false) {
+    const t = copy.settings;
+    const handle = klatsch.user(userId).handle;
+    const handedOn = (
+      db
+        .prepare(
+          `SELECT c.name FROM memberships m JOIN circles c ON c.id = m.circle_id WHERE m.user_id = ? AND m.role = 'owner'
+             AND EXISTS (SELECT 1 FROM memberships o WHERE o.circle_id = m.circle_id AND o.user_id <> m.user_id) ORDER BY c.name`,
+        )
+        .all(userId) as { name: string }[]
+    ).map((r) => r.name);
+    return dialog(
+      t.deleteTitle,
+      who,
+      html`<h1 id="title">${t.deleteTitle}</h1>
+        <ul class="sub">${t.deleteGoes.map((line) => html`<li>${line}</li>`)}</ul>
+        ${handedOn.length ? html`<p class="sub">${t.deleteCircles(handedOn)}</p>` : ''}
+        <p class="sub">${t.deleteBackups}</p>
+        ${mismatch ? html`<p class="flag" role="alert">${t.deleteMismatch}</p>` : ''}
+        <form method="post" action="/ui/settings/delete">
+          <input type="hidden" name="csrf" value="${csrf}" />
+          <label class="sub" for="handle">${t.deleteConfirmLabel(handle)}</label>
+          <input id="handle" type="text" name="handle" autocomplete="off" autocapitalize="none" spellcheck="false" required />
+          <div class="two"><a class="button" href="/ui/settings">${t.cancel}</a><button class="primary">${t.deleteConfirm}</button></div>
+        </form>`,
+    );
+  }
+
   web.post('/logout', (c) => {
     endSession(db, secret, c.get('session'));
     deleteCookie(c, COOKIE, { path: '/ui' });
@@ -2132,7 +2173,16 @@ function settingsPage(user: UserRow, elsewhere: number, passkeys: { list: Passke
     ${grantList(copy.consent.showHeading, grants.filter((g) => g.kind === 'show'), csrf)}
     ${grantList(copy.consent.deliverHeading, grants.filter((g) => g.kind === 'deliver'), csrf)}
     ${thanksSettings(helped, Boolean(user.agent_thanks), csrf)}
-    ${canMail ? emailSettings(user, csrf) : ''}`;
+    ${canMail ? emailSettings(user, csrf) : ''}
+    <section class="sec" id="delete">
+      <h2>${t.deleteHeading}</h2>
+      <div class="group">
+        <div class="row">
+          <div class="main"><span>${t.deleteHeading}</span><span class="m">${t.deleteLine}</span></div>
+          <a class="button" href="/ui/settings/delete">${t.deleteOpen}</a>
+        </div>
+      </div>
+    </section>`;
 }
 
 /** Home's one-time offer to save a passkey; hidden until the script finds the browser can make one. */

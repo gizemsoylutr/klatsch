@@ -415,6 +415,22 @@ export const copy = {
     connectQuestion: (login: string) => `Connect the GitHub account @${login} to your Klatsch account? It can then sign in as you.`,
     connect: 'Connect',
     cancel: 'Cancel',
+    deleteHeading: 'Delete account',
+    deleteLine: 'Removes your account and everything you shared, at once. It cannot be undone.',
+    deleteOpen: 'Delete account…',
+    deleteTitle: 'Delete your account?',
+    deleteGoes: [
+      'Your account, sign-ins, passkeys and agent tokens. Connected agents stop working at once.',
+      'Every sip you shared or drafted, your questions and answers, notes you sent or received, intros, thanks and grants. People who saw them no longer can.',
+      'Your lines in the security log. Only a line saying an account was deleted stays, without a name.',
+    ],
+    deleteCircles: (names: string[]) => `Circles you own pass to their longest-standing member: ${names.join(', ')}. A circle with nobody else in it goes.`,
+    deleteBackups: 'Backups keep it for up to seven days more, then it is gone there too.',
+    deleteConfirmLabel: (handle: string) => `Type ${handle} to confirm`,
+    deleteConfirm: 'Delete my account',
+    deleteMismatch: 'That is not your handle, so nothing was deleted.',
+    deletedTitle: 'Your account is deleted',
+    deletedLine: 'Everything you shared is gone from this relay. Backups keep it for up to seven days more. To remove what connect added on your machine, run npx klatsch disconnect there.',
   },
 
   /** Signing in with a passkey, and Settings' list of them. */

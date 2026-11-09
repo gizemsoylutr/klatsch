@@ -34,7 +34,7 @@ describe('privacy and terms pages', () => {
     assert.ok(html.includes('Ada &lt;Lovelace&gt;') && !html.includes('Ada <Lovelace>'));
     assert.ok(html.includes('ada@example.org') && html.includes('Hosting: Example Cloud'));
     assert.match(html, /Whoever runs a relay can read everything on it/);
-    assert.match(html, /There is no delete button yet/);
+    assert.match(html, /Settings has Delete account, which removes your account and everything you shared at once\./);
     assert.match(csp, /default-src 'none'/);
   });
 

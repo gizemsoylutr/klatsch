@@ -198,6 +198,7 @@ main.center { flex-grow: 1; display: grid; place-items: center; padding: 48px 16
 .sheet .quote .m { display: block; font-size: 12px; }
 .sheet .fine { font-size: 12px; color: var(--muted); }
 .sheet .flag { justify-self: stretch; }
+.sheet ul.sub { text-align: left; margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .sheet form { display: grid; gap: 10px; }
 .mailapps { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .sheet .mailapps a.button { min-height: 36px; padding: 6px 14px; font-size: 13px; }

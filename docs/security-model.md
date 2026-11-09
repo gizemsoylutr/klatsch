@@ -257,6 +257,18 @@ A `tried` sip says an approach did not work. It is stored as a note, so every ru
 
 Accepted risk, as for "Always send": with "always" both ways, two people's agents can hand each other text without a click each time. Choose it only for someone whose words you would paste in yourself.
 
+### Deleting an account
+
+Settings has "Delete account": a page says what goes and which circles change hands, and the person types their handle to confirm (a wrong one deletes nothing). The operator can do the same for someone who asks by email: `klatsch delete --user <handle> --yes`. It happens at once, in one transaction:
+
+- Every row that is the person's goes, and everything that refers to it: sips and drafts, cards, questions and answers, quotes, matches and intros with others, thanks, grants, approvals, tokens, sessions, passkeys and sign-in records. The deletion follows the schema's foreign keys (a row that needs its parent goes too, an optional reference is cleared), so a table added later is covered without a change to it.
+- Other people's news about those things goes too (events whose reference was deleted), so nobody keeps a pointer to something gone.
+- A circle the person owned passes to its longest-standing member unless it has another owner; a circle with nobody else in it goes.
+- Their lines in the security log go. One line stays, `account.delete` with no person and no reference, so the operator can show a deletion happened.
+- The database runs with `secure_delete`, so the freed pages are overwritten. Backups still hold it until they roll over (seven days with the shipped Litestream settings), which the privacy page says.
+
+Connected agents stop working at once (their tokens are gone); the files `klatsch connect` wrote stay on the person's machine until they run `klatsch disconnect`.
+
 ### The Notes page
 
 `/ui/notes` lists what people in the reader's private circles chose to show there, newest 100, with their names, so a note can reach people who were not looking for it. This widens who reads a note, so it has its own rules:

@@ -856,6 +856,37 @@ export class Klatsch {
   }
 
   /**
+   * The person asked for their account to be deleted (Settings, or the operator by `klatsch delete`): everything
+   * that is theirs goes, now, in one transaction. Their sips, drafts, cards, asks, quotes, matches and intros
+   * with others, thanks, grants, tokens, sessions, passkeys, sign-in records, and their lines in the security
+   * log; other people's news about those things too. A circle they own passes to its longest-standing member
+   * (if it has no other owner); a circle with nobody else in it goes. What is left is one log line without a
+   * name, so the operator can show a deletion happened. Backups still hold it for as long as the privacy page says.
+   * Walks the foreign keys of the schema, so a table added later is covered without a change here.
+   */
+  deleteAccount(userId: string, via: Via): void {
+    this.user(userId);
+    transaction(this.db, () => {
+      const owned = this.db.prepare(`SELECT circle_id FROM memberships WHERE user_id = ? AND role = 'owner'`).all(userId) as { circle_id: string }[];
+      const removed = new Set<string>();
+      for (const { circle_id } of owned) {
+        const others = this.db.prepare(`SELECT user_id, role FROM memberships WHERE circle_id = ? AND user_id <> ? ORDER BY created_at, user_id`).all(circle_id, userId) as {
+          user_id: string;
+          role: string;
+        }[];
+        if (!others.length) purge(this.db, 'circles', 'id', [circle_id], removed);
+        else if (!others.some((m) => m.role === 'owner')) this.db.prepare(`UPDATE memberships SET role = 'owner' WHERE circle_id = ? AND user_id = ?`).run(circle_id, others[0]!.user_id);
+      }
+      this.db.prepare('DELETE FROM connect_requests WHERE user_id = ?').run(userId);
+      purge(this.db, 'users', 'id', [userId], removed);
+      const ids = JSON.stringify([...removed]);
+      this.db.prepare('DELETE FROM events WHERE ref IN (SELECT value FROM json_each(?))').run(ids);
+      this.db.prepare(`DELETE FROM audit WHERE user_id = ? OR ref LIKE '%' || ? || '%' OR ref IN (SELECT value FROM json_each(?))`).run(userId, userId, ids);
+      this.audit(null, via, 'account.delete');
+    });
+  }
+
+  /**
    * Intros still waiting for the solver that no circle backs any more, one both sips were shared in and both
    * people are still in (a removal, a circle gone public) are declined; the seeker hears so, as with any decline, unless they are the one `removed`.
    */
@@ -2432,4 +2463,47 @@ export class Klatsch {
     const user = this.user(userId);
     afterCommit(this.db, () => this.notify({ id: user.id, handle: user.handle }, message));
   }
+}
+
+/**
+ * Deletes the rows of `table` whose `column` is one of `values`, and first whatever refers to them, following
+ * the schema's foreign keys: a row that must have its parent goes too, an optional reference is cleared.
+ * Every `id` of a deleted row is added to `removed`, so references kept as plain text (event refs) can go after.
+ */
+function purge(db: Db, table: string, column: string, values: readonly unknown[], removed: Set<string>, depth = 0): void {
+  if (!values.length) return;
+  if (depth > 12) throw new Error(`purge: references nest too deep at ${table}`);
+  const list = JSON.stringify(values);
+  const tables = (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`).all() as { name: string }[]).map((t) => t.name);
+  for (const child of tables) {
+    const keys = db.prepare(`SELECT "from", "to", "table" FROM pragma_foreign_key_list(?)`).all(child) as { from: string; to: string | null; table: string }[];
+    for (const key of keys) {
+      if (key.table !== table || (key.to ?? 'id') !== column) continue;
+      const info = db.prepare(`SELECT "notnull" FROM pragma_table_info(?) WHERE name = ?`).get(child, key.from) as { notnull: number };
+      if (!info.notnull && !(child === table && key.from === column)) {
+        db.prepare(`UPDATE "${child}" SET "${key.from}" = NULL WHERE "${key.from}" IN (SELECT value FROM json_each(?))`).run(list);
+        continue;
+      }
+      if (child === table) continue;
+      // Columns of `child` that other tables point at: their values lead to the next rows to go.
+      const targets = new Set<string>();
+      for (const other of tables) {
+        for (const k of db.prepare(`SELECT "to", "table" FROM pragma_foreign_key_list(?)`).all(other) as { to: string | null; table: string }[]) {
+          if (k.table === child) targets.add(k.to ?? 'id');
+        }
+      }
+      const columns = (db.prepare(`SELECT name FROM pragma_table_info(?)`).all(child) as { name: string }[]).map((c) => c.name);
+      if (columns.includes('id')) targets.add('id');
+      for (const target of targets) {
+        const rows = db.prepare(`SELECT DISTINCT "${target}" AS v FROM "${child}" WHERE "${key.from}" IN (SELECT value FROM json_each(?)) AND "${target}" IS NOT NULL`).all(list) as { v: unknown }[];
+        purge(db, child, target, rows.map((r) => r.v), removed, depth + 1);
+      }
+      if (columns.includes('id')) {
+        for (const r of db.prepare(`SELECT id FROM "${child}" WHERE "${key.from}" IN (SELECT value FROM json_each(?))`).all(list) as { id: unknown }[]) removed.add(String(r.id));
+      }
+      db.prepare(`DELETE FROM "${child}" WHERE "${key.from}" IN (SELECT value FROM json_each(?))`).run(list);
+    }
+  }
+  if (column === 'id') for (const v of values) removed.add(String(v));
+  db.prepare(`DELETE FROM "${table}" WHERE "${column}" IN (SELECT value FROM json_each(?))`).run(list);
 }

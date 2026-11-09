@@ -41,6 +41,12 @@ docker compose exec klatsch klatsch init --user <handle> --name "<Your name>" --
 docker compose exec klatsch klatsch login --user <handle>
 ```
 
+People delete their own account in Settings. When someone asks you by email instead, delete it for them (at once, everything that was theirs; see "Deleting an account" in the security model):
+
+```sh
+docker compose exec klatsch klatsch delete --user <handle> --yes
+```
+
 Everyone else joins by an invite link from the Circle page, or by a circle's public join link. To open a public circle at launch (the reference instance calls it "commons"; only the operator turns a link on, its owner can turn it off on the Circle page):
 
 ```sh
