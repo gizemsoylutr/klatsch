@@ -1,11 +1,12 @@
 import { createMcpHonoApp } from '@modelcontextprotocol/hono';
-import { createMcpHandler, OAuthError, OAuthErrorCode, requireBearerAuth, type AuthInfo } from '@modelcontextprotocol/server';
+import { createMcpHandler, getOAuthProtectedResourceMetadataUrl, OAuthError, OAuthErrorCode, requireBearerAuth, type AuthInfo } from '@modelcontextprotocol/server';
 import type { Context, Hono } from 'hono';
 import { verifyToken } from '../auth/tokens.ts';
 import { baseFor, relayOrigins } from '../config.ts';
 import { agentHandle, type Klatsch } from '../service.ts';
 import { badgeRoute } from './badge.ts';
 import { buildMcpServer } from './mcp.ts';
+import { oauthOffered, oauthRoutes } from './oauth.ts';
 import { landing, legalPage } from './layout.ts';
 import { pageHeaders, webRoutes } from './web.ts';
 
@@ -56,6 +57,8 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
 
   const gate = requireBearerAuth({
     expectedResource: resource,
+    // A client without a token finds the OAuth server from the 401 (RFC 9728), as ChatGPT and claude.ai do.
+    ...(oauthOffered(config.publicUrl) ? { resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resource) } : {}),
     verifier: {
       async verifyAccessToken(token: string): Promise<AuthInfo> {
         const verified = verifyToken(db, secret, token);
@@ -91,6 +94,7 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
     return handler.fetch(c.req.raw, { authInfo: auth, parsedBody: c.get('parsedBody') });
   });
 
+  oauthRoutes(app, klatsch, secret, resource);
   app.route('/ui', webRoutes(klatsch, secret));
   // The only public page under a person's control: their opt-in thanks badge, a number behind a random id.
   app.get('/badge/:file', badgeRoute(klatsch));

@@ -257,6 +257,18 @@ A `tried` sip says an approach did not work. It is stored as a note, so every ru
 
 Accepted risk, as for "Always send": with "always" both ways, two people's agents can hand each other text without a click each time. Choose it only for someone whose words you would paste in yourself.
 
+### Apps connected by OAuth
+
+Some MCP clients cannot be handed a token: ChatGPT and claude.ai connectors only speak OAuth. For them the relay is its own OAuth 2.1 authorization server, on a relay with an https public URL (or on this machine):
+
+- **Discovery.** `/mcp` answers a request without a token with `401` and `WWW-Authenticate: Bearer resource_metadata=…` (RFC 9728). The protected resource document names the relay as its authorization server; `/.well-known/oauth-authorization-server` (RFC 8414) lists the endpoints.
+- **Registration** (`POST /oauth/register`, RFC 7591) is open, as MCP clients expect, and limited to 20 an hour per address. A client is a name and one to five redirect URIs, https or http to localhost only, never with a fragment; it gets no secret (`token_endpoint_auth_method: none`), PKCE does that work. Registering grants nothing.
+- **Consent** (`/ui/oauth/authorize`) is a page in the person's signed-in session. An unknown client or a redirect URI it did not register is shown there and never followed. The page names the app (its name, cleaned of control characters) and the host it returns to, says what an agent can and cannot do, and asks for a click; Cancel returns `access_denied`. Signed out, the person signs in and lands back on the page, also when another site sent them (it only asks). The page's form-action allows the relay and that one redirect origin, so the answer can go back to the app; `frame-ancestors 'none'` as everywhere.
+- **Codes** are one-time, ten minutes, bound to the client, the redirect URI and the PKCE challenge (S256 only), and stored as keyed hashes. A code used twice revokes the token it bought (RFC 6749 4.1.2). The answer carries `iss` (RFC 9207). A `resource` other than the relay's `/mcp` is refused (`invalid_target`).
+- **The token is an ordinary agent token**: a row in `tokens`, with the same scopes and lifetime as any agent's, bound to the relay's `/mcp`, listed on the Tokens page under the app's name and revoked there. An app connected this way can do exactly what Claude Code can, and approves nothing: every share, intro, question and answer still waits for the person on an approval page (where the client cannot open one, the agent gets a code to show).
+- **Refresh tokens** last 30 days and work once. A refresh rotates the same token row (the old access token stops at once), so one connection is one entry on the Tokens page, and revoking it ends the connection: a refresh of a revoked token is refused. A refresh token presented again more than 30 seconds after its use revokes the connection (reuse detection); within 30 seconds it is only refused, for clients that retry.
+- Deleting the account deletes the codes, refresh tokens and tokens with it. Registered clients are not the person's and stay.
+
 ### Deleting an account
 
 Settings has "Delete account": a page says what goes and which circles change hands, and the person types their handle to confirm (a wrong one deletes nothing). The operator can do the same for someone who asks by email: `klatsch delete --user <handle> --yes`. It happens at once, in one transaction:

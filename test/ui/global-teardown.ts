@@ -13,6 +13,15 @@ const NOT_IN_A_BROWSER = new Set([
   // The side of `klatsch connect` that waits in the terminal: JSON, refused with an Origin, so no page can use it.
   'POST /ui/connect/start',
   'POST /ui/connect/poll',
+  // OAuth's machine side: discovery documents, registration and the token endpoint, called by the app's server
+  // (test/e2e/oauth.e2e.ts). The person's side, the consent page, is opened in a browser.
+  'ALL /.well-known/oauth-protected-resource/mcp',
+  'ALL /.well-known/oauth-authorization-server',
+  'GET /.well-known/oauth-protected-resource',
+  'OPTIONS /oauth/register',
+  'POST /oauth/register',
+  'OPTIONS /oauth/token',
+  'POST /oauth/token',
 ]);
 
 const pattern = (path: string) =>

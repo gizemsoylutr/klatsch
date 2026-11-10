@@ -9,6 +9,7 @@ import { claimEmailLogin, claimEmailLoginByCode, createEmailLogin, findEmailLogi
 import { authorizeUrl, identify, newAttempt, type GitHubIdentity } from '../auth/github.ts';
 import { googleAuthorizeUrl, identifyGoogle, newGoogleAttempt, type GoogleIdentity } from '../auth/google.ts';
 import { createInvite, findInvite, inviteById } from '../auth/invites.ts';
+import { issueCode, readAuthorize, redirectTo } from '../auth/oauth.ts';
 import { passkeyById, passkeysOf, transportsOf, type PasskeyView } from '../auth/passkeys.ts';
 import { CONNECT_INTERVAL_S, decideConnect, findConnect, pollConnect, startConnect } from '../auth/connect-requests.ts';
 import { connectCommand, createToken, mcpAddCommand, revokeToken, tokensOf, type TokenListing } from '../auth/tokens.ts';
@@ -149,7 +150,7 @@ function shortLived<T>(ttlMs = NEXT_TTL_MS) {
 }
 
 /** At most `limit` per key in a window. Bounded like `shortLived`: windows end in the order they started. */
-function perKeyLimit(limit: number, windowMs: number) {
+export function perKeyLimit(limit: number, windowMs: number) {
   const windows = new Map<string, { start: number; count: number }>();
   return (key: string): boolean => {
     const now = Date.now();
@@ -193,11 +194,19 @@ const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; 
 /** The pages with a passkey button: the same, plus the one same-origin script and its posts back to the relay. */
 const SCRIPT_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
+/**
+ * The OAuth consent page: its form is answered with a redirect back to the client, and browsers check that
+ * redirect against form-action too, so that one origin (a registered, validated redirect URI's) is added.
+ */
+const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self' ";
+const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin}; frame-ancestors 'none'; base-uri 'none'`;
+
 /** The headers of every page the relay serves to a browser: the web UI and the landing page at `/`. */
 export const pageHeaders: MiddlewareHandler = async (c, next) => {
   await next();
   // Only a page with a passkey button set the script policy itself (sign-in and Settings); it keeps it, all else gets none.
-  c.header('Content-Security-Policy', c.res.headers.get('Content-Security-Policy') === SCRIPT_CSP ? SCRIPT_CSP : PAGE_CSP);
+  const own = c.res.headers.get('Content-Security-Policy');
+  c.header('Content-Security-Policy', own === SCRIPT_CSP || (own !== null && own.startsWith(CONSENT_CSP_START)) ? own : PAGE_CSP);
   // same-origin, not no-referrer: under no-referrer browsers send `Origin: null` on form posts,
   // which the Origin checks then refuse. The login token still never leaves this origin.
   c.header('Referrer-Policy', 'same-origin');
@@ -943,8 +952,12 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const found = session ? readSession(db, secret, session) : undefined;
     if (!found || !session) {
       // Back to this page after the login link, for ten minutes; same cookie rules as the session.
-      if (c.req.method === 'GET' && isPage(c.req.path) && navigatedHere(c)) {
-        setCookie(c, NEXT_COOKIE, returns.put(c.req.path), { httpOnly: true, sameSite: 'Lax', secure, path: '/ui', maxAge: NEXT_TTL_MS / 1000 });
+      // The consent page is reached from the app being connected (another site), with its request in the query;
+      // landing there after signing in only shows the question, so it may come back from anywhere, query and all.
+      const consent = c.req.method === 'GET' && c.req.path === '/ui/oauth/authorize';
+      if (consent || (c.req.method === 'GET' && isPage(c.req.path) && navigatedHere(c))) {
+        const back = consent ? `${c.req.path}${new URL(c.req.url).search}` : c.req.path;
+        setCookie(c, NEXT_COOKIE, returns.put(back), { httpOnly: true, sameSite: 'Lax', secure, path: '/ui', maxAge: NEXT_TTL_MS / 1000 });
       }
       const t = copy.signIn;
       // At a public join link, the page says which circle; anyone may join it, so that is no secret.
@@ -1772,6 +1785,61 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const ended = endOtherSessions(db, secret, c.get('userId'), c.get('session'));
     klatsch.audit(c.get('userId'), 'web', 'session.end-others', String(ended));
     return c.redirect('/ui/settings', 303);
+  });
+
+  // OAuth consent: an app (ChatGPT, claude.ai) asks to act as this person's agent. Nothing is approved here but
+  // the connection itself; every share and answer still waits for the person, as with any agent.
+  const oauthResources = [`${config.publicUrl}/mcp`, config.publicUrl];
+  const oauthAnswer = (c: Context, read: ReturnType<typeof readAuthorize>) => {
+    if ('fatal' in read) {
+      const t = copy.oauth;
+      return c.html(notice(t.badTitle, html`<p class="sub">${read.fatal === 'unknown-client' ? t.unknownClient : t.badRedirect}</p>${homeLink}`), 400);
+    }
+    if ('back' in read) {
+      const { redirectUri, state, error, description } = read.back;
+      return c.redirect(redirectTo(redirectUri, { error, error_description: description, state, iss: config.publicUrl }), 303);
+    }
+    return undefined;
+  };
+  web.get('/oauth/authorize', (c) => {
+    const read = readAuthorize(db, c.req.query(), oauthResources);
+    const answered = oauthAnswer(c, read);
+    if (answered || !('ok' in read)) return answered!;
+    const { client, redirectUri, state, challenge } = read.ok;
+    const t = copy.oauth;
+    const host = new URL(redirectUri).host;
+    c.header('Content-Security-Policy', consentCsp(redirectUri));
+    const hidden = (name: string, value: string | undefined) => (value === undefined ? '' : html`<input type="hidden" name="${name}" value="${value}" />`);
+    return c.html(
+      dialog(
+        t.title(client.name),
+        viewer(c),
+        html`${icon()}
+          <h1 id="title">${t.title(client.name)}</h1>
+          <p class="sub">${t.lead(client.name, host)}</p>
+          <ul class="sub">${t.points.map((line) => html`<li>${line}</li>`)}</ul>
+          <p class="flag">${t.warn(host)}</p>
+          <form method="post" action="/ui/oauth/authorize">
+            <input type="hidden" name="csrf" value="${c.get('csrf')}" />
+            ${hidden('client_id', client.id)}${hidden('redirect_uri', redirectUri)}${hidden('state', state)}${hidden('code_challenge', challenge)}
+            ${hidden('code_challenge_method', 'S256')}${hidden('response_type', 'code')}${hidden('resource', c.req.query('resource'))}
+            <div class="two"><button name="decision" value="deny">${t.deny}</button><button class="primary" name="decision" value="allow">${t.allow}</button></div>
+          </form>`,
+      ),
+    );
+  });
+  web.post('/oauth/authorize', async (c) => {
+    const form = Object.fromEntries(Object.entries(await c.req.parseBody()).filter((e): e is [string, string] => typeof e[1] === 'string'));
+    const read = readAuthorize(db, form, oauthResources);
+    const answered = oauthAnswer(c, read);
+    if (answered || !('ok' in read)) return answered!;
+    const request = read.ok;
+    if (form.decision !== 'allow') {
+      return c.redirect(redirectTo(request.redirectUri, { error: 'access_denied', state: request.state, iss: config.publicUrl }), 303);
+    }
+    const code = issueCode(db, secret, c.get('userId'), request);
+    klatsch.audit(c.get('userId'), 'web', 'oauth.authorize', request.client.id);
+    return c.redirect(redirectTo(request.redirectUri, { code, state: request.state, iss: config.publicUrl }), 303);
   });
 
   web.get('/settings/delete', (c) => c.html(deletePage(c.get('userId'), c.get('csrf'), viewer(c))));

@@ -433,6 +433,23 @@ export const copy = {
     deletedLine: 'Everything you shared is gone from this relay. Backups keep it for up to seven days more. To remove what connect added on your machine, run npx klatsch disconnect there.',
   },
 
+  /** The OAuth consent page: an app such as ChatGPT asks to act as the person's agent. */
+  oauth: {
+    title: (name: string) => `Connect ${name}?`,
+    lead: (name: string, host: string) => `${name}, at ${host}, asks to act as your agent here, as Claude Code does.`,
+    points: [
+      'It can draft sips, look for matches, ask for intros, ask one person, and read your news.',
+      'It can never approve anything: every share, intro, question and answer still waits for you on a page like this.',
+      'It stays connected until you revoke it on the Tokens page.',
+    ],
+    warn: (host: string) => `Connect only if you started this in the app at ${host} just now.`,
+    allow: 'Connect',
+    deny: 'Cancel',
+    badTitle: 'Cannot connect this app',
+    unknownClient: 'Klatsch does not know this app. Start connecting again from the app.',
+    badRedirect: 'This app asked to send you to an address it did not register. Nothing was connected.',
+  },
+
   /** Signing in with a passkey, and Settings' list of them. */
   passkeys: {
     signIn: 'Sign in with a passkey',

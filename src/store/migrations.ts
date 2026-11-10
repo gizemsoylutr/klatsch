@@ -554,4 +554,32 @@ export const migrations: string[] = [
   CREATE INDEX asks_by_helper ON asks (helper_id, state);
   CREATE INDEX asks_by_asker ON asks (asker_id, state);
   `,
+  // OAuth for MCP clients that cannot be given a token (ChatGPT, claude.ai): registered public clients, one-time
+  // codes and rotating refresh tokens, stored as keyed hashes. The access token is an ordinary row in tokens.
+  `
+  CREATE TABLE oauth_clients (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    redirect_uris TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE oauth_codes (
+    hash TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL REFERENCES oauth_clients(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    redirect_uri TEXT NOT NULL,
+    challenge TEXT NOT NULL,
+    token_id TEXT REFERENCES tokens(id),
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER
+  );
+  CREATE TABLE oauth_refresh (
+    hash TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL REFERENCES oauth_clients(id),
+    token_id TEXT NOT NULL REFERENCES tokens(id),
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER
+  );
+  CREATE INDEX oauth_refresh_by_token ON oauth_refresh (token_id);
+  `,
 ];
