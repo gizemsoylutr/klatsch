@@ -1047,13 +1047,15 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     }
     // Saving a passkey is offered once, where it can work, until there is one or the person says "Not now".
     const offer = Boolean(passkeyAt(c)) && user.passkey_offer_dismissed_at === null && passkeysOf(db, userId).length === 0;
-    if (offer) c.header('Content-Security-Policy', SCRIPT_CSP);
+    // Notifications are offered once on Home, when no device has them and the passkey offer is not showing.
+    const pushOffer = !offer && user.push_offer_dismissed_at === null && klatsch.pushSubscriptionsOf(userId).length === 0;
+    if (offer || pushOffer) c.header('Content-Security-Policy', SCRIPT_CSP);
     return show(
       c,
       user.display_name,
       'home',
       // On the first Home after signing in, the script opens the browser's own passkey dialog by itself, once.
-      html`${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${dashboard(
+      html`${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${dashboard(
         user,
         klatsch.sipsOf(userId),
         klatsch.introsOf(userId),
@@ -1336,6 +1338,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         <section class="sec">
           <code class="cmd">${invite.link}</code>
           <p class="hint">${copy.circle.friendInviteNote}</p>
+          <p class="hint">${copy.push.hint} <a href="/ui/settings#notifications">${copy.push.hintLink}</a></p>
           <p class="hint"><a href="/ui/circle">${copy.circle.backToCircles}</a></p>
         </section>`,
     );
@@ -1389,7 +1392,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     }
     const text =
       joined === 'already-friends' ? copy.invite.alreadyFriends(invite.inviterHandle) : joined === 'joined' ? copy.invite.joined(invite.circleName) : copy.invite.alreadyMember(invite.circleName);
-    return c.html(notice(copy.invite.title, html`<p class="sub">${text}</p>${joined === 'joined' ? html`<p class="sub">${copy.invite.chatAppAgain}</p>` : ''}${circlesLink}`, false));
+    return c.html(notice(copy.invite.title, html`<p class="sub">${text}</p>${joined === 'joined' ? html`<p class="sub">${copy.invite.chatAppAgain}</p><p class="sub">${copy.push.hint} <a href="/ui/settings#notifications">${copy.push.hintLink}</a></p>` : ''}${circlesLink}`, false));
   });
 
   // ---------- agent tokens ----------
@@ -1851,6 +1854,11 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     }
     // Saved from Home's offer: back to Home (one fixed path), where the offer is then gone.
     return c.json({ next: data.back === 'home' ? '/ui' : '/ui/settings#passkeys' });
+  });
+
+  web.post('/push/offer/dismiss', (c) => {
+    klatsch.dismissPushOffer(c.get('userId'));
+    return c.redirect('/ui', 303);
   });
 
   web.post('/passkeys/offer/dismiss', (c) => {
@@ -2365,6 +2373,19 @@ function settingsPage(user: UserRow, elsewhere: number, passkeys: { list: Passke
         </div>
       </div>
     </section>`;
+}
+
+/** Home's offer of notifications on this device: the same button and script as Settings, with "Not now". */
+function pushOfferBox(key: string, csrf: string) {
+  const t = copy.push;
+  return html`<section class="offer" aria-labelledby="push-offer-title">
+      <div class="main"><h2 id="push-offer-title">${t.offerTitle}</h2><p>${t.offerLine}</p><p id="push-status" class="m" role="status" hidden></p></div>
+      <div class="acts">
+        <button type="button" class="primary" data-push data-key="${key}" data-csrf="${csrf}" data-done="${t.done}" data-failed="${t.failed}" data-denied="${t.denied}" data-unsupported="${t.unsupported}" hidden>${t.turnOn}</button>
+        ${button('/ui/push/offer/dismiss', t.offerLater, csrf, 'link')}
+      </div>
+    </section>
+    <script src="/ui/push.js" defer></script>`;
 }
 
 /** Home's one-time offer to save a passkey; hidden until the script finds the browser can make one. */

@@ -22,6 +22,9 @@ const HOST = `<!doctype html><html><body style="margin:0"><iframe id="card" sand
       frame.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: window.toolResult }, '*');
     } else if (msg.method === 'tools/call') {
       reply(await window.klatschCall(msg.params));
+    } else if (msg.method === 'ui/open-link') {
+      window.links = (window.links || []).concat([msg.params.url]);
+      reply({});
     } else if (msg.method === 'ui/message') {
       window.messages = (window.messages || []).concat([msg.params]);
       reply({});
@@ -74,6 +77,9 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     await page.screenshot({ path: 'test/ui/screenshots/chat-card-ask.png' });
     await card.getByRole('button', { name: 'Ask', exact: true }).click();
     await expect(card.getByText('Asked. Only they read it; their answer comes back here.')).toBeVisible();
+    // The chat cannot say when the answer comes: the card offers notifications, on Klatsch's Settings page.
+    await card.getByRole('button', { name: 'Turn on notifications' }).click();
+    await expect.poll(() => page.evaluate<string>('(window.links || []).join()')).toMatch(/\/ui\/settings#notifications$/);
     expect(await page.evaluate<number>('window.modelContext.length')).toBe(1);
     expect(errors).toEqual([]);
   });

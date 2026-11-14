@@ -22,6 +22,14 @@ test.describe.serial('notifications on this device', () => {
     await relay.close();
   });
 
+  test('Home offers notifications; "Not now" puts the offer away', async () => {
+    await alice.open(`${relay.base}/ui`);
+    await expect(alice.page.getByRole('heading', { name: 'Know when a friend asks you' })).toBeVisible();
+    await alice.shot('push-offer.png');
+    await alice.click(alice.page.getByRole('button', { name: 'Not now' }));
+    await expect(alice.page.getByRole('heading', { name: 'Know when a friend asks you' })).toHaveCount(0);
+  });
+
   test('Settings shows the section; with a device on, one click turns it off everywhere', async () => {
     const ua = createECDH('prime256v1');
     ua.generateKeys();

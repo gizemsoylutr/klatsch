@@ -233,6 +233,8 @@ describe('passkeys', () => {
 describe('the passkey offer on Home', () => {
   it('shows once where passkeys work, with the script, to someone without a passkey, until they say Not now', async () => {
     const t = setup();
+    // The notifications offer would bring its own script: put it away, to see the passkey offer's policy alone.
+    t.klatsch.dismissPushOffer(t.alice);
     const b = browser(t);
     await b.signInAs(t.alice);
     const home = await b.request('/ui');
@@ -253,7 +255,7 @@ describe('the passkey offer on Home', () => {
     assert.equal(dismissed.status, 303);
     assert.equal(dismissed.location, '/ui');
     const after = await b.request('/ui');
-    assert.doesNotMatch(after.text, /class="offer"|passkey\.js/);
+    assert.doesNotMatch(after.text, /data-passkey-offer|passkey\.js/);
     assert.equal(after.csp, PAGE_CSP, 'Home without the offer keeps the plain policy');
     assert.equal(t.db.prepare(`SELECT count(*) n FROM audit WHERE action = 'passkey.offer.dismiss'`).get()!.n, 1);
     assert.match((await b.request('/ui/settings')).text, /data-passkey="add"/, 'Settings still offers it');
@@ -261,10 +263,11 @@ describe('the passkey offer on Home', () => {
 
   it('is not offered at 127.0.0.1, where passkeys cannot work', async () => {
     const t = setup();
+    t.klatsch.dismissPushOffer(t.alice);
     const b = browser(t, BASE);
     await b.signInAs(t.alice);
     const home = await b.request('/ui');
-    assert.doesNotMatch(home.text, /class="offer"/);
+    assert.doesNotMatch(home.text, /data-passkey-offer/);
     assert.equal(home.csp, PAGE_CSP);
   });
 
@@ -277,7 +280,7 @@ describe('the passkey offer on Home', () => {
     const added = await b.post('/ui/passkeys', { key: options.json.key, back: 'home', credential: new SoftPasskey().register(options.json.options, LOCAL) });
     assert.equal(added.status, 200, added.text);
     assert.deepEqual(added.json, { next: '/ui' });
-    assert.doesNotMatch((await b.request('/ui')).text, /class="offer"/);
+    assert.doesNotMatch((await b.request('/ui')).text, /data-passkey-offer/);
     const other = await addPasskey(t);
     assert.ok(other);
   });

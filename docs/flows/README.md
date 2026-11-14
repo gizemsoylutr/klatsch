@@ -29,7 +29,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | OAuth: an app connects as the person’s agent after they approve it, and nothing more | 7 | [oauth.drawio](oauth.drawio) |
 | open notes: Alice reads what Bob opened to the circle at once; Bob is not disturbed | 9 | [open-notes.drawio](open-notes.drawio) |
 | passkeys: add on Settings, sign in from another browser, remove | 5 | [passkeys.drawio](passkeys.drawio) |
-| push notifications: offered in Settings, one subscription per device, off in one click | 4 | [push.drawio](push.drawio) |
+| push notifications: offered in Settings, one subscription per device, off in one click | 5 | [push.drawio](push.drawio) |
 | quote hand-off: Alice sends Bob's sip to her own agent | 7 | [quote-handoff.drawio](quote-handoff.drawio) |
 | request intro: find matches first, then ask for an intro to one | 6 | [request-intro.drawio](request-intro.drawio) |
 | return after sign-in: an approval opened signed out is decided after the login link | 3 | [return-after-sign-in.drawio](return-after-sign-in.drawio) |

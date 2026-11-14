@@ -43,6 +43,14 @@ describe('push notifications: offered in Settings, one subscription per device, 
     assert.ok(!worker.includes('fetch('), 'the worker never fetches');
   });
 
+  it('Home offers notifications once, until a device has them or the person says Not now', async () => {
+    assert.match((await aliceBrowser.get('/ui')).html, /Know when a friend asks you/);
+    assert.ok((await aliceBrowser.post('/ui/push/offer/dismiss')).status < 400);
+    assert.ok(!(await aliceBrowser.get('/ui')).html.includes('Know when a friend asks you'));
+    // The friend link page says it too.
+    assert.match((await aliceBrowser.post('/ui/friends/invite')).html, /Chat apps cannot tell you when your friend asks or answers\./);
+  });
+
   it('Settings offers it with the relay’s public key and its same-origin script', async () => {
     const page = await aliceBrowser.get('/ui/settings');
     assert.ok(page.html.includes(`data-key="${vapidFromSecret(relay.secret).publicKey}"`));

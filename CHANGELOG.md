@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Notifications are offered where people need them: once on Home ("Know when a friend asks you", with Not now), on the friend link page, after joining, and in the chat card after a decision, because chat apps cannot tell people when something arrives.
 - "Draft with my AI" in the card also asks the assistant to start drafting, so the person need not type a message.
 - The card copies a friend link with the browser's copy command where a chat app blocks the clipboard, and can open WhatsApp or email with the link filled in.
 - A second friend link between two people who are friends already adds nothing ("already friends"); duplicates made before are closed.

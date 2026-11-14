@@ -48,6 +48,8 @@ export interface Card {
   /** A text box for the person's own answer, sent with the `answer` action. */
   answerBox?: { label: string; placeholder: string; max: number };
   flags?: string[];
+  /** Where the person turns on notifications, offered once the card is done: chat apps cannot tell them when an answer comes. */
+  notify?: string;
 }
 
 export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval' | 'ask' | 'friend', ref: string, expiresAt = Date.now() + KEY_TTL_MS): string {
@@ -212,8 +214,17 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
   const app = new App({ name: 'Klatsch card', version: '1' });
   const root = document.getElementById('card');
   const el = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
+  let current = null;
+  /** After a decision: chat apps cannot say when an answer arrives, so the card offers notifications. */
+  const notifyOffer = () => {
+    if (!current || !current.notify) return [];
+    const b = el('button', 'Turn on notifications'); b.type = 'button';
+    b.addEventListener('click', () => app.openLink({ url: current.notify }).catch(() => {}));
+    const row = el('div', undefined, 'row'); row.append(b);
+    return [el('p', 'This chat cannot tell you when they answer. Klatsch can, on your phone or browser.', 'note'), row];
+  };
   const finish = (message) => {
-    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('p', message, 'done'));
+    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('p', message, 'done'), ...notifyOffer());
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: ' + message }] }).catch(() => {});
   };
   // The friend link: shown and copied here, never told to the model.
@@ -241,10 +252,11 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       app.openLink({ url: 'mailto:?subject=' + encodeURIComponent('Add me on Klatsch') + '&body=' + encodeURIComponent('Add me as a friend on Klatsch: ' + link) }).catch(() => { said.textContent = 'This chat app cannot open links: copy it instead.'; });
     });
     const row = el('div', undefined, 'row'); row.append(mail, whatsapp, copy);
-    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', message), field, row, said);
+    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', message), field, row, said, ...notifyOffer());
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };
   const render = (card) => {
+    current = card;
     const parts = [el('p', 'Klatsch', 'brand'), el('h1', card.title)];
     const dl = el('dl');
     for (const line of card.lines) { dl.append(el('dt', line.label), el('dd', line.text)); }

@@ -95,7 +95,7 @@ test.describe.serial('passkeys: Home offers one after sign-in', () => {
     // Presence is simulated but verification fails, as when someone cancels Face ID.
     authenticatorId = (await authenticator(false)).authenticatorId;
     await bob.open(createLoginLink(relay.db, relay.secret, bobId, base));
-    const offer = bob.page.locator('section.offer');
+    const offer = bob.page.locator('section[data-passkey-offer]');
     await expect(offer).toBeVisible();
     await expect(offer.getByRole('button', { name: 'Save a passkey' })).toBeEnabled();
     await expect(bob.page.locator('#passkey-error')).toBeHidden();
@@ -113,7 +113,7 @@ test.describe.serial('passkeys: Home offers one after sign-in', () => {
     await Promise.all([bob.page.waitForEvent('load'), bob.open(createLoginLink(relay.db, relay.secret, bobId, base))]);
     await expect.poll(() => (relay.db.prepare('SELECT count(*) n FROM passkeys').get() as { n: number }).n).toBe(1);
     await bob.page.waitForLoadState('load');
-    await expect(bob.page.locator('section.offer')).toHaveCount(0);
+    await expect(bob.page.locator('section[data-passkey-offer]')).toHaveCount(0);
     await bob.open(`${base}/ui/settings`);
     await expect(bob.page.locator('#passkeys').getByRole('button', { name: 'Remove' })).toHaveCount(1);
   });
@@ -121,7 +121,7 @@ test.describe.serial('passkeys: Home offers one after sign-in', () => {
   test('"Not now" puts the card away for good; Settings still offers a passkey', async () => {
     relay.db.prepare('DELETE FROM passkeys').run();
     await bob.open(`${base}/ui`);
-    const offer = bob.page.locator('section.offer');
+    const offer = bob.page.locator('section[data-passkey-offer]');
     await expect(offer).toBeVisible();
     await bob.click(offer.getByRole('button', { name: 'Not now' }));
     await expect(offer).toHaveCount(0);

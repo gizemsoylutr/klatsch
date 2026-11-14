@@ -572,6 +572,11 @@ export const copy = {
     denied: 'Notifications are blocked for Klatsch in this browser. Allow them in its settings, then try again.',
     unsupported: 'This browser cannot get notifications from a web page. On an iPhone, add Klatsch to the Home Screen first.',
     iphone: 'On an iPhone: tap Share, then Add to Home Screen, open Klatsch from there and turn notifications on.',
+    offerTitle: 'Know when a friend asks you',
+    offerLine: 'Chat apps cannot tell you when something arrives. Turn on notifications on this device: they say only that something is new, never what anyone wrote.',
+    offerLater: 'Not now',
+    hint: 'Chat apps cannot tell you when your friend asks or answers.',
+    hintLink: 'Turn on notifications',
   },
 
   /** A circle with a public join link: who joins, what members see, what turning the link on means. */

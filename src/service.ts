@@ -283,6 +283,7 @@ export interface UserRow {
   agent_thanks: number;
   /** When the person said "Not now" to saving a passkey on Home. */
   passkey_offer_dismissed_at: number | null;
+  push_offer_dismissed_at: number | null;
 }
 
 export interface CircleView {
@@ -693,7 +694,7 @@ export class Klatsch {
   }
 
   user(userId: string): UserRow {
-    const row = this.db.prepare('SELECT id, handle, display_name, email, email_verified_at, notify_email, github_id, github_login, google_sub, google_email, badge_id, agent_thanks, passkey_offer_dismissed_at FROM users WHERE id = ?').get(userId) as
+    const row = this.db.prepare('SELECT id, handle, display_name, email, email_verified_at, notify_email, github_id, github_login, google_sub, google_email, badge_id, agent_thanks, passkey_offer_dismissed_at, push_offer_dismissed_at FROM users WHERE id = ?').get(userId) as
       | UserRow
       | undefined;
     if (!row) throw new KlatschError('not-found', 'Unknown user.');
@@ -2529,6 +2530,13 @@ export class Klatsch {
     if (this.user(userId).passkey_offer_dismissed_at !== null) return;
     this.db.prepare('UPDATE users SET passkey_offer_dismissed_at = ? WHERE id = ?').run(Date.now(), userId);
     this.audit(userId, 'web', 'passkey.offer.dismiss');
+  }
+
+  /** "Not now" to Home's offer of notifications: it is not shown again (Settings still has them). */
+  dismissPushOffer(userId: string): void {
+    if (this.user(userId).push_offer_dismissed_at !== null) return;
+    this.db.prepare('UPDATE users SET push_offer_dismissed_at = ? WHERE id = ?').run(Date.now(), userId);
+    this.audit(userId, 'web', 'push.offer.dismiss');
   }
 
   /** Whether the person's agent may say thanks for them; on unless they turn it off. */

@@ -153,7 +153,8 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     const shown = { ...(result.structuredContent ?? {}), note };
     delete (shown as Record<string, unknown>).approve_url;
     delete (shown as Record<string, unknown>).code;
-    return { ...result, content: [{ type: 'text', text: JSON.stringify(shown) }], structuredContent: shown, _meta: { ...(result._meta ?? {}), [CARD_META]: card } };
+    const withNotify = { ...card, notify: `${base}/ui/settings#notifications` };
+    return { ...result, content: [{ type: 'text', text: JSON.stringify(shown) }], structuredContent: shown, _meta: { ...(result._meta ?? {}), [CARD_META]: withNotify } };
   };
   /** Whether this request can become an MCP task: only then is `watch` worth suggesting. */
   const canWatch = (): boolean => {

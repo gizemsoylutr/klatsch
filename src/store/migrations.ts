@@ -640,4 +640,8 @@ export const migrations: string[] = [
     )
   );
   `,
+  // "Not now" to Home's offer of notifications on this device: it is not shown again.
+  `
+  ALTER TABLE users ADD COLUMN push_offer_dismissed_at INTEGER;
+  `,
 ];
