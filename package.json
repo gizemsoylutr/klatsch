@@ -58,11 +58,11 @@
     "demo:record": "node scripts/record-demo.ts"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.5",
+    "@hono/node-server": "2.1.6",
     "@modelcontextprotocol/hono": "2.0.2",
     "@modelcontextprotocol/server": "2.4.0",
     "@simplewebauthn/server": "14.0.3",
-    "hono": "4.13.14",
+    "hono": "4.13.16",
     "nodemailer": "10.1.7",
     "zod": "4.6.7"
   },
