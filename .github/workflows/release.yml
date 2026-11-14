@@ -85,4 +85,4 @@ jobs:
           TARBALL: ${{ needs.build.outputs.tarball }}
         run: |
           if [ "$PRERELEASE" = "true" ]; then tag=next; else tag=latest; fi
-          npm publish "pack/$TARBALL" --provenance --access public --ignore-scripts --tag "$tag"
+          npm publish "./pack/$TARBALL" --provenance --access public --ignore-scripts --tag "$tag"
