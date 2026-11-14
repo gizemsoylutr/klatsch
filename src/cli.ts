@@ -107,6 +107,8 @@ function open(config: Config, demo = false): { klatsch: Klatsch; secret: Buffer 
   pushTo = (user, message) => {
     for (const subscription of klatsch.pushSubscriptionsOf(user.id)) {
       void sendPush(vapid, pushSubject, subscription, { title: notifications.desktopTitle, body: message, url: '/ui' }).then((outcome) => {
+        // The outcome only, never who or what: enough to tell a push service that refused from one that took it.
+        console.error(`klatsch: push ${outcome} (${new URL(subscription.endpoint).hostname})`);
         if (outcome === 'gone') klatsch.forgetPushSubscription(subscription.id);
       });
     }
