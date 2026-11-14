@@ -463,7 +463,10 @@ describe('the bare relay address', () => {
     const page = await browser.text();
     assert.match(page, /href="\/ui">Sign in</);
     assert.match(page, /href="https:\/\/github.com\/gizemsoylutr\/klatsch">GitHub</);
-    assert.doesNotMatch(page, /<script|<form|<img|https?:\/\/(?!github\.com\/gizemsoylutr\/klatsch["/])/, 'no scripts, forms, images or links but to the project');
+    // The relay's own MCP address is shown as text for chat apps to add; it is not a link.
+    const connector = `<code>${BASE}/mcp</code>`;
+    assert.ok(page.includes(connector), 'the connector address for chat apps');
+    assert.doesNotMatch(page.replace(connector, ''), /<script|<form|<img|https?:\/\/(?!github\.com\/gizemsoylutr\/klatsch["/])/, 'no scripts, forms, images or links but to the project');
     assert.match(page, /<figcaption>Example: /, 'the terminal and the approval page are marked as an example');
     assert.doesNotMatch(page, /Sign in with GitHub/, 'without a GitHub app the buttons just say Sign in');
     const other = await t.app.request(`${BASE}/`);

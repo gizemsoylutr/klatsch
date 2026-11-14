@@ -476,7 +476,7 @@ export function button(action: string, label: string, csrf: string, kind?: 'prim
  * are an illustration (captioned as an example, with made-up data), not a live view of anything.
  * `github`: GitHub is the only way in, so the buttons say "Sign in with GitHub".
  */
-export function landing(github: boolean, hasLegal = false) {
+export function landing(github: boolean, hasLegal = false, mcpUrl = '') {
   const t = copy.landing;
   const signIn = github ? t.signInGitHub : t.signIn;
   const dots = html`<i></i><i></i><i></i>`;
@@ -506,6 +506,7 @@ export function landing(github: boolean, hasLegal = false) {
         <h1>${t.headline[0]} <span>${t.headline[1]}</span></h1>
         <p class="lead">${t.lead}</p>
         <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a><a class="btn quiet lg" href="#how">${t.howLink}</a></div>
+        ${mcpUrl ? html`<p class="cmd"><code>${t.connector(mcpUrl)[0]}</code><span>${t.connector(mcpUrl)[1]}</span></p>` : ''}
         <p class="cmd"><code>${t.demo[0]}</code><span>${t.demo[1]}</span></p>
         <figure>
           <figcaption>${t.example.caption}</figcaption>

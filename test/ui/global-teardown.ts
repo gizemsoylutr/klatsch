@@ -10,6 +10,8 @@ import { VISITED } from './people.ts';
 const NOT_IN_A_BROWSER = new Set([
   // The agents' endpoint, driven by the real MCP client in every scenario, never by a page.
   'ALL /mcp',
+  // Plain text for assistants that read a site before suggesting it (test/e2e/oauth.e2e.ts).
+  'GET /llms.txt',
   // The side of `klatsch connect` that waits in the terminal: JSON, refused with an Origin, so no page can use it.
   'POST /ui/connect/start',
   'POST /ui/connect/poll',

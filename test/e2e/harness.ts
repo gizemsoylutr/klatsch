@@ -205,7 +205,7 @@ export async function agent(relay: Relay, token: string, options: { onPage?: (ur
     const text = result.content?.[0]?.text ?? '';
     return { data: result.structuredContent ?? (result.isError ? JSON.parse(text) : {}), text, isError: Boolean(result.isError), raw: JSON.stringify(result) };
   };
-  return { call, dialogs, close: () => client.close() };
+  return { call, dialogs, listTools: () => client.listTools(), close: () => client.close() };
 }
 
 /**

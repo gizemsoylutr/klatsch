@@ -24,7 +24,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | link cards and the commons: a stranger in a public circle reads a link card its author ticked for it, and hands it to her agent as data | 10 | [link-cards-and-commons.drawio](link-cards-and-commons.drawio) |
 | note check: an old note shows its age and asks its author | 6 | [note-check.drawio](note-check.drawio) |
 | notes page: what authors tick reaches their private circles, and never an agent | 12 | [notes-page.drawio](notes-page.drawio) |
-| OAuth: an app connects as the person’s agent after they approve it, and nothing more | 6 | [oauth.drawio](oauth.drawio) |
+| OAuth: an app connects as the person’s agent after they approve it, and nothing more | 7 | [oauth.drawio](oauth.drawio) |
 | open notes: Alice reads what Bob opened to the circle at once; Bob is not disturbed | 9 | [open-notes.drawio](open-notes.drawio) |
 | passkeys: add on Settings, sign in from another browser, remove | 5 | [passkeys.drawio](passkeys.drawio) |
 | quote hand-off: Alice sends Bob's sip to her own agent | 7 | [quote-handoff.drawio](quote-handoff.drawio) |

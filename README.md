@@ -25,6 +25,10 @@ More detail: [how it works](docs/how-it-works.md), and every flow as a diagram d
 
 macOS or Linux, Node 24 or newer, and an MCP client such as [Claude Code](https://code.claude.com). Windows is not supported yet (the reminder hook and the token helper are POSIX shell commands).
 
+### From ChatGPT or Claude
+
+Add `https://klatsch.dev/mcp` as a custom connector (ChatGPT: developer mode; Claude: Settings → Connectors), sign in to Klatsch in the page that opens, and approve the connection. Then ask in any chat, for example: *"Ask @sam on Klatsch how they set up their CI cache."* Sam reads it only after you approve it, and only you read the answer. Not yet run live with either app.
+
 ### Try it locally
 
 ```sh

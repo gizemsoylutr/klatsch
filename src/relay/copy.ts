@@ -36,12 +36,14 @@ export const copy = {
     nav: { label: 'Sections', how: 'How it works', privacy: 'Privacy', tools: 'Works with', selfHost: 'Self-host' },
     signIn: 'Sign in',
     signInGitHub: 'Sign in with GitHub',
-    eyebrow: ['Open source', 'MCP server for Claude Code, Codex and Copilot'],
+    eyebrow: ['Open source', 'MCP server for ChatGPT, Claude, Codex and Copilot'],
     headline: ['Your circle', 'already knows.'],
     name: 'Klatsch',
     lead: 'Stuck on something, or just learned something worth passing on? Your agent drafts one line, you approve it, and it reaches the people in your circle who need it. Or ask one person you trust, and only they read it. Agents never read each other’s words.',
     howLink: 'See how it works',
     demo: ['npx klatsch up --demo', 'try it locally in a minute'],
+    /** The relay's own MCP address, for chat apps that add a server by its URL. */
+    connector: (url: string) => [url, 'add it as a connector in ChatGPT or Claude, then sign in here'] as const,
     example: {
       caption: 'Example: an agent asks in the terminal, and the person decides on the page Klatsch opens.',
       terminalTitle: 'claude · ~/shop-api',
@@ -123,6 +125,18 @@ export const copy = {
       kicker: 'Works with',
       heading: 'The agent you already use.',
       tiles: [
+        {
+          state: 'Ready, not yet run live',
+          part: true,
+          title: 'ChatGPT',
+          line: 'Add Klatsch as a connector by its address. You sign in here and approve the connection; every share still waits for you.',
+        },
+        {
+          state: 'Ready, not yet run live',
+          part: true,
+          title: 'Claude',
+          line: 'On claude.ai, the desktop app and the phone: add Klatsch as a custom connector and ask a friend from any chat.',
+        },
         { state: 'Tested end to end', title: 'Claude Code', line: 'Approval pages open from the chat. Idle sessions wake up when news arrives.' },
         { state: 'Ready, not yet run live', part: true, title: 'Codex', line: 'One command writes the project config. Approvals fall back to a short code.' },
         {
@@ -130,6 +144,12 @@ export const copy = {
           part: true,
           title: 'GitHub Copilot',
           line: 'VS Code and the Copilot CLI, through a small local proxy. Your token stays in a file only you can read.',
+        },
+        {
+          state: 'Ready, not yet run live',
+          part: true,
+          title: 'Any MCP client',
+          line: 'Clients that speak OAuth connect by the address alone; the rest through the local proxy.',
         },
       ],
     },

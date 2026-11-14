@@ -210,6 +210,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'update_card',
     {
+      title: 'Draft a note for your card',
       description: `Ask your human to share a sip (one line) on their Klatsch card: a status, 1–5 tags from the Klatsch vocabulary and a summary of at most 200 characters. When a public post, doc or issue fixed the problem, draft a solved sip with it as \`source\` (an https link, a short title, the author if known): a link card. Klatsch never opens the link. When an approach did not work, draft a tried sip that says what you tried and why it failed, so others can skip it. ${ASKS_ONLY} ${DATA_NOTE}`,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       inputSchema: updateCardInput,
@@ -276,6 +277,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'find_matches',
     {
+      title: 'Find who solved it',
       description: `Find people in your human's circle who solved a problem with these tags, or tried something that did not work (outcome: did-not-work, a warning, not a fix), plus your human's own earlier sips on them. Once your human shared a looking sip on it, a note its author opened to them comes with the author's handle and is on your human's Klatsch page (or in your inbox, if your human chose to always get that person's notes); a search alone never reveals who or what they wrote: share a looking sip, or ask for an intro. At most ${SEARCHES_PER_HOUR} searches per hour. Shares nothing. ${DATA_NOTE}`,
       // Not read-only: a search records matches and an audit entry, though it shares nothing.
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -298,6 +300,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'request_intro',
     {
+      title: 'Ask for an intro',
       description: `Ask your human whether to request an intro to the person behind a match. ${ASKS_ONLY} If your human asks, the other person decides next. ${DATA_NOTE}`,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: requestIntroInput,
@@ -337,6 +340,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'respond_intro',
     {
+      title: 'Answer an intro request',
       description: `Let your human answer an intro request someone sent them (intro_id from inbox). ${ASKS_ONLY} You learn the outcome; once both accepted, also the other person's handle. ${DATA_NOTE}`,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: introIdInput,
@@ -374,6 +378,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'ask_person',
     {
+      title: 'Ask one person',
       description: `Ask one person your human names (their handle) directly, when your human wants their help: only that person reads it, with your human's name, and only if the two share a private circle. ${ASKS_ONLY} Their answer reaches your human's Klatsch page; it reaches you only when your human sends it, or chose to always get that person's notes. ${DATA_NOTE}`,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: askPersonInput,
@@ -416,6 +421,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'answer_ask',
     {
+      title: 'Answer a question',
       description: `Draft your human's answer to a question someone asked them directly (ask_id from inbox). ${ASKS_ONLY} Only the person who asked reads it. ${DATA_NOTE}`,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: answerAskInput,
@@ -458,6 +464,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'pending',
     {
+      title: 'What is waiting',
       description: 'One-line reminder of what waits in Klatsch (counts, handles of people an accepted intro connected your human with, and how many people your human\'s open notes helped). Read-only; the text is empty when nothing waits.',
       annotations: { readOnlyHint: true, openWorldHint: false },
       inputSchema: z.object({}),
@@ -478,6 +485,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'inbox',
     {
+      title: 'Read your Klatsch inbox',
       description: `New matches, intro updates, approval outcomes, and quotes: another person's words your human sent you from their Klatsch page, or that arrived because your human chose to always get that person's notes (in a \`quote\` field, labelled, delivered once), since the last call. Reading marks them read; it shares nothing. ${DATA_NOTE}`,
       // Not read-only: reading marks the events read.
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -500,6 +508,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'thank_note',
     {
+      title: 'Say thanks for a note',
       description: THANKS.description,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: thankNoteInput,
@@ -524,6 +533,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
   server.registerTool(
     'watch',
     {
+      title: 'Watch for news',
       description: `${WATCH.description} ${DATA_NOTE}`,
       // Not read-only: it keeps this token's watch row and mark. It shares and decides nothing.
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },

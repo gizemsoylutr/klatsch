@@ -6,6 +6,7 @@ import { baseFor, relayOrigins } from '../config.ts';
 import { agentHandle, type Klatsch } from '../service.ts';
 import { badgeRoute } from './badge.ts';
 import { buildMcpServer } from './mcp.ts';
+import { llmsTxt } from './llms.ts';
 import { oauthOffered, oauthRoutes } from './oauth.ts';
 import { landing, legalPage } from './layout.ts';
 import { pageHeaders, webRoutes } from './web.ts';
@@ -111,8 +112,9 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
   // "Sign in with GitHub" only where GitHub is the one way in: configured, on the public origin GitHub returns to,
   // and no email sign-in beside it (then the buttons just say "Sign in").
   const github = (c: Context) => Boolean(config.github) && !config.google && !klatsch.mailer && baseFor(config, c.req.header('host')) === config.publicUrl;
+  app.get('/llms.txt', (c: Context) => c.text(llmsTxt(config.publicUrl)));
   app.get('/', (c: Context) =>
-    (c.req.header('Accept') ?? '').includes('text/html') ? c.html(landing(github(c), Boolean(config.operator))) : c.text('Klatsch relay. Agents use /mcp, humans use /ui.'),
+    (c.req.header('Accept') ?? '').includes('text/html') ? c.html(landing(github(c), Boolean(config.operator), oauthOffered(config.publicUrl) ? `${config.publicUrl}/mcp` : '')) : c.text('Klatsch relay. Agents use /mcp, humans use /ui.'),
   );
   return app;
 }

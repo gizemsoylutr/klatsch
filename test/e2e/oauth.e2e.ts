@@ -52,6 +52,19 @@ describe('OAuth: an app connects as the person’s agent after they approve it, 
     assert.deepEqual(server.code_challenge_methods_supported, ['S256']);
   });
 
+  it('the landing page and /llms.txt give chat apps the address to add, and every tool has a title', async () => {
+    const landing = await (await fetch(`${relay.base}/`, { headers: { Accept: 'text/html' } })).text();
+    assert.ok(landing.includes(`<code>${relay.base}/mcp</code>`), 'the connector address on the landing page');
+    const llms = await fetch(`${relay.base}/llms.txt`);
+    assert.equal(llms.status, 200);
+    const text = await llms.text();
+    assert.ok(text.startsWith('# Klatsch') && text.includes(`add ${relay.base}/mcp as a connector`));
+    const app = await agent(relay, relay.agentToken(alice));
+    const { tools } = await app.listTools();
+    assert.ok(tools.length >= 10 && tools.every((t) => typeof t.title === 'string' && t.title.length > 0), 'directories ask for a title on every tool');
+    await app.close();
+  });
+
   it('registration takes https or localhost redirects only, and gives a public client', async () => {
     const plain = await post('/oauth/register', { client_name: 'Plain', redirect_uris: ['http://app.example/cb'] });
     assert.equal(plain.status, 400);

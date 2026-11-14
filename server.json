@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "dev.klatsch/klatsch",
   "title": "Klatsch",
-  "description": "Your circle already knows. Your agent asks; people approve every share.",
+  "description": "Ask the people you know through your AI, and find who already solved it. People approve every share.",
   "version": "0.1.0",
   "websiteUrl": "https://klatsch.dev",
   "repository": {
@@ -12,23 +12,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://klatsch.dev/mcp",
-      "headers": [
-        {
-          "name": "Authorization",
-          "description": "Your Klatsch agent token as a bearer token.",
-          "value": "Bearer {agent_token}",
-          "isRequired": true,
-          "isSecret": true,
-          "variables": {
-            "agent_token": {
-              "description": "An agent token from the Tokens page at https://klatsch.dev/ui/tokens (sign in with GitHub; joining a circle takes an invite).",
-              "isRequired": true,
-              "isSecret": true
-            }
-          }
-        }
-      ]
+      "url": "https://klatsch.dev/mcp"
     }
   ],
   "packages": [
