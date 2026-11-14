@@ -429,8 +429,18 @@ function main(): void {
       body: { type: 'string' },
       'status-line': { type: 'boolean', default: false },
       yes: { type: 'boolean', default: false },
+      version: { type: 'boolean', short: 'v', default: false },
+      help: { type: 'boolean', short: 'h', default: false },
     },
   });
+  if (values.version) {
+    console.log(VERSION);
+    return;
+  }
+  if (values.help) {
+    console.log(USAGE);
+    return;
+  }
   // The environment (a container) first, flags over it.
   const base = loadConfig({ ...envConfig(process.env), ...(values.port ? { port: Number(values.port) } : {}), ...(values.data ? { dataDir: values.data } : {}) });
 
@@ -651,4 +661,19 @@ function main(): void {
   }
 }
 
-main();
+/** A mistake on the command line is one plain line, not a stack trace; `KLATSCH_DEBUG=1` shows the trace. */
+function failPlainly(error: unknown): void {
+  if (process.env.KLATSCH_DEBUG) console.error(error);
+  else console.error(`klatsch: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+}
+
+process.on('unhandledRejection', (error) => {
+  failPlainly(error);
+  process.exit(1);
+});
+try {
+  main();
+} catch (error) {
+  failPlainly(error);
+}
