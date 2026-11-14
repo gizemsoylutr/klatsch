@@ -767,6 +767,14 @@ export class Klatsch {
     this.db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(id);
   }
 
+  /** Notifications off on one device: the person's own subscription for this endpoint, if any. */
+  forgetOwnPushSubscription(userId: string, endpoint: string): void {
+    const normal = pushEndpoint(endpoint);
+    if (!normal) return;
+    const removed = this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(normal, userId);
+    if (removed.changes) this.audit(userId, 'web', 'push.off.here');
+  }
+
   /** Notifications off on every device of this person. */
   pushOff(userId: string): void {
     this.db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);

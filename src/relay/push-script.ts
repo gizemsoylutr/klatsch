@@ -10,12 +10,30 @@
 export const PUSH_SCRIPT = `'use strict';
 (() => {
   const button = document.querySelector('button[data-push]');
+  const off = document.querySelector('button[data-push-off]');
   const status = document.getElementById('push-status');
   if (!button || !status) return;
   const say = (text) => { status.textContent = text; status.hidden = false; };
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) { say(button.dataset.unsupported); return; }
   const bytes = (text) => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (ch) => ch.charCodeAt(0));
-  button.hidden = false;
+  const post = (path, fields) =>
+    fetch(path, { method: 'POST', body: new URLSearchParams({ csrf: button.dataset.csrf, ...fields }), credentials: 'same-origin', redirect: 'error' });
+  // This browser already gets them: say so, and offer to turn them off here instead of on.
+  const showOn = () => {
+    button.hidden = true;
+    say(button.dataset.here);
+    if (off) off.hidden = false;
+  };
+  (async () => {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration('/ui/');
+      const existing = registration && Notification.permission === 'granted' ? await registration.pushManager.getSubscription() : null;
+      if (existing) showOn();
+      else button.hidden = false;
+    } catch {
+      button.hidden = false;
+    }
+  })();
   button.addEventListener('click', async () => {
     button.disabled = true;
     try {
@@ -25,15 +43,32 @@ export const PUSH_SCRIPT = `'use strict';
       const existing = await registration.pushManager.getSubscription();
       const subscription = existing || (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes(button.dataset.key) }));
       const json = subscription.toJSON();
-      const body = new URLSearchParams({ csrf: button.dataset.csrf, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
-      const response = await fetch('/ui/push/subscribe', { method: 'POST', body, credentials: 'same-origin', redirect: 'error' });
+      const response = await post('/ui/push/subscribe', { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
       if (!response.ok) throw new Error('refused');
-      say(button.dataset.done);
+      // The page shows it from the relay's side too (the device count, the offer gone).
+      window.location.reload();
     } catch {
       say(button.dataset.failed);
       button.disabled = false;
     }
   });
+  if (off) {
+    off.addEventListener('click', async () => {
+      off.disabled = true;
+      try {
+        const registration = await navigator.serviceWorker.getRegistration('/ui/');
+        const subscription = registration ? await registration.pushManager.getSubscription() : null;
+        if (subscription) {
+          await post('/ui/push/unsubscribe', { endpoint: subscription.endpoint });
+          await subscription.unsubscribe();
+        }
+        window.location.reload();
+      } catch {
+        say(button.dataset.failed);
+        off.disabled = false;
+      }
+    });
+  }
 })();
 `;
 

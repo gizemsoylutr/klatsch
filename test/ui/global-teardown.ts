@@ -17,6 +17,7 @@ const NOT_IN_A_BROWSER = new Set([
   'GET /ui/manifest.webmanifest',
   'GET /ui/icon.svg',
   'POST /ui/push/subscribe',
+  'POST /ui/push/unsubscribe',
   'GET /llms.txt',
   // The icon as PNG for chat apps and home screens (test/e2e/oauth.e2e.ts).
   'GET /icon.png',

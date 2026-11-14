@@ -78,6 +78,19 @@ describe('push notifications: offered in Settings, one subscription per device, 
     assert.ok(forged.status >= 400);
   });
 
+  it('"Turn off here" forgets this device only, and only for its own person', async () => {
+    const mine = subscription();
+    await aliceBrowser.post('/ui/push/subscribe', mine);
+    const before = relay.klatsch.pushSubscriptionsOf(alice).length;
+    const bob = relay.klatsch.ensureUser('bob', 'Bob');
+    const bobBrowser = await browser(relay, relay.loginLink(bob));
+    await bobBrowser.post('/ui/push/unsubscribe', { endpoint: mine.endpoint });
+    assert.equal(relay.klatsch.pushSubscriptionsOf(alice).length, before, 'not by someone else');
+    assert.equal((await aliceBrowser.post('/ui/push/unsubscribe', { endpoint: mine.endpoint })).status, 200);
+    assert.equal(relay.klatsch.pushSubscriptionsOf(alice).length, before - 1);
+    assert.match((await aliceBrowser.get('/ui/settings')).html, /data-push-off hidden>Turn off here</);
+  });
+
   it('at most ten devices; "Turn off everywhere" forgets them all', async () => {
     for (let i = 0; i < 12; i++) await aliceBrowser.post('/ui/push/subscribe', subscription());
     assert.equal(relay.klatsch.pushSubscriptionsOf(alice).length, 10);
