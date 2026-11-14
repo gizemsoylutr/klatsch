@@ -111,8 +111,10 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     await aliceChat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
     const ask = relay.klatsch.asksOf(eveId).find((k) => k.question === 'Withdrawn before Eve answers?')!;
     const shown = await eveChat.call('show_question', { ask_id: ask.id });
-    relay.klatsch.withdrawAsk(aliceId, ask.id);
     const { card, errors } = await openCard(page, eveChat, JSON.parse(shown.raw));
+    await expect(card.getByLabel('Your answer')).toBeVisible();
+    // Alice withdraws it while Eve's card is open.
+    relay.klatsch.withdrawAsk(aliceId, ask.id);
     await card.getByLabel('Your answer').fill('Too late.');
     await card.getByRole('button', { name: 'Send answer' }).click();
     await expect(card.getByText('This question is not waiting for your human.')).toBeVisible();
@@ -147,6 +149,27 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     await expect.poll(() => page.evaluate<number>('(window.messages || []).length')).toBe(1);
     const quote = ((await eveChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
     expect(quote.quote).toBe('Draft this one?');
+    expect(errors).toEqual([]);
+  });
+
+  test('a card the chat shows again, after it was decided, shows what came of it and no buttons', async ({ page }) => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Reloaded later?' });
+    await aliceChat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(asked.raw));
+    await expect(card.getByText('Asked. Only they read it; their answer comes back here.')).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Ask', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a question withdrawn before the card is shown again: the card says it is closed', async ({ page }) => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Withdrawn, then shown?' });
+    await aliceChat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
+    const ask = relay.klatsch.asksOf(eveId).find((k) => k.question === 'Withdrawn, then shown?')!;
+    const shown = await eveChat.call('show_question', { ask_id: ask.id });
+    relay.klatsch.withdrawAsk(aliceId, ask.id);
+    const { card, errors } = await openCard(page, eveChat, JSON.parse(shown.raw));
+    await expect(card.getByText(/Not open any more/)).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 });

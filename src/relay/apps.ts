@@ -61,6 +61,25 @@ export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval
   return key;
 }
 
+/**
+ * What a card shown again should say: still `open`, `done` with what came of it, or `gone` (decided on the page,
+ * withdrawn or expired). Looked up by its own key, for its own person; nothing else is told.
+ */
+export function keyState(db: Db, secret: Buffer, userId: string, key: string): { state: 'open' | 'done' | 'gone'; outcome?: string; kind?: 'approval' | 'ask' | 'friend'; ref?: string } {
+  const row = db.prepare('SELECT user_id, kind, ref, expires_at, used_at, outcome FROM app_keys WHERE hash = ?').get(keyedHash(secret, `app-key ${key}`)) as
+    | { user_id: string; kind: 'approval' | 'ask' | 'friend'; ref: string; expires_at: number; used_at: number | null; outcome: string | null }
+    | undefined;
+  if (!row || row.user_id !== userId) return { state: 'gone' };
+  if (row.used_at !== null) return { state: 'done', ...(row.outcome ? { outcome: row.outcome } : {}) };
+  if (row.expires_at <= Date.now()) return { state: 'gone' };
+  return { state: 'open', kind: row.kind, ref: row.ref };
+}
+
+/** Keeps what came of a decision, for when the chat shows the card again. */
+export function keepOutcome(db: Db, secret: Buffer, key: string, outcome: string): void {
+  db.prepare('UPDATE app_keys SET outcome = ? WHERE hash = ?').run(outcome, keyedHash(secret, `app-key ${key}`));
+}
+
 /** Uses the key once, for its own person; anything else is simply not found. */
 export function useKey(db: Db, secret: Buffer, userId: string, key: string): { kind: 'approval' | 'ask' | 'friend'; ref: string } | undefined {
   const hash = keyedHash(secret, `app-key ${key}`);
@@ -307,9 +326,20 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     parts.push(row);
     root.replaceChildren(...parts);
   };
+  // Shown again (the chat reloaded): ask the relay whether this card was decided already, before offering buttons.
+  const show = async (card) => {
+    current = card;
+    try {
+      const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key: card.key } });
+      const sc = (result && result.structuredContent) || {};
+      if (sc.state === 'done') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'Done.', 'done')); return; }
+      if (sc.state === 'gone') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'This card is no longer open.', 'note')); return; }
+    } catch {}
+    render(card);
+  };
   app.ontoolresult = (result) => {
     const card = result && result._meta && result._meta['${CARD_META}'];
-    if (card) render(card);
+    if (card) show(card);
     else root.replaceChildren(el('p', 'Klatsch', 'brand'), el('p', (result && result.structuredContent && result.structuredContent.note) || 'Nothing to decide here.', 'note'));
   };
   app.connect().catch(() => {});

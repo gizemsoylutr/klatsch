@@ -136,4 +136,21 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     const again = (await aliceChat.call('add_friend')).meta[CARD];
     assert.equal((await aliceChat.call('klatsch_card', { key: again.key, decision: 'approved' })).isError, true);
   });
+
+  it('a card shown again knows it was decided, or decided elsewhere, and offers no buttons twice', async () => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Shown again?' });
+    const card = asked.meta[CARD];
+    assert.equal((await aliceChat.call('klatsch_card_state', { key: card.key })).data.state, 'open');
+    await aliceChat.call('klatsch_card', { key: card.key, decision: 'approved' });
+    const again = (await aliceChat.call('klatsch_card_state', { key: card.key })).data;
+    assert.equal(again.state, 'done');
+    assert.match(again.message, /Asked/);
+    // Decided on the Klatsch page instead: the card says it is closed.
+    const other = await aliceChat.call('ask_person', { handle: '@eve', question: 'Decided on the page?' });
+    const approval = relay.db.prepare(`SELECT id FROM approvals WHERE state = 'pending' ORDER BY created_at DESC LIMIT 1`).get() as { id: string };
+    relay.db.prepare(`UPDATE approvals SET state = 'declined' WHERE id = ?`).run(approval.id);
+    assert.equal((await aliceChat.call('klatsch_card_state', { key: other.meta[CARD].key })).data.state, 'gone');
+    // Someone else's key tells them nothing.
+    assert.equal((await eveChat.call('klatsch_card_state', { key: card.key })).data.state, 'gone');
+  });
 });

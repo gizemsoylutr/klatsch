@@ -14,7 +14,7 @@ import * as z from 'zod/v4';
 import { getApproval, openApproval, type Approval, type ApprovalAction } from '../auth/approvals.ts';
 import { isChatAppToken } from '../auth/oauth.ts';
 import { transaction } from '../store/db.ts';
-import { approvalCard, CARD_META, CARD_URI, cardHtml, friendCard, issueKey, questionCard, showsCards, useKey, type Card } from './apps.ts';
+import { approvalCard, CARD_META, CARD_URI, cardHtml, friendCard, issueKey, keepOutcome, keyState, questionCard, showsCards, useKey, type Card } from './apps.ts';
 import { createInvite } from '../auth/invites.ts';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { ASK, ASKS_ONLY, CARD_NOTES, DATA_NOTE, FRIENDS, NOTES, pendingReminder, SEARCHES_PER_HOUR, START_LISTENING, THANKS, TOO_MANY_OPEN, TOO_MANY_SEARCHES, WATCH } from '../copy/agent.ts';
@@ -572,6 +572,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
             }
             throw new KlatschError('invalid', CARD_NOTES.notOffered);
           });
+          keepOutcome(klatsch.db, secret, input.key, message);
           if (link) return { content: [{ type: 'text' as const, text: message }], structuredContent: { message, link } };
           return said(message);
         } catch (error) {
@@ -580,6 +581,39 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       },
     );
   }
+
+  // For the card only: whether it was decided already, so a card the chat shows again does not offer its buttons twice.
+  server.registerTool(
+    'klatsch_card_state',
+    {
+      title: 'State of a Klatsch card',
+      description: 'Used by the Klatsch card in the chat when it is shown again. Not for the model.',
+      annotations: { readOnlyHint: true, openWorldHint: false },
+      inputSchema: z.object({ key: z.string().min(20).max(100) }),
+      _meta: { ui: { resourceUri: CARD_URI, visibility: ['app'] } },
+      scopeChallenge: requireScopes('inbox:read'),
+    },
+    async (input): Promise<ToolResult> => {
+      try {
+        const id = caller();
+        const found = keyState(klatsch.db, secret, id, input.key);
+        let state = found.state;
+        // Still open by its key, but decided on the Klatsch page, withdrawn or answered there: gone from the card.
+        if (state === 'open' && found.kind === 'approval' && getApproval(klatsch.db, id, found.ref!)?.state !== 'pending') state = 'gone';
+        if (state === 'open' && found.kind === 'ask') {
+          try {
+            klatsch.questionFor(id, found.ref!);
+          } catch {
+            state = 'gone';
+          }
+        }
+        const message = state === 'done' ? (found.outcome ?? CARD_NOTES.done) : state === 'gone' ? CARD_NOTES.closed : '';
+        return { content: [{ type: 'text', text: state }], structuredContent: { state, ...(message ? { message } : {}) } };
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  );
 
   server.registerTool(
     'add_friend',

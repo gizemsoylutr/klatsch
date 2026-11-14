@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A card the chat shows again (after a reload, or scrolling back) asks the relay first (`klatsch_card_state`, for the card only) and shows what came of it, or that it was decided on the page, withdrawn or expired, instead of offering its buttons again.
 - Landing and sign-in pages lead with "Ask your friends. From any chat." and a two-line lead; ChatGPT is marked as tried live.
 - Turning notifications on reloads the page, so it shows them on; a browser that has them says so and offers "Turn off here" (`POST /ui/push/unsubscribe`, this device only).
 - Notifications are offered where people need them: once on Home ("Know when a friend asks you", with Not now), on the friend link page, after joining, and in the chat card after a decision, because chat apps cannot tell people when something arrives.

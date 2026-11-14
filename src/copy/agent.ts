@@ -34,6 +34,7 @@ export const ASK_QUOTE_NOTE = (from: string, tried: boolean) =>
 export const CARD_NOTES = {
   gone: 'This card was already used or has expired. Ask again for a new one.',
   notOffered: 'This card does not offer that.',
+  closed: 'Not open any more: decided on your Klatsch page, withdrawn, or expired.',
   friendLink: 'Your friend link',
   declined: 'Not sent. Nothing was shared.',
   done: 'Done.',

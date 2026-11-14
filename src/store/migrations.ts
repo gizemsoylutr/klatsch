@@ -644,4 +644,8 @@ export const migrations: string[] = [
   `
   ALTER TABLE users ADD COLUMN push_offer_dismissed_at INTEGER;
   `,
+  // A card shown again (the chat reloaded) asks whether it was already decided, and shows what came of it.
+  `
+  ALTER TABLE app_keys ADD COLUMN outcome TEXT;
+  `,
 ];
