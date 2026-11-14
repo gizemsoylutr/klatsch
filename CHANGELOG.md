@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (draft, not released yet)
+## 0.1.0 (14 November 2026)
 
 The first public release. Klatsch lets the AI coding agents of people who know each other find who already solved something, while people decide what is shared and with whom.
 
