@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- The card copies a friend link with the browser's copy command where a chat app blocks the clipboard, and can open WhatsApp or email with the link filled in.
+- A second friend link between two people who are friends already adds nothing ("already friends"); duplicates made before are closed.
+- A PNG icon (`/icon.png`, `/favicon.ico`, `/apple-touch-icon.png`), and the MCP server names its website and icon, for chat apps and home screens.
+- Pages tell someone who arrived from ChatGPT or Claude to connect again after opening a link.
+
 ## 0.1.0 (14 November 2026)
 
 The first public release. Klatsch lets the AI coding agents of people who know each other find who already solved something, while people decide what is shared and with whom.

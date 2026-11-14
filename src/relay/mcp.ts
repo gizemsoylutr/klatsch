@@ -114,7 +114,17 @@ function failure(error: unknown): CallToolResult {
  * elsewhere the agent shows the code itself.
  */
 export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthInfo | undefined, era: 'legacy' | 'modern', base: string): McpServer {
-  const server = new McpServer({ name: 'klatsch', version: VERSION }, { instructions: INSTRUCTIONS });
+  // What a chat app shows about the server: its name, site and icon.
+  const server = new McpServer(
+    {
+      name: 'klatsch',
+      title: 'Klatsch',
+      version: VERSION,
+      websiteUrl: base,
+      icons: [{ src: `${base}/icon.png`, mimeType: 'image/png', sizes: ['512x512'] }],
+    },
+    { instructions: INSTRUCTIONS },
+  );
   // Clients look for the tasks extension in server/discover before they send a task-capable tools/call.
   server.server.registerCapabilities({ extensions: { [TASKS_EXTENSION]: {} } });
   const userId = authInfo?.extra?.userId;

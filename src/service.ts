@@ -648,6 +648,17 @@ export class Klatsch {
     });
   }
 
+  /** The friendship two people share, if any. */
+  friendshipOf(a: string, b: string): string | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT c.id FROM circles c JOIN memberships x ON x.circle_id = c.id AND x.user_id = ? JOIN memberships y ON y.circle_id = c.id AND y.user_id = ?
+         WHERE c.pair = 1 AND c.ended_at IS NULL ORDER BY c.created_at LIMIT 1`,
+      )
+      .get(a, b) as { id: string } | undefined;
+    return row?.id;
+  }
+
   isFriendship(circleId: string): boolean {
     return Boolean((this.db.prepare('SELECT pair FROM circles WHERE id = ?').get(circleId) as { pair: number } | undefined)?.pair);
   }
@@ -895,9 +906,15 @@ export class Klatsch {
    * Joins the invite's circle. Joining a circle you are already in leaves the invite unused.
    * Someone removed from the circle can only come back on an invite its owner created after the removal, which clears the removal.
    */
-  acceptInvite(userId: string, invite: Invite): 'joined' | 'already-member' {
+  acceptInvite(userId: string, invite: Invite): 'joined' | 'already-member' | 'already-friends' {
     return transaction(this.db, () => {
       if (this.memberRole(userId, invite.circleId)) return 'already-member';
+      // A second friend link between the same two people: they are friends already, so the new one is closed unused.
+      if (invite.pair && userId !== invite.createdBy && this.friendshipOf(userId, invite.createdBy)) {
+        this.db.prepare('UPDATE circles SET ended_at = ? WHERE id = ? AND pair = 1').run(Date.now(), invite.circleId);
+        this.audit(userId, 'web', 'friend.again', invite.circleId);
+        return 'already-friends';
+      }
       if (!this.inviteOpenTo(userId, invite) || !this.mayInvite(invite.createdBy, invite.circleId)) throw new KlatschError('forbidden', 'This invite is not valid.');
       const circle = this.db
         .prepare('SELECT join_cap AS cap, (SELECT count(*) FROM memberships x WHERE x.circle_id = c.id) AS people FROM circles c WHERE c.id = ?')

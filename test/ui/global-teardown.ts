@@ -18,6 +18,10 @@ const NOT_IN_A_BROWSER = new Set([
   'GET /ui/icon.svg',
   'POST /ui/push/subscribe',
   'GET /llms.txt',
+  // The icon as PNG for chat apps and home screens (test/e2e/oauth.e2e.ts).
+  'GET /icon.png',
+  'GET /favicon.ico',
+  'GET /apple-touch-icon.png',
   // The side of `klatsch connect` that waits in the terminal: JSON, refused with an Origin, so no page can use it.
   'POST /ui/connect/start',
   'POST /ui/connect/poll',

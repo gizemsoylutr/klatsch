@@ -237,7 +237,8 @@ export const copy = {
   /** Signed in, in no circle yet: someone has to invite them. */
   noCircle: {
     title: 'You need an invite',
-    line: 'Klatsch circles grow by invite only. Ask someone in a circle for an invite link and open it in this browser.',
+    line: 'Klatsch grows by links. Ask a friend on Klatsch for their friend link, or someone in a circle for an invite, and open it in this browser.',
+    chatApp: 'Connecting ChatGPT or Claude? Open the link first, then start the connection again in the chat app.',
     signedInGitHub: (login: string) => `You signed in with GitHub as @${login}, and are in no circle here yet.`,
     signedInGoogle: (email: string) => `You signed in with Google as ${email}, and are in no circle here yet.`,
     friend: 'Or add a friend: you get a link to send them, and once they open it you can ask each other anything through your AI.',
@@ -545,6 +546,7 @@ export const copy = {
     friendLine: (inviter: string, handle: string) => html`<strong>${inviter}</strong> (@${handle}) wants to add you as a friend on Klatsch.`,
     friendNote: 'Friends can ask each other anything through their AI. Only the two of you read what you ask and answer, and each of you approves before anything is sent.',
     friendJoin: 'Add friend',
+    alreadyFriends: (handle: string) => `You and @${handle} are already friends. Nothing changed.`,
     heading: 'Join the klatsch?',
     line: (inviter: string, handle: string, circle: string) => html`<strong>${inviter}</strong> (@${handle}) invites you to <strong>${circle}</strong>.`,
     note: "Members of a circle see each other's names here. A note someone opens to the circle shows their name to those it matches; anything else stays anonymous until both allow an intro.",
@@ -552,6 +554,7 @@ export const copy = {
     title: 'Invite',
     alreadyMember: (circle: string) => html`You are already in <strong>${circle}</strong>.`,
     joined: (circle: string) => html`You joined <strong>${circle}</strong>.`,
+    chatAppAgain: 'Using ChatGPT or Claude? Connect Klatsch there now: in the chat app, open Klatsch and choose Connect.',
     yourCircles: 'Your circles',
     invalidTitle: 'Invite not valid',
     invalid: 'This invite is not valid. Invites work once and last seven days.',

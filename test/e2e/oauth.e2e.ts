@@ -59,6 +59,11 @@ describe('OAuth: an app connects as the person’s agent after they approve it, 
     assert.equal(llms.status, 200);
     const text = await llms.text();
     assert.ok(text.startsWith('# Klatsch') && text.includes(`add ${relay.base}/mcp as a connector`));
+    for (const path of ['/icon.png', '/favicon.ico', '/apple-touch-icon.png']) {
+      const icon = await fetch(`${relay.base}${path}`);
+      assert.equal(icon.headers.get('content-type'), 'image/png', path);
+      assert.deepEqual([...new Uint8Array(await icon.arrayBuffer()).slice(1, 4)], [0x50, 0x4e, 0x47], 'a PNG');
+    }
     const app = await agent(relay, relay.agentToken(alice));
     const { tools } = await app.listTools();
     assert.ok(tools.length >= 10 && tools.every((t) => typeof t.title === 'string' && t.title.length > 0), 'directories ask for a title on every tool');

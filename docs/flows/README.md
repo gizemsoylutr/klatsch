@@ -16,7 +16,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | direct ask: one person, both humans approve, agents get text only by a click or "always" | 10 | [direct-ask.drawio](direct-ask.drawio) |
 | sign in by email: a new person joins by invite with a mailed link, and signs in by email again later | 13 | [email-sign-in.drawio](email-sign-in.drawio) |
 | email: confirm an address in the browser, then content-free notifications | 7 | [email.drawio](email.drawio) |
-| friends: a link, a question about anything, an answer typed by hand that reaches the agent that asked | 7 | [friends.drawio](friends.drawio) |
+| friends: a link, a question about anything, an answer typed by hand that reaches the agent that asked | 8 | [friends.drawio](friends.drawio) |
 | sign in with GitHub: a new person is made only when they join by invite, connecting GitHub needs a confirmation, and the callback refuses what it should | 21 | [github-sign-in.drawio](github-sign-in.drawio) |
 | sign in with Google: made only by joining, found by id only, verified addresses only | 14 | [google-sign-in.drawio](google-sign-in.drawio) |
 | hosted connect: token from the Tokens page, connect with the CLI, agent calls the relay | 5 | [hosted-connect.drawio](hosted-connect.drawio) |

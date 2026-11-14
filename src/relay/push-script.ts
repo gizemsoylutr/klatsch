@@ -59,7 +59,10 @@ export const MANIFEST = JSON.stringify({
   display: 'standalone',
   background_color: '#ffffff',
   theme_color: '#0071e3',
-  icons: [{ src: '/ui/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+  icons: [
+    { src: '/ui/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+    { src: '/icon.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+  ],
 });
 
 /** The cup on a blue tile, as the favicon, for the home screen and notifications. */

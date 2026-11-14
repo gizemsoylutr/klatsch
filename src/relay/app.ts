@@ -6,6 +6,7 @@ import { baseFor, relayOrigins } from '../config.ts';
 import { agentHandle, type Klatsch } from '../service.ts';
 import { badgeRoute } from './badge.ts';
 import { buildMcpServer } from './mcp.ts';
+import { iconPng } from './icon-png.ts';
 import { llmsTxt } from './llms.ts';
 import { oauthOffered, oauthRoutes } from './oauth.ts';
 import { landing, legalPage } from './layout.ts';
@@ -113,6 +114,15 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
   // and no email sign-in beside it (then the buttons just say "Sign in").
   const github = (c: Context) => Boolean(config.github) && !config.google && !klatsch.mailer && baseFor(config, c.req.header('host')) === config.publicUrl;
   app.get('/llms.txt', (c: Context) => c.text(llmsTxt(config.publicUrl)));
+  // The icon as a bitmap, for chat apps, link previews and home screens; /favicon.ico for clients that only try that.
+  const png = (size: number, rounded = true) => (c: Context) => {
+    c.header('Content-Type', 'image/png');
+    c.header('Cache-Control', 'public, max-age=86400');
+    return c.body(new Uint8Array(iconPng(size, rounded)));
+  };
+  app.get('/icon.png', png(512));
+  app.get('/favicon.ico', png(64));
+  app.get('/apple-touch-icon.png', png(180, false));
   app.get('/', (c: Context) =>
     (c.req.header('Accept') ?? '').includes('text/html') ? c.html(landing(github(c), Boolean(config.operator), oauthOffered(config.publicUrl) ? `${config.publicUrl}/mcp` : '')) : c.text('Klatsch relay. Agents use /mcp, humans use /ui.'),
   );

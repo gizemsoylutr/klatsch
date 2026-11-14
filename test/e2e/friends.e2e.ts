@@ -60,6 +60,14 @@ describe('friends: a link, a question about anything, an answer typed by hand th
     assert.equal((relay.db.prepare('SELECT count(*) AS n FROM sip_circles WHERE sip_id = ? AND circle_id = ?').get(note.sipId, friendship) as { n: number }).n, 0);
   });
 
+  it('a second link between the same two people adds nothing: they are friends already', async () => {
+    const second = (await aliceBrowser.post('/ui/friends/invite')).html.match(/<code class="cmd">([^<]+)<\/code>/)![1]!;
+    const answer = await eveBrowser.post(new URL(second).pathname);
+    assert.match(answer.html, /You and @alice are already friends\. Nothing changed\./);
+    assert.equal(relay.klatsch.circlesOf(alice).filter((c) => c.pair).length, 1);
+    assert.equal(relay.klatsch.circlesOf(eve).filter((c) => c.pair).length, 1);
+  });
+
   it('the link worked once, and a friendship takes nobody else', async () => {
     assert.equal((await frankBrowser.get(new URL(link).pathname)).status, 404);
     assert.equal((await eveBrowser.post(`/ui/circles/${friendship}/invites`)).status, 409, 'Eve cannot invite a third person');

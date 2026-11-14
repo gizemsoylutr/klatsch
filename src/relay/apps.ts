@@ -222,12 +222,25 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     field.addEventListener('focus', () => field.select());
     const copy = el('button', 'Copy link', 'primary'); copy.type = 'button';
     const said = el('p', '', 'note');
+    // Chat apps often refuse the clipboard API in a card; the older copy command still works on a click.
     copy.addEventListener('click', async () => {
-      field.select();
-      try { await navigator.clipboard.writeText(link); said.textContent = 'Copied. Paste it into a message to your friend.'; }
-      catch { said.textContent = 'Selected: copy it with your keyboard or a long press.'; }
+      field.focus(); field.select(); field.setSelectionRange(0, link.length);
+      let copied = false;
+      try { await navigator.clipboard.writeText(link); copied = true; } catch {}
+      if (!copied) { try { copied = document.execCommand('copy'); } catch {} }
+      said.textContent = copied ? 'Copied. Paste it into a message to your friend.' : 'Selected: press Ctrl+C (or Cmd+C) to copy it.';
     });
-    const row = el('div', undefined, 'row'); row.append(copy);
+    // Or straight into a message: the chat app opens the messenger with the link filled in.
+    const whatsapp = el('button', 'Send on WhatsApp'); whatsapp.type = 'button';
+    whatsapp.addEventListener('click', () => {
+      const text = 'Add me as a friend on Klatsch: ' + link;
+      app.openLink({ url: 'https://wa.me/?text=' + encodeURIComponent(text) }).catch(() => { said.textContent = 'This chat app cannot open links: copy it instead.'; });
+    });
+    const mail = el('button', 'Send by email'); mail.type = 'button';
+    mail.addEventListener('click', () => {
+      app.openLink({ url: 'mailto:?subject=' + encodeURIComponent('Add me on Klatsch') + '&body=' + encodeURIComponent('Add me as a friend on Klatsch: ' + link) }).catch(() => { said.textContent = 'This chat app cannot open links: copy it instead.'; });
+    });
+    const row = el('div', undefined, 'row'); row.append(mail, whatsapp, copy);
     root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', message), field, row, said);
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };

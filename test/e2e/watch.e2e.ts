@@ -129,7 +129,11 @@ describe('watch: an idle session hears back when Bob accepts', () => {
     let last = '';
     for (let i = 0; i < 5; i++) {
       last = (await own('tools/call', { name: 'watch', arguments: {} })).result.taskId;
-      assert.deepEqual((await own('tasks/cancel', { taskId: last })).result, { resultType: 'complete', _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'klatsch', version: VERSION } } });
+      const cancelled = (await own('tasks/cancel', { taskId: last })).result;
+      assert.equal(cancelled.resultType, 'complete');
+      assert.equal(cancelled._meta['io.modelcontextprotocol/serverInfo'].name, 'klatsch');
+      assert.equal(cancelled._meta['io.modelcontextprotocol/serverInfo'].version, VERSION);
+      assert.match(cancelled._meta['io.modelcontextprotocol/serverInfo'].icons[0].src, /\/icon\.png$/, 'the server names its site and icon');
     }
     const stopped = (await own('tasks/get', { taskId: last })).result;
     assert.equal(stopped.status, 'cancelled');

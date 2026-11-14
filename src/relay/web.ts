@@ -435,7 +435,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const target = joinTargetOf(returns.take(key));
     const view = target && joinView(target, '?');
     if (!target || !view) {
-      return c.html(notice(copy.noCircle.title, html`<p class="sub">${copy.noCircle.signedInGitHub(identity.login)}</p><p class="sub">${copy.noCircle.line}</p>`));
+      return c.html(notice(copy.noCircle.title, html`<p class="sub">${copy.noCircle.signedInGitHub(identity.login)}</p><p class="sub">${copy.noCircle.line}</p><p class="sub">${copy.noCircle.chatApp}</p>`));
     }
     const join = { kind: 'join' as const, identity, csrf: randomBytes(24).toString('base64url'), target, tries: 0 };
     setStep(c, join);
@@ -547,7 +547,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const target = joinTargetOf(returns.take(key));
     const view = target && joinView(target, '?');
     if (!target || !view) {
-      return c.html(notice(copy.noCircle.title, html`<p class="sub">${copy.noCircle.signedInGoogle(identity.email)}</p><p class="sub">${copy.noCircle.line}</p>`));
+      return c.html(notice(copy.noCircle.title, html`<p class="sub">${copy.noCircle.signedInGoogle(identity.email)}</p><p class="sub">${copy.noCircle.line}</p><p class="sub">${copy.noCircle.chatApp}</p>`));
     }
     const join = { kind: 'join' as const, identity, csrf: randomBytes(24).toString('base64url'), target, tries: 0 };
     setGoogleStep(c, join);
@@ -1380,15 +1380,16 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.post('/invite/:token', (c) => {
     const invite = findInvite(db, secret, c.req.param('token'));
     if (!invite) return invalidInvite(c);
-    let joined: 'joined' | 'already-member';
+    let joined: 'joined' | 'already-member' | 'already-friends';
     try {
       joined = klatsch.acceptInvite(c.get('userId'), invite);
     } catch (error) {
       if (error instanceof KlatschError) return invalidInvite(c);
       throw error;
     }
-    const text = joined === 'joined' ? copy.invite.joined(invite.circleName) : copy.invite.alreadyMember(invite.circleName);
-    return c.html(notice(copy.invite.title, html`<p class="sub">${text}</p>${circlesLink}`, false));
+    const text =
+      joined === 'already-friends' ? copy.invite.alreadyFriends(invite.inviterHandle) : joined === 'joined' ? copy.invite.joined(invite.circleName) : copy.invite.alreadyMember(invite.circleName);
+    return c.html(notice(copy.invite.title, html`<p class="sub">${text}</p>${joined === 'joined' ? html`<p class="sub">${copy.invite.chatAppAgain}</p>` : ''}${circlesLink}`, false));
   });
 
   // ---------- agent tokens ----------

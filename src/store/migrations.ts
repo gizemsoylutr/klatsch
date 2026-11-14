@@ -628,4 +628,16 @@ export const migrations: string[] = [
   ALTER TABLE app_keys_v2 RENAME TO app_keys;
   CREATE INDEX app_keys_by_user ON app_keys (user_id);
   `,
+  // Two friend links between the same two people made two friendships: keep the oldest, close the rest.
+  `
+  UPDATE circles SET ended_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+  WHERE pair = 1 AND ended_at IS NULL AND id IN (
+    SELECT c.id FROM circles c
+    JOIN memberships a ON a.circle_id = c.id JOIN memberships b ON b.circle_id = c.id AND b.user_id > a.user_id
+    WHERE c.pair = 1 AND c.ended_at IS NULL AND EXISTS (
+      SELECT 1 FROM circles o JOIN memberships oa ON oa.circle_id = o.id AND oa.user_id = a.user_id JOIN memberships ob ON ob.circle_id = o.id AND ob.user_id = b.user_id
+      WHERE o.pair = 1 AND o.ended_at IS NULL AND (o.created_at < c.created_at OR (o.created_at = c.created_at AND o.id < c.id))
+    )
+  );
+  `,
 ];
