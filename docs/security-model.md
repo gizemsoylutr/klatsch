@@ -258,6 +258,21 @@ A `tried` sip says an approach did not work. It is stored as a note, so every ru
 
 Accepted risk, as for "Always send": with "always" both ways, two people's agents can hand each other text without a click each time. Choose it only for someone whose words you would paste in yourself. Accepted risk of the answer going straight to the asker's agent: a friend's answer can carry words meant to steer that agent. It arrives as a labelled quote that says it is not instructions, from someone the asker chose to ask, and the asker's own approvals still guard everything the agent could do with Klatsch.
 
+### Cards in the chat (MCP Apps)
+
+In a chat app that shows MCP Apps (the `io.modelcontextprotocol/ui` extension; ChatGPT and Claude do), the person decides an ask, an answer or an intro in Klatsch's own card inside the conversation instead of on the Klatsch page, and reads and answers a question someone asked them there. Sharing a note still opens the Klatsch page, because it asks which circles and who reads it.
+
+What keeps the model from deciding:
+
+- **Only a chat app's own connection.** Cards are offered only to an OAuth connection whose client registered redirect URIs on a chat app's host alone (chatgpt.com, claude.ai, claude.com), so its sign-in codes reach only that app and its tokens are never in an agent's hands. An agent token, the stdio proxy, or any client that merely declares the MCP Apps extension gets the code and the page, as before.
+
+- **A key for the card only.** When a card is shown, the tool result carries a one-time key in `_meta`, which chat apps give to the card and not to the model; the text and structured result the model reads carry no key and no code. The key is stored as a keyed hash, bound to the person and to one approval or one question, works once and lasts as long as the approval.
+- **A tool for the card only.** The one tool that takes the key, `klatsch_card`, is marked `visibility: ["app"]`, which chat apps leave out of the model's tool list and allow only from the card. A call with any other key, someone else's key or a used one is refused.
+- **The other person's words go to the card, not the model.** `show_question` puts the question in the card's `_meta` only; the model learns who asked. It reads the question only when the person clicks "Draft with my AI".
+- **The card renders text, never HTML.** It builds its content with `textContent`, loads nothing from the network, and declares no outside domains.
+
+Accepted risk: the last three protections rest on the chat app keeping to the MCP Apps standard. A chat app that showed `_meta` to the model and let the model call app-only tools would let a tricked model approve. Where that matters more than staying in the chat, decide on the Klatsch page: every request still has one, and clients without cards never get a key.
+
 ### Apps connected by OAuth
 
 Some MCP clients cannot be handed a token: ChatGPT and claude.ai connectors only speak OAuth. For them the relay is its own OAuth 2.1 authorization server, on a relay with an https public URL (or on this machine):

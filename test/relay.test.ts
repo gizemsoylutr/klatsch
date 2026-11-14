@@ -771,7 +771,7 @@ describe('quotes: the human hands the other sip to their own agent', () => {
     t.klatsch.sendQuote(t.alice, introId);
     const token = t.token(t.alice);
     const tools = (await t.mcp(token, 'tools/list')).body.result.tools as { name: string }[];
-    assert.deepEqual(tools.map((tool) => tool.name).sort(), ['answer_ask', 'ask_person', 'find_matches', 'friends', 'inbox', 'pending', 'request_intro', 'respond_intro', 'thank_note', 'update_card', 'watch']);
+    assert.deepEqual(tools.map((tool) => tool.name).sort(), ['answer_ask', 'ask_person', 'find_matches', 'friends', 'inbox', 'klatsch_card', 'pending', 'request_intro', 'respond_intro', 'show_question', 'thank_note', 'update_card', 'watch']);
     const reminder = (await t.tool(token, 'pending', {})).body.result.content[0].text as string;
     assert.match(reminder, /1 quote for you from @bob \(in the klatsch inbox\)/);
     assert.ok(!reminder.includes(BOB_SECRET_TEXT));

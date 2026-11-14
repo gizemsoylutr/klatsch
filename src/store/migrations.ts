@@ -588,4 +588,17 @@ export const migrations: string[] = [
   ALTER TABLE circles ADD COLUMN pair INTEGER NOT NULL DEFAULT 0 CHECK (pair IN (0, 1));
   ALTER TABLE circles ADD COLUMN ended_at INTEGER;
   `,
+  // Cards in the chat (MCP Apps): a one-time key that only Klatsch's card in the chat receives, never the model,
+  // for one decision on one approval, or one answer to one question. Stored as a keyed hash.
+  `
+  CREATE TABLE app_keys (
+    hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    kind TEXT NOT NULL CHECK (kind IN ('approval', 'ask')),
+    ref TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER
+  );
+  CREATE INDEX app_keys_by_user ON app_keys (user_id);
+  `,
 ];

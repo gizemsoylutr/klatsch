@@ -10,6 +10,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | ask me first: Bob allows one intro once and another always, per person | 7 | [allow-always.drawio](allow-always.drawio) |
 | approval by code: no dialog, the human types the code in their browser | 9 | [approval-by-code.drawio](approval-by-code.drawio) |
 | browser connect: a code from the command, typed in the signed-in browser | 12 | [browser-connect.drawio](browser-connect.drawio) |
+| cards in the chat: decide and answer without leaving the conversation | 6 | [chat-cards.drawio](chat-cards.drawio) |
 | dashboard: drafts, intros and the card, decided in the browser | 7 | [dashboard.drawio](dashboard.drawio) |
 | decline: the solvers say no, the seeker hears so, no names are exchanged | 6 | [decline.drawio](decline.drawio) |
 | direct ask: one person, both humans approve, agents get text only by a click or "always" | 10 | [direct-ask.drawio](direct-ask.drawio) |

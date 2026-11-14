@@ -1269,6 +1269,12 @@ export class Klatsch {
     return detect(answer);
   }
 
+  /** A question waiting for `helperId`, with who asked: for the card in their own chat, never for their agent. */
+  questionFor(helperId: string, askId: string): { from: { name: string; handle: string }; question: string } {
+    const { asker, question } = this.openAskFor(helperId, askId);
+    return { from: asker, question };
+  }
+
   /** Throws unless this question waits for `helperId`. */
   checkAnswerable(helperId: string, askId: string): void {
     this.openAskFor(helperId, askId);

@@ -1,5 +1,6 @@
 // The pieces every end-to-end scenario is built from: a real relay on a free port, browsers that sign in
 // through login links and keep their cookie, and agents on the real MCP client (protocol 2026-07-28).
+import { registerClient } from '../../src/auth/oauth.ts';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
@@ -89,13 +90,21 @@ export async function startRelay(
   const loginLink = (userId: string) => createLoginLink(db, secret, userId, base);
   /** An agent token, as `klatsch connect` hands it to Claude Code. */
   const agentToken = (userId: string) => createToken(db, secret, userId, { ttlDays: 1 }).token;
+  /**
+   * The token a chat app gets by OAuth (ChatGPT by default): its client registered redirect URIs on the app's own
+   * host only, which is what lets the relay show cards in the chat to it and to no agent.
+   */
+  const chatAppToken = (userId: string, redirect = 'https://chatgpt.com/connector_platform_oauth_redirect') => {
+    const client = registerClient(db, { client_name: 'ChatGPT', redirect_uris: [redirect] }) as { client_id: string };
+    return createToken(db, secret, userId, { ttlDays: 1, label: `oauth:${client.client_id}`, agent: { clients: [], project: 'ChatGPT' } }).token;
+  };
   /** Waits for mail sent after a request returned (nodemailer builds it asynchronously). */
   const mailCount = async (count: number) => {
     for (let i = 0; i < 200 && mails.length < count; i++) await new Promise((resolve) => setTimeout(resolve, 5));
     return mails.length;
   };
 
-  return { base, db, secret, klatsch, notifications, mails, mailCount, loginLink, agentToken, close };
+  return { base, db, secret, klatsch, notifications, mails, mailCount, loginLink, agentToken, chatAppToken, close };
 }
 
 export type Relay = Awaited<ReturnType<typeof startRelay>>;
@@ -183,11 +192,18 @@ export interface Dialog {
  * page it is sent to and `onPage` is the person who looks at it; without, the client declares no
  * elicitation and gets a code to show instead.
  */
-export async function agent(relay: Relay, token: string, options: { onPage?: (url: string) => Promise<void>; dialogs?: boolean } = {}) {
+export async function agent(relay: Relay, token: string, options: { onPage?: (url: string) => Promise<void>; dialogs?: boolean; cards?: boolean } = {}) {
   const dialogs: Dialog[] = [];
   const client = new Client(
     { name: 'e2e-agent', version: '0' },
-    { capabilities: options.dialogs === false ? {} : { elicitation: { form: {}, url: {} } }, versionNegotiation: { mode: 'auto' } },
+    {
+      capabilities: {
+        ...(options.dialogs === false ? {} : { elicitation: { form: {}, url: {} } }),
+        // A chat app that shows MCP Apps cards (ChatGPT, Claude).
+        ...(options.cards ? { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } } : {}),
+      },
+      versionNegotiation: { mode: 'auto' },
+    },
   );
   if (options.dialogs !== false) {
     client.setRequestHandler('elicitation/create', async (request) => {
@@ -201,11 +217,11 @@ export async function agent(relay: Relay, token: string, options: { onPage?: (ur
     new StreamableHTTPClientTransport(new URL(`${relay.base}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }),
   );
   const call = async (name: string, args: Record<string, unknown> = {}) => {
-    const result = (await client.callTool({ name, arguments: args })) as { structuredContent?: any; content?: { text?: string }[]; isError?: boolean };
+    const result = (await client.callTool({ name, arguments: args })) as { structuredContent?: any; content?: { text?: string }[]; isError?: boolean; _meta?: Record<string, any> };
     const text = result.content?.[0]?.text ?? '';
-    return { data: result.structuredContent ?? (result.isError ? JSON.parse(text) : {}), text, isError: Boolean(result.isError), raw: JSON.stringify(result) };
+    return { data: result.structuredContent ?? (result.isError ? JSON.parse(text) : {}), text, isError: Boolean(result.isError), raw: JSON.stringify(result), meta: result._meta ?? {} };
   };
-  return { call, dialogs, listTools: () => client.listTools(), close: () => client.close() };
+  return { call, dialogs, listTools: () => client.listTools(), readResource: (uri: string) => client.readResource({ uri }), close: () => client.close() };
 }
 
 /**

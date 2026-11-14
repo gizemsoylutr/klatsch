@@ -77,6 +77,26 @@ export function registerClient(db: Db, body: unknown): Record<string, unknown> {
   };
 }
 
+/**
+ * The chat apps whose OAuth connections may get cards in the chat (MCP Apps). A client counts only when every
+ * redirect URI it registered is on one of these hosts: its codes then go only to that app, so a token made for
+ * it cannot be in an agent's hands. A client declaring the MCP Apps extension proves nothing by itself.
+ */
+const CHAT_APP_HOSTS = new Set(['chatgpt.com', 'claude.ai', 'claude.com']);
+
+export function isChatAppToken(db: Db, tokenId: string): boolean {
+  const row = db.prepare('SELECT label FROM tokens WHERE id = ?').get(tokenId) as { label: string | null } | undefined;
+  const clientId = row?.label?.startsWith('oauth:') ? row.label.slice('oauth:'.length) : undefined;
+  const client = clientId ? clientOf(db, clientId) : undefined;
+  return Boolean(
+    client?.redirectUris.length &&
+      client.redirectUris.every((uri) => {
+        const url = new URL(uri);
+        return url.protocol === 'https:' && !url.port && CHAT_APP_HOSTS.has(url.hostname);
+      }),
+  );
+}
+
 export function clientOf(db: Db, id: string): OAuthClient | undefined {
   const row = db.prepare('SELECT id, name, redirect_uris FROM oauth_clients WHERE id = ?').get(id) as { id: string; name: string; redirect_uris: string } | undefined;
   return row ? { id: row.id, name: row.name, redirectUris: JSON.parse(row.redirect_uris) as string[] } : undefined;

@@ -27,7 +27,7 @@ macOS or Linux, Node 24 or newer, and an MCP client such as [Claude Code](https:
 
 ### From ChatGPT or Claude
 
-Add `https://klatsch.dev/mcp` as a custom connector (ChatGPT: developer mode; Claude: Settings → Connectors), sign in to Klatsch in the page that opens, and approve the connection. Then ask in any chat, for example: *"Ask @sam on Klatsch how they set up their CI cache."* Sam reads it only after you approve it, and only you read the answer. Not yet run live with either app.
+Add `https://klatsch.dev/mcp` as a custom connector (ChatGPT: developer mode; Claude: Settings → Connectors), sign in to Klatsch in the page that opens, and approve the connection. Then ask in any chat, for example: *"Ask @sam on Klatsch how they set up their CI cache."* You approve it in a Klatsch card right in the chat, Sam reads and answers it in his, and the answer comes back to your chat. Add friends with "Add a friend" on the Circle page. Not yet run live with either app.
 
 ### Try it locally
 
