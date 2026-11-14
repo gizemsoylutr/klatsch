@@ -81,7 +81,7 @@ describe('dashboard: drafts, intros and the card, decided in the browser', () =>
     assert.match(opened.headers.get('content-security-policy') ?? '', /^default-src 'none'; style-src 'unsafe-inline';/);
     assert.equal(opened.headers.get('x-content-type-options'), 'nosniff');
     const page = await opened.text();
-    assert.match(page, /<h1>Your circle <span>already knows\.<\/span><\/h1>/);
+    assert.match(page, /<h1>Ask your friends\. <span>From any chat\.<\/span><\/h1>/);
     assert.match(page, /<a class="btn primary lg" href="\/ui">Sign in<\/a>/, 'no GitHub app here, so the button just says Sign in');
     assert.match(page, /<a class="sp" href="https:\/\/github.com\/gizemsoylutr\/klatsch">GitHub<\/a>/);
     assert.match(page, /<figcaption>Example: [^<]+<\/figcaption>\s*<div class="stage" aria-hidden="true">/, 'the terminal and the approval page are an illustration');

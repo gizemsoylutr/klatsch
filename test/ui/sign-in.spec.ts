@@ -30,7 +30,7 @@ test.describe.serial('sign-in: a one-time login link, a session cookie, signing 
   test('typing the bare relay address shows what Klatsch is; Sign in takes her to her dashboard', async () => {
     const a = people[0]!;
     expect((await a.open(`${relay.base}/`)).status()).toBe(200);
-    await expect(a.page).toHaveTitle('Your circle already knows · Klatsch');
+    await expect(a.page).toHaveTitle('Ask your friends from any chat · Klatsch');
     await expect(a.page.getByRole('link', { name: 'GitHub', exact: true })).toHaveAttribute('href', 'https://github.com/gizemsoylutr/klatsch');
     await expect(a.page.getByRole('figure')).toContainText('Example:');
     await a.shot('sign-in-landing.png');

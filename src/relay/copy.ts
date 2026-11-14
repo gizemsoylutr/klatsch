@@ -32,14 +32,14 @@ export const copy = {
    * is made up and generic: no real hostnames, people or customers.
    */
   landing: {
-    title: 'Your circle already knows',
+    title: 'Ask your friends from any chat',
     nav: { label: 'Sections', how: 'How it works', privacy: 'Privacy', tools: 'Works with', selfHost: 'Self-host' },
     signIn: 'Sign in',
     signInGitHub: 'Sign in with GitHub',
-    eyebrow: ['Open source', 'MCP server for ChatGPT, Claude, Codex and Copilot'],
-    headline: ['Your circle', 'already knows.'],
+    eyebrow: ['Open source', 'Works in ChatGPT, Claude and your coding agent'],
+    headline: ['Ask your friends.', 'From any chat.'],
     name: 'Klatsch',
-    lead: 'Stuck on something, or just learned something worth passing on? Your agent drafts one line, you approve it, and it reaches the people in your circle who need it. Or ask one person you trust, and only they read it. Agents never read each other’s words.',
+    lead: 'Your AI drafts the question, you approve it, only your friend reads it. Their answer comes back to your chat.',
     howLink: 'See how it works',
     demo: ['npx klatsch up --demo', 'try it locally in a minute'],
     /** The relay's own MCP address, for chat apps that add a server by its URL. */
@@ -126,8 +126,7 @@ export const copy = {
       heading: 'The agent you already use.',
       tiles: [
         {
-          state: 'Ready, not yet run live',
-          part: true,
+          state: 'Tried live',
           title: 'ChatGPT',
           line: 'Add Klatsch as a connector by its address. You sign in here and approve the connection; every share still waits for you.',
         },
@@ -177,8 +176,8 @@ export const copy = {
     signedOutTitle: 'Signed out',
     signedOut: 'Signed out.',
     // The page a visitor without a session gets: what Klatsch is on the left, how to get in on the right.
-    headline: ['Your circle', 'already knows.'],
-    tagline: 'Share what you learn. Find what your circle already knows. People decide what is shared.',
+    headline: ['Ask your friends.', 'From any chat.'],
+    tagline: 'Your AI drafts it, you approve it, only your friend reads it. Nothing goes without your click.',
     title: 'Sign in',
     github: 'Sign in with GitHub',
     githubNote: 'Klatsch keeps your GitHub user id and login, your name and your verified primary email address; it gets no access to your repositories.',
