@@ -20,6 +20,7 @@ describe('connect: Claude Code settings', () => {
       'mcp__klatsch__respond_intro',
       'mcp__klatsch__ask_person',
       'mcp__klatsch__answer_ask',
+      'mcp__klatsch__friends',
       'mcp__klatsch__pending',
       'mcp__klatsch__inbox',
       'mcp__klatsch__watch',

@@ -11,6 +11,8 @@ export interface Invite {
   createdAt: number;
   inviterName: string;
   inviterHandle: string;
+  /** "Add a friend": the circle is a friendship of two, named on pages by the inviter. */
+  pair: boolean;
 }
 
 /**
@@ -45,21 +47,22 @@ export function inviteById(db: Db, inviteId: string): Invite | undefined {
 function validInvite(db: Db, by: 'token_hash' | 'id', value: string): Invite | undefined {
   const row = db
     .prepare(
-      `SELECT i.id, i.circle_id, c.name AS circle_name, i.created_by, i.created_at, u.display_name AS inviter_name, u.handle AS inviter_handle
+      `SELECT i.id, i.circle_id, c.name AS circle_name, c.pair, i.created_by, i.created_at, u.display_name AS inviter_name, u.handle AS inviter_handle
        FROM invites i
        JOIN circles c ON c.id = i.circle_id
        JOIN users u ON u.id = i.created_by
        JOIN memberships m ON m.circle_id = i.circle_id AND m.user_id = i.created_by
-       WHERE i.${by} = ? AND i.used_at IS NULL AND i.expires_at > ?`,
+       WHERE i.${by} = ? AND i.used_at IS NULL AND i.expires_at > ? AND c.ended_at IS NULL`,
     )
     .get(value, Date.now()) as
-    | { id: string; circle_id: string; circle_name: string; created_by: string; created_at: number; inviter_name: string; inviter_handle: string }
+    | { id: string; circle_id: string; circle_name: string; pair: number; created_by: string; created_at: number; inviter_name: string; inviter_handle: string }
     | undefined;
   return (
     row && {
       id: row.id,
       circleId: row.circle_id,
-      circleName: row.circle_name,
+      circleName: row.pair ? `friends with @${row.inviter_handle}` : row.circle_name,
+      pair: row.pair === 1,
       createdBy: row.created_by,
       createdAt: row.created_at,
       inviterName: row.inviter_name,

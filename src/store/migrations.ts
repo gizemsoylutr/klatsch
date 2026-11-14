@@ -582,4 +582,10 @@ export const migrations: string[] = [
   );
   CREATE INDEX oauth_refresh_by_token ON oauth_refresh (token_id);
   `,
+  // Friends: a private circle of exactly two, made by "Add a friend". Asks need no tags (a friend is asked
+  // about anything), and an answer goes to the asker's agent at once: the asker's agent asked it.
+  `
+  ALTER TABLE circles ADD COLUMN pair INTEGER NOT NULL DEFAULT 0 CHECK (pair IN (0, 1));
+  ALTER TABLE circles ADD COLUMN ended_at INTEGER;
+  `,
 ];

@@ -1017,6 +1017,8 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
             <h1 id="title">${copy.noCircle.title}</h1>
             <p class="sub">${copy.settings.signedInAs(user.display_name, user.handle)}</p>
             <p class="sub">${copy.noCircle.line}</p>
+            <p class="sub">${copy.noCircle.friend}</p>
+            ${button('/ui/friends/invite', copy.circle.addFriend, c.get('csrf'), 'primary')}
             ${button('/ui/logout', copy.dashboard.signOut, c.get('csrf'))}
             <p class="fine">${copy.noCircle.selfHost} <a href="${copy.landing.links.selfHosting}">${copy.noCircle.selfHostLink}</a></p>`,
         ),
@@ -1260,7 +1262,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.post('/circles/:id/invites', (c) => {
     const userId = c.get('userId');
     const circleId = c.req.param('id');
-    if (!klatsch.mayInvite(userId, circleId)) {
+    if (!klatsch.mayInvite(userId, circleId) || klatsch.isFriendship(circleId)) {
       const why = klatsch.memberRole(userId, circleId) ? copy.commons.ownerInvites : copy.circle.notMember;
       return c.html(notice(copy.layout.notPossible, html`<p class="sub">${why}</p><p><a href="/ui/circle">${copy.layout.back}</a></p>`), 409);
     }
@@ -1278,6 +1280,33 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         </section>`,
     );
   });
+
+  // "Add a friend": a new circle of two and its one invite, the link shown once to the inviter.
+  web.post('/friends/invite', (c) => {
+    const userId = c.get('userId');
+    let circleId: string;
+    try {
+      circleId = klatsch.friendCircle(userId);
+    } catch (error) {
+      if (!(error instanceof KlatschError)) throw error;
+      return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p><p><a href="/ui/circle">${copy.layout.back}</a></p>`), 409);
+    }
+    const invite = createInvite(db, secret, circleId, userId, base(c));
+    klatsch.audit(userId, 'web', 'invite.create', invite.inviteId);
+    return show(
+      c,
+      copy.circle.friendInviteTitle,
+      'circle',
+      html`<div class="ph"><h1>${copy.circle.friendInviteTitle}</h1></div>
+        <section class="sec">
+          <code class="cmd">${invite.link}</code>
+          <p class="hint">${copy.circle.friendInviteNote}</p>
+          <p class="hint"><a href="/ui/circle">${copy.circle.backToCircles}</a></p>
+        </section>`,
+    );
+  });
+
+  web.post('/friends/:id/end', (c) => attempt(c, () => klatsch.endFriendship(c.get('userId'), c.req.param('id')), '/ui/circle'));
 
   web.post('/circles/:id/members/:member/remove', (c) =>
     attempt(c, () => klatsch.removeMember(c.get('userId'), c.req.param('id'), c.req.param('member')), '/ui/circle'),
@@ -1298,11 +1327,17 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       dialog(
         copy.invite.heading,
         viewer(c),
-        html`${pair(invite.inviterName, viewer(c).name, { leftBlue: true, rightBlue: false })}
-          <h1 id="title">${copy.invite.heading}</h1>
-          <p class="sub">${copy.invite.line(invite.inviterName, invite.inviterHandle, invite.circleName)}</p>
-          ${button(`/ui/invite/${c.req.param('token')}`, copy.invite.join, c.get('csrf'), 'primary')}
-          <p class="fine">${copy.invite.note}</p>`,
+        invite.pair
+          ? html`${pair(invite.inviterName, viewer(c).name, { leftBlue: true, rightBlue: false })}
+              <h1 id="title">${copy.invite.friendHeading}</h1>
+              <p class="sub">${copy.invite.friendLine(invite.inviterName, invite.inviterHandle)}</p>
+              ${button(`/ui/invite/${c.req.param('token')}`, copy.invite.friendJoin, c.get('csrf'), 'primary')}
+              <p class="fine">${copy.invite.friendNote}</p>`
+          : html`${pair(invite.inviterName, viewer(c).name, { leftBlue: true, rightBlue: false })}
+              <h1 id="title">${copy.invite.heading}</h1>
+              <p class="sub">${copy.invite.line(invite.inviterName, invite.inviterHandle, invite.circleName)}</p>
+              ${button(`/ui/invite/${c.req.param('token')}`, copy.invite.join, c.get('csrf'), 'primary')}
+              <p class="fine">${copy.invite.note}</p>`,
       ),
     );
   });
@@ -1708,6 +1743,14 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       () => c.html(notice(copy.asks.sentTitle, html`<p class="sub">${copy.asks.sent(from)}</p>${homeLink}`)),
     );
   });
+  // The person asked types the answer on their page; it goes to the asker's agent at once (the page says so).
+  web.post('/asks/:id/answer', async (c) => {
+    const form = await c.req.parseBody();
+    const answer = typeof form.answer === 'string' ? form.answer : '';
+    return attempt(c, () => klatsch.answerByHand(c.get('userId'), c.req.param('id'), answer), '/ui', () =>
+      c.html(notice(copy.asks.answeredTitle, html`<p class="sub">${copy.asks.answered}</p>${homeLink}`)),
+    );
+  });
   web.post('/asks/:id/decline', act((u, id) => klatsch.declineAsk(u, id)));
   web.post('/asks/:id/withdraw', act((u, id) => klatsch.withdrawAsk(u, id)));
   web.post('/notes/:id/send-always', send(sendNote, true));
@@ -1947,7 +1990,7 @@ function matchInChoice(circles: SharingCircle[], status: SipRow['status'], form?
     <legend>${t.matchIn}</legend>
     <input type="hidden" name="scope" value="1"${owner} />
     ${circles.map(
-      (c) => html`<label><input type="checkbox" name="in_${c.id}" value="1"${owner}${c.public ? '' : html` checked`} /><span>${c.name} <span class="m">${copy.circle.people(c.people)}</span></span></label>
+      (c) => html`<label><input type="checkbox" name="in_${c.id}" value="1"${owner}${c.public || c.pair ? '' : html` checked`} /><span>${c.name} <span class="m">${copy.circle.people(c.people)}</span></span></label>
         ${c.public ? why(c) : ''}`,
     )}
   </fieldset>`;
@@ -2057,10 +2100,26 @@ function joinLink(circle: CircleView, base: string, csrf: string) {
   </div>`;
 }
 
-function circlePage(userId: string, circles: CircleView[], base: string, csrf: string) {
+function circlePage(userId: string, allCircles: CircleView[], base: string, csrf: string) {
   const t = copy.circle;
-  return html`<div class="ph"><h1>${t.title}</h1></div>
-    ${circles.length ? '' : html`<p class="hint">${t.none}</p>`}
+  const friends = allCircles.filter((c) => c.pair);
+  const circles = allCircles.filter((c) => !c.pair);
+  return html`<div class="ph"><h1>${t.title}</h1><div class="end">${button('/ui/friends/invite', t.addFriend, csrf, 'primary')}</div></div>
+    ${allCircles.length ? '' : html`<p class="hint">${t.none}</p>`}
+    ${friends.length
+      ? html`<section class="sec">
+          <h2>${t.friendsHeading}</h2>
+          <ul class="list">${friends.map((f) => {
+            const other = f.members.find((m) => m.id !== userId);
+            return html`<li class="item">
+              ${avatar(other?.displayName ?? '?', { blue: true })}
+              <div class="main">${other ? html`<span class="t">${other.displayName} <span class="m">@${other.handle}</span></span>` : html`<span class="m">${t.friendWaiting}</span>`}</div>
+              <div class="acts">${button(`/ui/friends/${f.id}/end`, t.endFriendship, csrf, 'link')}</div>
+            </li>`;
+          })}</ul>
+          <p class="hint">${t.friendsNote}</p>
+        </section>`
+      : ''}
     ${circles.map((circle) => {
       // In a public circle only its owner sees everyone; a member sees the owner, themselves and a count.
       const others = circle.people - circle.members.length;
@@ -2382,7 +2441,8 @@ function dashboard(
   const approved = sips.filter((s) => s.state === 'approved');
   const waiting = intros.filter((i) => i.state === 'awaiting-solver' && i.role === 'solver');
   const accepted = intros.filter((i) => i.state === 'accepted');
-  const needs = waiting.length + drafts.length;
+  // A question waiting for an answer needs the person too.
+  const needs = waiting.length + drafts.length + asks.filter((k) => k.role === 'helper' && k.state === 'open').length;
   const chip = (count: number, label: string, hot = false) => html`<li${hot && count ? html` class="hot"` : ''}><b>${count}</b> ${label}</li>`;
   const status = (s: SipRow & { tags: string[] }) =>
     html`<span class="m">${shownStatus(s)} · ${s.tags.join(', ')}${s.status === 'solved'
@@ -2484,13 +2544,22 @@ function dashboard(
                 </div>
                 <div class="acts">${
                   k.role === 'helper'
-                    ? html`${button(`/ui/asks/${k.id}/decline`, copy.asks.decline, csrf)}${button(`/ui/asks/${k.id}/send`, copy.asks.send, csrf, 'primary')}`
+                    ? html`${button(`/ui/asks/${k.id}/decline`, copy.asks.decline, csrf)}${button(`/ui/asks/${k.id}/send`, copy.asks.draft, csrf)}`
                     : k.state === 'answered'
-                      ? button(`/ui/asks/${k.id}/send`, copy.asks.send, csrf, 'primary')
+                      ? html`<span class="m">${copy.asks.answerSent}</span>`
                       : k.state === 'open'
                         ? button(`/ui/asks/${k.id}/withdraw`, copy.asks.withdraw, csrf, 'link')
                         : ''
                 }</div>
+                ${k.role === 'helper'
+                  ? html`<form class="answer" method="post" action="/ui/asks/${k.id}/answer">
+                      <input type="hidden" name="csrf" value="${csrf}" />
+                      <label for="answer-${k.id}">${copy.asks.yourAnswer}</label>
+                      <textarea id="answer-${k.id}" name="answer" maxlength="500" rows="3" required></textarea>
+                      <p class="m">${copy.asks.answerGoes(k.other.handle)}</p>
+                      <button class="primary">${copy.asks.sendAnswer}</button>
+                    </form>`
+                  : ''}
               </li>`,
             )}
           </ul>

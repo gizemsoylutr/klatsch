@@ -12,7 +12,7 @@ import {
 } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { getApproval, openApproval, type Approval, type ApprovalAction } from '../auth/approvals.ts';
-import { ASK, ASKS_ONLY, DATA_NOTE, NOTES, pendingReminder, SEARCHES_PER_HOUR, START_LISTENING, THANKS, TOO_MANY_OPEN, TOO_MANY_SEARCHES, WATCH } from '../copy/agent.ts';
+import { ASK, ASKS_ONLY, DATA_NOTE, FRIENDS, NOTES, pendingReminder, SEARCHES_PER_HOUR, START_LISTENING, THANKS, TOO_MANY_OPEN, TOO_MANY_SEARCHES, WATCH } from '../copy/agent.ts';
 import { keyedHash, safeEqual } from '../crypto.ts';
 import {
   answerAskInput,
@@ -21,6 +21,7 @@ import {
   askPersonOutput,
   findMatchesInput,
   findMatchesOutput,
+  friendsOutput,
   inboxInput,
   inboxOutput,
   introIdInput,
@@ -379,7 +380,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     'ask_person',
     {
       title: 'Ask one person',
-      description: `Ask one person your human names (their handle) directly, when your human wants their help: only that person reads it, with your human's name, and only if the two share a private circle. ${ASKS_ONLY} Their answer reaches your human's Klatsch page; it reaches you only when your human sends it, or chose to always get that person's notes. ${DATA_NOTE}`,
+      description: `Ask one person your human names (their handle) directly, about anything, when your human says "ask my friend …" or wants their help: only that person reads it, with your human's name, and only if the two are friends or share a private circle (the friends tool lists who). ${ASKS_ONLY} When they answer, the answer comes to you in inbox. ${DATA_NOTE}`,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: askPersonInput,
       outputSchema: askPersonOutput,
@@ -398,7 +399,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           () => {
             // Checked when a new approval would open, not on the round that brings the human's decision.
             if (!klatsch.canAsk(id)) throw new KlatschError('forbidden', ASK.tooMany);
-            return { action: 'ask_person', payload: { handle: helper.handle, tags: JSON.stringify(preview.tags), question: input.question }, what: `Ask @${helper.handle} directly about ${preview.tags.join(', ')}` };
+            return { action: 'ask_person', payload: { handle: helper.handle, tags: JSON.stringify(preview.tags), question: input.question }, what: preview.tags.length ? `Ask @${helper.handle} directly about ${preview.tags.join(', ')}` : `Ask @${helper.handle} directly` };
           },
           (approval) =>
             ok({
@@ -453,6 +454,28 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
             }),
           (approval, code) => ok({ ...pending(approval, code), flags }),
         );
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'friends',
+    {
+      title: 'List friends',
+      description:
+        'Your human\'s friends on Klatsch, by handle only: people they can ask anything with ask_person. People in a shared private circle can be asked too, by the handle your human gives. Read-only. To add a friend, your human uses "Add a friend" on their Klatsch Circle page and sends the link.',
+      annotations: { readOnlyHint: true, openWorldHint: false },
+      inputSchema: z.object({}),
+      outputSchema: friendsOutput,
+      scopeChallenge: requireScopes('inbox:read'),
+    },
+    async () => {
+      try {
+        const people = klatsch.askablePeople(caller());
+        const note = people.length ? FRIENDS.some(people.length) : FRIENDS.none;
+        return { content: [{ type: 'text', text: JSON.stringify({ people, note }) }], structuredContent: { people, note } };
       } catch (error) {
         return failure(error);
       }

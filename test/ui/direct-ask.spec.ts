@@ -36,7 +36,7 @@ test.describe.serial('direct ask: Home shows both sides, and every step is a cli
     await relay.close();
   });
 
-  test('Alice approves the question; Bob reads it on Home and sends it to his agent', async () => {
+  test('Alice approves the question; Bob reads it on Home and hands it to his AI to draft', async () => {
     const asked = await aliceAgent.call('ask_person', { handle: 'bob', tags: ['postgres'], question: 'How did you fix paging?' });
     await expect(async () => expect(asked.data.code).toBeTruthy()).toPass();
     await approveByCode(alice, asked.data.code, 'Ask');
@@ -44,18 +44,30 @@ test.describe.serial('direct ask: Home shows both sides, and every step is a cli
     await expect(bob.page.getByText('Alice asks you')).toBeVisible();
     await expect(bob.page.getByText('How did you fix paging?')).toBeVisible();
     await bob.shot('direct-ask-home.png');
-    await bob.click(bob.page.getByRole('button', { name: 'Send to my agent' }));
+    await expect(bob.page.getByText('Only @alice reads it, and it goes straight to the AI they asked with.')).toBeVisible();
+    await bob.click(bob.page.getByRole('button', { name: 'Draft with my AI' }));
     await expect(bob.page.getByText('Your agent gets this from @alice')).toBeVisible();
   });
 
-  test('Bob approves his agent’s answer; Alice reads it and sends it to hers', async () => {
+  test('Bob approves his agent’s answer; Alice reads it, and it already went to her AI', async () => {
     const ask = ((await bobAgent.call('inbox')).data.events as { kind: string; ref: string }[]).find((e) => e.kind === 'ask.received')!;
     const answered = await bobAgent.call('answer_ask', { ask_id: ask.ref, answer: 'A keyset cursor.' });
     await approveByCode(bob, answered.data.code, 'Send');
     await alice.open(`${relay.base}/ui`);
     await expect(alice.page.getByText('A keyset cursor.')).toBeVisible();
-    await alice.click(alice.page.getByRole('button', { name: 'Send to my agent' }));
-    await expect(alice.page.getByText('Your agent gets this from @bob')).toBeVisible();
+    await expect(alice.page.getByText('Sent to your AI')).toBeVisible();
+  });
+
+  test('Bob types an answer himself, on Home; Alice reads it', async () => {
+    const asked = await aliceAgent.call('ask_person', { handle: 'bob', question: 'Coffee place near the office?' });
+    await approveByCode(alice, asked.data.code, 'Ask');
+    await bob.open(`${relay.base}/ui`);
+    await bob.page.getByLabel('Your answer').fill('The one by the bridge.');
+    await bob.shot('direct-ask-answer-by-hand.png');
+    await bob.click(bob.page.getByRole('button', { name: 'Send answer' }));
+    await expect(bob.page.getByRole('heading', { name: 'Answer sent' })).toBeVisible();
+    await alice.open(`${relay.base}/ui`);
+    await expect(alice.page.getByText('The one by the bridge.')).toBeVisible();
   });
 
   test('Bob declines one, and Alice withdraws another', async () => {

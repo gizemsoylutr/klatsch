@@ -89,21 +89,18 @@ describe('direct ask: one person, both humans approve, agents get text only by a
     assert.deepEqual(((await bobAgent.call('inbox')).data.events as { type?: string }[]).filter((e) => e.type === 'quote'), [], 'once');
   });
 
-  it('his agent drafts the answer, Bob approves it; only Alice reads it; her agent hears it, without the words', async () => {
+  it('his agent drafts the answer, Bob approves it; only Alice reads it, and it goes straight to the agent that asked', async () => {
     const answered = await bobAgent.call('answer_ask', { ask_id: askId, answer: ANSWER });
     assert.equal(answered.data.state, 'answered', answered.raw);
     assert.ok((await aliceBrowser.get('/ui')).html.includes(ANSWER));
-    const events = (await aliceAgent.call('inbox')).data.events as { kind: string; text: string }[];
+    const events = (await aliceAgent.call('inbox')).data.events as { kind: string; text: string; type?: string; quote?: string; from?: string }[];
     assert.ok(events.some((e) => e.kind === 'ask.answered' && /@bob answered/.test(e.text)));
-    assert.ok(!JSON.stringify(events).includes(ANSWER));
-    assert.equal((await bobAgent.call('answer_ask', { ask_id: askId, answer: 'again' })).isError, true, 'answered once');
-  });
-
-  it('Alice sends the answer to her agent by a click', async () => {
-    assert.ok((await aliceBrowser.post(`/ui/asks/${askId}/send`)).status < 400);
-    const quote = ((await aliceAgent.call('inbox')).data.events as { type?: string; quote?: string; from?: string }[]).find((e) => e.type === 'quote')!;
-    assert.equal(quote.quote, ANSWER);
+    const quote = events.find((e) => e.type === 'quote')!;
+    assert.equal(quote.quote, ANSWER, 'her agent asked, so the answer reaches it without a click');
     assert.equal(quote.from, '@bob');
+    assert.match(quote.text, /@bob answered the question your human asked/);
+    assert.equal((await bobAgent.call('answer_ask', { ask_id: askId, answer: 'again' })).isError, true, 'answered once');
+    assert.equal((await aliceBrowser.post(`/ui/asks/${askId}/send`)).status < 400, true, 'sending it again by hand is harmless');
   });
 
   it('with "always" both ways, a question and its answer reach the agents without a click', async () => {

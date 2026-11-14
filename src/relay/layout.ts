@@ -86,6 +86,10 @@ main.page { width: 100%; max-width: 980px; margin: 0 auto; padding: 40px 24px 64
 .t { font-weight: 600; }
 .m { font-size: 13px; color: var(--muted); font-weight: 400; }
 .acts { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center; }
+.item form.answer { flex: 1 1 100%; display: grid; gap: 8px; margin-left: 50px; }
+.item form.answer label { font-weight: 600; font-size: 14px; }
+.item form.answer textarea { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; }
+.item form.answer button { justify-self: start; }
 .kind { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; font-size: 14px; font-weight: 600; }
 .kind.ask { background: var(--accent-soft); color: var(--accent-text); }
 .kind.draft { background: var(--warn-soft); color: var(--warn); }
@@ -231,6 +235,7 @@ a.gh { width: 100%; min-height: 46px; background: var(--fg); color: var(--bg); f
 .passkey button { width: 100%; min-height: 46px; font-size: 15px; }
 
 @media (max-width: 600px) {
+  .item form.answer { margin-left: 0; }
   .top-in { padding: 8px 16px; }
   .tabs { order: 3; width: 100%; }
   .tabs a { flex: 1; padding: 6px 4px; }

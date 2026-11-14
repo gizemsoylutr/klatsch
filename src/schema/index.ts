@@ -194,8 +194,8 @@ export const askPersonInput = z.object({
   handle: z
     .string()
     .regex(/^@?[a-z0-9][a-z0-9-]{0,38}$/)
-    .describe('The handle of the one person your human wants to ask, e.g. "@ayse". They must share a private circle with your human.'),
-  tags: z.array(tag).min(1).max(5),
+    .describe('The handle of the one person your human wants to ask, e.g. "@ayse". They must share a private circle with your human; the friends tool lists who.'),
+  tags: z.array(tag).max(5).default([]).describe('Optional: tags from the Klatsch vocabulary when the question is technical. Leave empty for anything else.'),
   question: z
     .string()
     .min(1)
@@ -223,6 +223,13 @@ export const answerAskOutput = z.object({
   ...approvalFields,
 });
 
+export const friendsOutput = z.object({
+  people: z
+    .array(z.object({ handle: z.string(), friend: z.boolean().describe('Added as a friend, rather than met in a shared circle.') }))
+    .describe('Everyone your human can ask directly: handles only, never names.'),
+  note: z.string(),
+});
+
 export const wireSchemas = {
   'update-card.input': updateCardInput,
   'update-card.output': updateCardOutput,
@@ -237,6 +244,7 @@ export const wireSchemas = {
   'inbox.output': inboxOutput,
   'thank-note.input': thankNoteInput,
   'thank-note.output': thankNoteOutput,
+  'friends.output': friendsOutput,
   'ask-person.input': askPersonInput,
   'ask-person.output': askPersonOutput,
   'answer-ask.input': answerAskInput,

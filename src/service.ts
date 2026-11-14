@@ -171,6 +171,8 @@ export interface SharingCircle {
   id: string;
   name: string;
   public: boolean;
+  /** A friendship: never ticked by default, a friend is there to be asked, not to match every note. */
+  pair: boolean;
   people: number;
 }
 
@@ -293,6 +295,8 @@ export interface CircleView {
   /** The public join link's last segment while it is on. */
   joinToken: string | null;
   joinCap: number | null;
+  /** A friendship: a private circle of two, made by "Add a friend". */
+  pair: boolean;
   /**
    * In join order; for the human web UI only. In a public circle a member sees only the owner and themselves
    * (strangers' names come only through intros and open notes); the owner sees everyone, to remove them.
@@ -302,6 +306,8 @@ export interface CircleView {
 
 /** How long a direct question waits, and how long a person may have so many open or send so many a day. */
 const ASK_DAYS = 14;
+/** An answer typed on the page: the same bound as an agent's draft. */
+const ANSWER_MAX = 500;
 const ASKS_OPEN = 5;
 const ASKS_PER_DAY = 10;
 
@@ -595,6 +601,79 @@ export class Klatsch {
     return id;
   }
 
+  /**
+   * "Add a friend": a new private circle for two, owned by `userId`, that its one invite fills. Named by a random
+   * suffix nobody sees; pages show the other person instead. At most 20 waiting ones per person.
+   */
+  friendCircle(userId: string): string {
+    // Links still waiting (unused, unexpired, friendship not ended), and how many were made in a day.
+    const now = Date.now();
+    const waiting = this.db
+      .prepare(
+        `SELECT count(*) AS n FROM circles c JOIN invites i ON i.circle_id = c.id
+         WHERE c.pair = 1 AND c.ended_at IS NULL AND i.created_by = ? AND i.used_at IS NULL AND i.expires_at > ?`,
+      )
+      .get(userId, now) as { n: number };
+    const today = this.db
+      .prepare(`SELECT count(*) AS n FROM circles c JOIN memberships m ON m.circle_id = c.id AND m.user_id = ? AND m.role = 'owner' WHERE c.pair = 1 AND c.created_at > ?`)
+      .get(userId, now - DAY) as { n: number };
+    if (waiting.n >= 20) throw new KlatschError('forbidden', 'You have 20 friend links nobody opened yet. Wait until some are used or expire (after seven days).');
+    if (today.n >= 30) throw new KlatschError('forbidden', 'You made 30 friend links today. Try again tomorrow.');
+    const id = newId('cir');
+    transaction(this.db, () => {
+      this.db.prepare('INSERT INTO circles (id, name, created_at, pair, join_cap) VALUES (?, ?, ?, 1, 2)').run(id, `friends-${id.slice(-10)}`, Date.now());
+      this.db.prepare(`INSERT INTO memberships (circle_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`).run(id, userId, Date.now());
+      this.audit(userId, 'web', 'friend.circle', id);
+    });
+    return id;
+  }
+
+  /**
+   * Either of the two ends a friendship: the other person leaves it as if removed (matches, waiting intros and
+   * grants they no longer share a circle for end), and it disappears from both pages. Kept, not deleted, because
+   * sips shared in it still name it.
+   */
+  endFriendship(userId: string, circleId: string): void {
+    const circle = this.db.prepare('SELECT pair, ended_at FROM circles WHERE id = ?').get(circleId) as { pair: number; ended_at: number | null } | undefined;
+    const role = this.memberRole(userId, circleId);
+    if (!circle?.pair || circle.ended_at !== null || !role) throw new KlatschError('forbidden', 'This is not one of your friendships.');
+    transaction(this.db, () => {
+      const owner = (this.db.prepare(`SELECT user_id FROM memberships WHERE circle_id = ? AND role = 'owner'`).get(circleId) as { user_id: string }).user_id;
+      const other = this.db.prepare('SELECT user_id FROM memberships WHERE circle_id = ? AND user_id != ?').get(circleId, owner) as { user_id: string } | undefined;
+      // Neither loses their sign-in: with no circle left, a person can still add a friend.
+      if (other) this.removeMember(owner, circleId, other.user_id, { keepAccess: true });
+      this.db.prepare('UPDATE circles SET ended_at = ? WHERE id = ?').run(Date.now(), circleId);
+      this.audit(userId, 'web', 'friend.end', circleId);
+    });
+  }
+
+  isFriendship(circleId: string): boolean {
+    return Boolean((this.db.prepare('SELECT pair FROM circles WHERE id = ?').get(circleId) as { pair: number } | undefined)?.pair);
+  }
+
+  /** What a friendship is called on its two people's pages: the other person, or that the invite still waits. */
+  pairName(circleId: string, userId: string): string {
+    const other = this.db
+      .prepare('SELECT u.handle FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.circle_id = ? AND m.user_id != ?')
+      .get(circleId, userId) as { handle: string } | undefined;
+    return other ? `@${other.handle}` : 'friend invite, not used yet';
+  }
+
+  /**
+   * A person's friends, by handle only, for their own agent to name whom to ask. Not everyone in their private
+   * circles: a big circle's member list is not something an agent should be able to read.
+   */
+  askablePeople(userId: string): { handle: string; friend: boolean }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT u.handle, 1 AS friend FROM memberships mine JOIN circles c ON c.id = mine.circle_id AND c.pair = 1 AND c.ended_at IS NULL
+         JOIN memberships other ON other.circle_id = c.id AND other.user_id != mine.user_id JOIN users u ON u.id = other.user_id
+         WHERE mine.user_id = ? GROUP BY u.id ORDER BY u.handle`,
+      )
+      .all(userId) as { handle: string; friend: number }[];
+    return rows.filter((r) => agentHandle(r.handle)).map((r) => ({ handle: `@${r.handle}`, friend: r.friend === 1 }));
+  }
+
   addMember(circleId: string, userId: string, invitedBy?: string): void {
     this.db
       .prepare('INSERT OR IGNORE INTO memberships (circle_id, user_id, invited_by, created_at) VALUES (?, ?, ?, ?)')
@@ -650,8 +729,16 @@ export class Klatsch {
     this.audit(userId, 'web', on ? 'notify.email.on' : 'notify.email.off');
   }
 
+  /** In a circle with someone to share with: an ended friendship, or one whose link nobody used yet, does not count. */
   inAnyCircle(userId: string): boolean {
-    return Boolean(this.db.prepare('SELECT 1 FROM memberships WHERE user_id = ?').get(userId));
+    return Boolean(
+      this.db
+        .prepare(
+          `SELECT 1 FROM memberships m JOIN circles c ON c.id = m.circle_id
+           WHERE m.user_id = ? AND c.ended_at IS NULL AND (c.pair = 0 OR (SELECT count(*) FROM memberships x WHERE x.circle_id = c.id) = 2)`,
+        )
+        .get(userId),
+    );
   }
 
   memberRole(userId: string, circleId: string): Role | undefined {
@@ -665,10 +752,10 @@ export class Klatsch {
   circlesOf(userId: string): CircleView[] {
     const circles = this.db
       .prepare(
-        `SELECT c.id, c.name, c.public, c.join_token, c.join_cap, m.role, (SELECT count(*) FROM memberships x WHERE x.circle_id = c.id) AS people
-         FROM circles c JOIN memberships m ON m.circle_id = c.id WHERE m.user_id = ? ORDER BY c.name`,
+        `SELECT c.id, c.name, c.public, c.pair, c.join_token, c.join_cap, m.role, (SELECT count(*) FROM memberships x WHERE x.circle_id = c.id) AS people
+         FROM circles c JOIN memberships m ON m.circle_id = c.id WHERE m.user_id = ? AND c.ended_at IS NULL ORDER BY c.pair, c.name`,
       )
-      .all(userId) as { id: string; name: string; public: number; join_token: string | null; join_cap: number | null; role: Role; people: number }[];
+      .all(userId) as { id: string; name: string; public: number; pair: number; join_token: string | null; join_cap: number | null; role: Role; people: number }[];
     const members = this.db.prepare(
       `SELECT u.id, u.handle, u.display_name, m.role, m.invited_by FROM memberships m JOIN users u ON u.id = m.user_id
        WHERE m.circle_id = ? ORDER BY m.created_at, u.handle`,
@@ -684,12 +771,13 @@ export class Klatsch {
       const hidden = Boolean(circle.public) && circle.role !== 'owner';
       return {
         id: circle.id,
-        name: circle.name,
+        name: circle.pair ? this.pairName(circle.id, userId) : circle.name,
         role: circle.role,
         people: circle.people,
         public: Boolean(circle.public),
         joinToken: circle.join_token,
         joinCap: circle.join_cap,
+        pair: Boolean(circle.pair),
         members: hidden ? all.filter((m) => m.role === 'owner' || m.id === userId) : all,
       };
     });
@@ -699,11 +787,11 @@ export class Klatsch {
   sharingCircles(userId: string): SharingCircle[] {
     const rows = this.db
       .prepare(
-        `SELECT c.id, c.name, c.public, (SELECT count(*) FROM memberships x WHERE x.circle_id = c.id) AS people
-         FROM circles c JOIN memberships m ON m.circle_id = c.id WHERE m.user_id = ? ORDER BY c.public, c.name`,
+        `SELECT c.id, c.name, c.public, c.pair, (SELECT count(*) FROM memberships x WHERE x.circle_id = c.id) AS people
+         FROM circles c JOIN memberships m ON m.circle_id = c.id WHERE m.user_id = ? AND c.ended_at IS NULL ORDER BY c.public, c.pair, c.name`,
       )
-      .all(userId) as { id: string; name: string; public: number; people: number }[];
-    return rows.map((r) => ({ id: r.id, name: r.name, public: Boolean(r.public), people: r.people }));
+      .all(userId) as { id: string; name: string; public: number; pair: number; people: number }[];
+    return rows.map((r) => ({ id: r.id, name: r.pair ? this.pairName(r.id, userId) : r.name, public: Boolean(r.public), pair: Boolean(r.pair), people: r.people }));
   }
 
   // ---------- public circles ----------
@@ -717,6 +805,7 @@ export class Klatsch {
    */
   setJoinLink(ownerId: string, circleId: string, on: boolean, options: { name?: string; cap?: number | null } = {}): string | undefined {
     if (this.memberRole(ownerId, circleId) !== 'owner') throw new KlatschError('forbidden', 'Only the owner of the circle can change its public join link.');
+    if (this.isFriendship(circleId)) throw new KlatschError('forbidden', 'A friendship is for two people; it cannot have a public join link.');
     if (options.name !== undefined && !JOIN_NAME.test(options.name)) throw new KlatschError('invalid', 'A join link name is 3–20 lowercase letters, digits or hyphens.');
     if (options.cap !== undefined && options.cap !== null && !(Number.isInteger(options.cap) && options.cap > 0)) throw new KlatschError('invalid', 'A cap is a whole number above zero.');
     return transaction(this.db, () => {
@@ -792,6 +881,9 @@ export class Klatsch {
   mayInvite(userId: string, circleId: string): boolean {
     const role = this.memberRole(userId, circleId);
     if (!role) return false;
+    // A friendship has its one invite, from the person who made it; an ended one takes nobody.
+    const kind = this.db.prepare('SELECT pair, ended_at FROM circles WHERE id = ?').get(circleId) as { pair: number; ended_at: number | null };
+    if (kind.ended_at !== null || (kind.pair && role !== 'owner')) return false;
     return role === 'owner' || !(this.db.prepare('SELECT public FROM circles WHERE id = ?').get(circleId) as { public: number }).public;
   }
 
@@ -814,9 +906,11 @@ export class Klatsch {
    * hears so, as with any decline), only the owner can invite them back, and
    * someone left in no circle loses every agent token, web session and unused login link, and their badge.
    */
-  removeMember(ownerId: string, circleId: string, memberId: string): void {
+  removeMember(ownerId: string, circleId: string, memberId: string, options: { keepAccess?: boolean } = {}): void {
     if (this.memberRole(ownerId, circleId) !== 'owner') throw new KlatschError('forbidden', 'Only the owner of the circle can remove members.');
     if (memberId === ownerId) throw new KlatschError('forbidden', 'You cannot remove yourself.');
+    // A friendship ends with endFriendship, which keeps both signed in and closes it for good.
+    if (!options.keepAccess && this.isFriendship(circleId)) throw new KlatschError('forbidden', 'Use Remove friend to end a friendship.');
     transaction(this.db, () => {
       const removed = this.db.prepare('DELETE FROM memberships WHERE circle_id = ? AND user_id = ?').run(circleId, memberId);
       if (!removed.changes) throw new KlatschError('not-found', 'No such member.');
@@ -845,7 +939,7 @@ export class Klatsch {
         this.endGrant(g.id, g.kind === 'show' ? g.grantee_id : g.grantor_id, g.kind === 'show' ? g.grantor_id : g.grantee_id, g.kind);
         this.audit(g.grantor_id, 'web', 'grant.end', g.id);
       }
-      if (!this.inAnyCircle(memberId)) {
+      if (!options.keepAccess && !this.inAnyCircle(memberId)) {
         revokeTokens(this.db, memberId);
         this.db.prepare('DELETE FROM web_sessions WHERE user_id = ?').run(memberId);
         this.db.prepare('DELETE FROM web_logins WHERE user_id = ? AND used_at IS NULL').run(memberId);
@@ -958,7 +1052,7 @@ export class Klatsch {
   approveSip(userId: string, sipId: string, via: Via = 'web', visibility?: Visibility, matchIn?: string[], feed = false): void {
     const draft = this.ownDraft(userId, sipId);
     const sip = draft.status === 'solved' && visibility ? { ...draft, visibility } : draft;
-    const scope = this.sharingCircles(userId).filter((c) => (matchIn ? matchIn.includes(c.id) : !c.public));
+    const scope = this.sharingCircles(userId).filter((c) => (matchIn ? matchIn.includes(c.id) : !c.public && !c.pair));
     if (!scope.length) throw new KlatschError('invalid', consent.pickCircle);
     const open = sip.status === 'solved' && sip.visibility === 'open' ? 1 : 0;
     const now = Date.now();
@@ -1118,6 +1212,7 @@ export class Klatsch {
   /** Checks a question before anyone approves it: tags from the vocabulary, nothing hidden, identifiers flagged. */
   previewAsk(tags: string[], question: string): { tags: string[]; flags: Flag[] } {
     refuseHidden(question);
+    if (!tags.length) return { tags: [], flags: detect(question) };
     const { resolved, unknown } = resolveTags(this.db, tags);
     if (unknown.length) throw new KlatschError('unknown-tags', 'Some tags are not in the Klatsch vocabulary. Use the suggestions and try again.', unknown);
     return { tags: resolved, flags: detect(question) };
@@ -1179,16 +1274,24 @@ export class Klatsch {
     this.openAskFor(helperId, askId);
   }
 
-  private answerAsk(helperId: string, askId: string, answer: string, tried: boolean): void {
+  /** The person asked writes the answer themselves, on their page: their click is the approval. */
+  answerByHand(helperId: string, askId: string, answer: string): void {
+    const text = answer.trim();
+    if (!text) throw new KlatschError('invalid', ASK.emptyAnswer);
+    if (text.length > ANSWER_MAX) throw new KlatschError('invalid', ASK.longAnswer);
+    this.answerAsk(helperId, askId, text, false, 'web');
+  }
+
+  private answerAsk(helperId: string, askId: string, answer: string, tried: boolean, via: Via = 'web'): void {
     const { row } = this.openAskFor(helperId, askId);
     refuseHidden(answer);
-    const always = this.hasGrant(row.asker_id, helperId, 'deliver');
+    // The asker's agent asked it, so the answer goes there at once; the person answering is told so first.
     this.db
-      .prepare(`UPDATE asks SET state = 'answered', answer = ?, answer_failed = ?, answered_at = ?, answer_for_agent = ?, question_for_agent = 0 WHERE id = ? AND state = 'open'`)
-      .run(sealText(this.db, answer), tried ? 1 : 0, Date.now(), always ? 1 : 0, askId);
+      .prepare(`UPDATE asks SET state = 'answered', answer = ?, answer_failed = ?, answered_at = ?, answer_for_agent = 1, question_for_agent = 0 WHERE id = ? AND state = 'open'`)
+      .run(sealText(this.db, answer), tried ? 1 : 0, Date.now(), askId);
     this.event(row.asker_id, 'ask.answered', askId);
-    if (always) this.event(row.asker_id, 'ask.answer', askId);
-    this.audit(helperId, 'web', 'ask.answer', askId);
+    this.event(row.asker_id, 'ask.answer', askId);
+    this.audit(helperId, via, 'ask.answer', askId);
     this.notifyUser(row.asker_id, notifications.other);
   }
 
@@ -1202,13 +1305,10 @@ export class Klatsch {
       this.audit(userId, 'web', 'ask.send', askId);
       return { from: `@${asker.handle}` };
     }
-    // The asker hands the answer to theirs.
+    // The asker's agent already got the answer when it came; a click from an old page sends nothing twice.
     if (!row || row.asker_id !== userId || row.state !== 'answered' || row.expires_at <= Date.now() || !this.sharePrivateCircle(userId, row.helper_id)) {
       throw new KlatschError('forbidden', ASK.notOpen);
     }
-    this.db.prepare('UPDATE asks SET answer_for_agent = 1 WHERE id = ?').run(askId);
-    this.event(userId, 'ask.answer', askId, true);
-    this.audit(userId, 'web', 'ask.send', askId);
     return { from: `@${this.user(row.helper_id).handle}` };
   }
 
@@ -1592,7 +1692,7 @@ export class Klatsch {
       .prepare(
         `SELECT s.id AS sip_id, s.summary, s.user_id, s.failed, coalesce(s.checked_at, s.approved_at) AS as_of, u.handle, u.display_name, s.source_url, s.source_title, s.source_author,
                 EXISTS (SELECT 1 FROM thanks t WHERE t.from_user_id = ? AND t.sip_id = s.id) AS thanked,
-                (SELECT c.name FROM sip_circles sc JOIN circles c ON c.id = sc.circle_id AND c.public = 0
+                (SELECT CASE WHEN c.pair = 1 THEN 'friends' ELSE c.name END FROM sip_circles sc JOIN circles c ON c.id = sc.circle_id AND c.public = 0
                    JOIN memberships a ON a.circle_id = sc.circle_id AND a.user_id = s.user_id
                    JOIN memberships b ON b.circle_id = sc.circle_id AND b.user_id = ?
                  WHERE sc.sip_id = s.id AND sc.feed = 1 AND sc.open = 1 ORDER BY c.name LIMIT 1) AS circle

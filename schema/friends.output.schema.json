@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "people": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string"
+          },
+          "friend": {
+            "type": "boolean",
+            "description": "Added as a friend, rather than met in a shared circle."
+          }
+        },
+        "required": [
+          "handle",
+          "friend"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Everyone your human can ask directly: handles only, never names."
+    },
+    "note": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "people",
+    "note"
+  ],
+  "additionalProperties": false
+}

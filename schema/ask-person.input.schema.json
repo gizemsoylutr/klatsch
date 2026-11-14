@@ -5,10 +5,11 @@
     "handle": {
       "type": "string",
       "pattern": "^@?[a-z0-9][a-z0-9-]{0,38}$",
-      "description": "The handle of the one person your human wants to ask, e.g. \"@ayse\". They must share a private circle with your human."
+      "description": "The handle of the one person your human wants to ask, e.g. \"@ayse\". They must share a private circle with your human; the friends tool lists who."
     },
     "tags": {
-      "minItems": 1,
+      "default": [],
+      "description": "Optional: tags from the Klatsch vocabulary when the question is technical. Leave empty for anything else.",
       "maxItems": 5,
       "type": "array",
       "items": {

@@ -72,7 +72,7 @@ describe('the stdio proxy for clients without a header helper (Copilot)', () => 
     const person = personAt(aliceBrowser, 'approved');
     const agent = await proxied(data, modernDir, { modern: true, onPage: person.onPage });
     const tools = (await agent.client.listTools()).tools.map((tool) => tool.name).sort();
-    assert.deepEqual(tools, ['answer_ask', 'ask_person', 'find_matches', 'inbox', 'pending', 'request_intro', 'respond_intro', 'thank_note', 'update_card', 'watch']);
+    assert.deepEqual(tools, ['answer_ask', 'ask_person', 'find_matches', 'friends', 'inbox', 'pending', 'request_intro', 'respond_intro', 'thank_note', 'update_card', 'watch']);
     const shared = await agent.call('update_card', { status: 'looking', tags: ['nodejs', 'express'], summary: ALICE_TEXT, ask_for_intro: false });
     assert.equal(person.seen.length, 1, 'the client opened the approval page');
     assert.equal(person.seen[0]!.status, 200);
