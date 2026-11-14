@@ -34,6 +34,7 @@ export const ASK_QUOTE_NOTE = (from: string, tried: boolean) =>
 export const CARD_NOTES = {
   gone: 'This card was already used or has expired. Ask again for a new one.',
   notOffered: 'This card does not offer that.',
+  friendLink: 'Your friend link',
   declined: 'Not sent. Nothing was shared.',
   done: 'Done.',
   answered: 'Answer sent. Only they read it.',
@@ -50,7 +51,9 @@ export const CARD_NOTES = {
 /** `friends`: whom your human can ask directly. */
 export const FRIENDS = {
   some: (n: number) => `Your human's ${n === 1 ? 'friend' : `${n} friends`}: ask any of them directly with ask_person.`,
-  none: 'Your human has no friends on Klatsch yet. They add one with "Add a friend" on their Klatsch Circle page and send the link.',
+  none: 'Your human has no friends on Klatsch yet. Call add_friend: they make a link in the Klatsch card and send it.',
+  inCard: 'The Klatsch card in this chat lets your human make a friend link and copy it. You do not see the link; they send it themselves.',
+  onPage: (url: string) => `Your human makes a friend link on their Klatsch page: ${url}, "Add a friend". They send it themselves.`,
 };
 export const ASK = {
   noOne: 'Nobody your human can ask has that handle. Ask your human for the handle of someone in one of their private circles.',

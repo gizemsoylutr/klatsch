@@ -613,4 +613,19 @@ export const migrations: string[] = [
   );
   CREATE INDEX push_subscriptions_by_user ON push_subscriptions (user_id);
   `,
+  // A card key may also make a friend link: the link is made by the person's click and shown in the card only.
+  `
+  CREATE TABLE app_keys_v2 (
+    hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    kind TEXT NOT NULL CHECK (kind IN ('approval', 'ask', 'friend')),
+    ref TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER
+  );
+  INSERT INTO app_keys_v2 SELECT hash, user_id, kind, ref, expires_at, used_at FROM app_keys;
+  DROP TABLE app_keys;
+  ALTER TABLE app_keys_v2 RENAME TO app_keys;
+  CREATE INDEX app_keys_by_user ON app_keys (user_id);
+  `,
 ];

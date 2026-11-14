@@ -34,7 +34,7 @@ export interface CardLine {
   text: string;
 }
 export interface CardAction {
-  decision: 'approved' | 'always' | 'declined' | 'answer' | 'draft';
+  decision: 'approved' | 'always' | 'declined' | 'answer' | 'draft' | 'friend_link';
   label: string;
   primary?: boolean;
 }
@@ -50,7 +50,7 @@ export interface Card {
   flags?: string[];
 }
 
-export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval' | 'ask', ref: string, expiresAt = Date.now() + KEY_TTL_MS): string {
+export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval' | 'ask' | 'friend', ref: string, expiresAt = Date.now() + KEY_TTL_MS): string {
   const key = randomToken(32);
   // Old keys go; a question shown again keeps only its newest card working.
   db.prepare('DELETE FROM app_keys WHERE expires_at < ?').run(Date.now() - 24 * 60 * 60 * 1000);
@@ -60,10 +60,10 @@ export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval
 }
 
 /** Uses the key once, for its own person; anything else is simply not found. */
-export function useKey(db: Db, secret: Buffer, userId: string, key: string): { kind: 'approval' | 'ask'; ref: string } | undefined {
+export function useKey(db: Db, secret: Buffer, userId: string, key: string): { kind: 'approval' | 'ask' | 'friend'; ref: string } | undefined {
   const hash = keyedHash(secret, `app-key ${key}`);
   const row = db.prepare('SELECT user_id, kind, ref, expires_at, used_at FROM app_keys WHERE hash = ?').get(hash) as
-    | { user_id: string; kind: 'approval' | 'ask'; ref: string; expires_at: number; used_at: number | null }
+    | { user_id: string; kind: 'approval' | 'ask' | 'friend'; ref: string; expires_at: number; used_at: number | null }
     | undefined;
   if (!row || row.user_id !== userId || row.used_at !== null || row.expires_at <= Date.now()) return undefined;
   const claimed = db.prepare('UPDATE app_keys SET used_at = ? WHERE hash = ? AND used_at IS NULL').run(Date.now(), hash);
@@ -149,6 +149,17 @@ export function questionCard(key: string, from: { name: string; handle: string }
   };
 }
 
+/** "Add a friend" in the chat: the person's click makes the link, and only the card shows it, to copy and send. */
+export function friendCard(key: string): Card {
+  return {
+    key,
+    title: 'Add a friend',
+    lines: [],
+    note: 'Make a link and send it to your friend by any messenger. It works once, for seven days. When they open it and sign in, you can ask each other anything.',
+    actions: [{ decision: 'friend_link', label: 'Make a link', primary: true }],
+  };
+}
+
 let cached: string | undefined;
 
 /**
@@ -184,6 +195,7 @@ dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
 .flags { font-size: 13px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 8px 10px; margin: 0; }
 label { font-size: 13px; font-weight: 600; }
+input[type=text] { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 textarea { width: 100%; min-height: 76px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 button { font: inherit; font-size: 14px; font-weight: 500; border: 0; border-radius: 999px; padding: 7px 16px; background: var(--chip); color: var(--fg); cursor: pointer; }
@@ -203,6 +215,21 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
   const finish = (message) => {
     root.replaceChildren(el('p', 'Klatsch', 'brand'), el('p', message, 'done'));
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: ' + message }] }).catch(() => {});
+  };
+  // The friend link: shown and copied here, never told to the model.
+  const showLink = (message, link) => {
+    const field = el('input'); field.type = 'text'; field.readOnly = true; field.value = link; field.id = 'link';
+    field.addEventListener('focus', () => field.select());
+    const copy = el('button', 'Copy link', 'primary'); copy.type = 'button';
+    const said = el('p', '', 'note');
+    copy.addEventListener('click', async () => {
+      field.select();
+      try { await navigator.clipboard.writeText(link); said.textContent = 'Copied. Paste it into a message to your friend.'; }
+      catch { said.textContent = 'Selected: copy it with your keyboard or a long press.'; }
+    });
+    const row = el('div', undefined, 'row'); row.append(copy);
+    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', message), field, row, said);
+    app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };
   const render = (card) => {
     const parts = [el('p', 'Klatsch', 'brand'), el('h1', card.title)];
@@ -237,7 +264,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
             root.append(el('p', why, 'flags error'));
             return;
           }
-          finish((result.structuredContent && result.structuredContent.message) || 'Done.');
+          const sc = result.structuredContent || {};
+          if (typeof sc.link === 'string') { showLink(sc.message || 'Your link', sc.link); return; }
+          finish(sc.message || 'Done.');
         } catch (error) {
           buttons.forEach((x) => (x.disabled = false));
           root.append(el('p', 'That did not work. Try again, or decide on your Klatsch page.', 'flags'));

@@ -54,7 +54,7 @@ describe('a 2025-06-18 client without dialogs or tasks (Codex by default)', () =
   it('the agent connects on 2025-06-18 and sees every Klatsch tool', async () => {
     assert.equal(alice.init.protocolVersion, '2025-06-18');
     const tools = (await alice.post('tools/list', {})).result.tools.map((t: { name: string }) => t.name).sort();
-    assert.deepEqual(tools, ['answer_ask', 'ask_person', 'find_matches', 'friends', 'inbox', 'klatsch_card', 'pending', 'request_intro', 'respond_intro', 'show_question', 'thank_note', 'update_card', 'watch']);
+    assert.deepEqual(tools, ['add_friend', 'answer_ask', 'ask_person', 'find_matches', 'friends', 'inbox', 'klatsch_card', 'pending', 'request_intro', 'respond_intro', 'show_question', 'thank_note', 'update_card', 'watch']);
   });
 
   it("Alice's agent shares with a code; she types it in her browser and shares", async () => {

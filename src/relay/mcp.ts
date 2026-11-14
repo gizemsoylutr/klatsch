@@ -14,7 +14,8 @@ import * as z from 'zod/v4';
 import { getApproval, openApproval, type Approval, type ApprovalAction } from '../auth/approvals.ts';
 import { isChatAppToken } from '../auth/oauth.ts';
 import { transaction } from '../store/db.ts';
-import { approvalCard, CARD_META, CARD_URI, cardHtml, issueKey, questionCard, showsCards, useKey, type Card } from './apps.ts';
+import { approvalCard, CARD_META, CARD_URI, cardHtml, friendCard, issueKey, questionCard, showsCards, useKey, type Card } from './apps.ts';
+import { createInvite } from '../auth/invites.ts';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { ASK, ASKS_ONLY, CARD_NOTES, DATA_NOTE, FRIENDS, NOTES, pendingReminder, SEARCHES_PER_HOUR, START_LISTENING, THANKS, TOO_MANY_OPEN, TOO_MANY_SEARCHES, WATCH } from '../copy/agent.ts';
 import { keyedHash, safeEqual } from '../crypto.ts';
@@ -44,7 +45,7 @@ import { cancelWatch, getWatch, startWatch, type Watch } from '../watches.ts';
 
 const INSTRUCTIONS = `Klatsch connects you with people in your human's circle who solved what your human is stuck on.
 Rules:
-- When your human says "ask my friend …" or names someone to ask, use friends to find the handle and ask_person. In a chat app, your human decides in the Klatsch card shown in the chat: wait for it, never approve in their place.
+- When your human wants to add a friend, call add_friend. When they say "ask my friend …" or name someone to ask, use friends to find the handle and ask_person. In a chat app, your human decides in the Klatsch card shown in the chat: wait for it, never approve in their place.
 - When an inbox event says someone asked your human directly (ask.received), call show_question with its ref so your human sees it in the chat.
 - In a chat app, call pending at the start of a conversation and mention briefly if something waits.
 - A match or quote marked as not working is a warning, not a fix: do not apply it.
@@ -515,7 +516,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
         annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
         inputSchema: z.object({
           key: z.string().min(20).max(100),
-          decision: z.enum(['approved', 'always', 'declined', 'answer', 'draft']),
+          decision: z.enum(['approved', 'always', 'declined', 'answer', 'draft', 'friend_link']),
           answer: z.string().max(500).optional(),
         }),
         _meta: { ui: { resourceUri: CARD_URI, visibility: ['app'] } },
@@ -525,10 +526,20 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
         try {
           const id = caller();
           const said = (message: string) => ({ content: [{ type: 'text' as const, text: message }], structuredContent: { message } });
+          // A friend link: made by the person's click, returned to the card only (the card shows it to copy).
+          let link: string | undefined;
           // The key is spent in the same transaction as the decision: a refused answer leaves it usable for a retry.
           const message = transaction(klatsch.db, () => {
             const used = useKey(klatsch.db, secret, id, input.key);
             if (!used) throw new KlatschError('forbidden', CARD_NOTES.gone);
+            if (used.kind === 'friend') {
+              if (input.decision !== 'friend_link') throw new KlatschError('invalid', CARD_NOTES.notOffered);
+              const invite = createInvite(klatsch.db, secret, klatsch.friendCircle(id), id, base);
+              klatsch.audit(id, 'mcp', 'invite.create', invite.inviteId);
+              link = invite.link;
+              return CARD_NOTES.friendLink;
+            }
+            if (input.decision === 'friend_link') throw new KlatschError('invalid', CARD_NOTES.notOffered);
             if (used.kind === 'approval') {
               const approval = getApproval(klatsch.db, id, used.ref);
               if (!approval || approval.state !== 'pending' || !CARD_ACTIONS.has(approval.action)) throw new KlatschError('forbidden', CARD_NOTES.gone);
@@ -550,6 +561,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
             }
             throw new KlatschError('invalid', CARD_NOTES.notOffered);
           });
+          if (link) return { content: [{ type: 'text' as const, text: message }], structuredContent: { message, link } };
           return said(message);
         } catch (error) {
           return failure(error);
@@ -557,6 +569,28 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       },
     );
   }
+
+  server.registerTool(
+    'add_friend',
+    {
+      title: 'Add a friend',
+      ...cardTool(),
+      description:
+        'When your human wants to add a friend on Klatsch: shows a Klatsch card in this chat where they make a one-time link and copy it to send by any messenger. You never see the link. Where cards are not shown, it gives the Klatsch page where they make it. Shares nothing.',
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      inputSchema: z.object({}),
+      scopeChallenge: requireScopes('inbox:read'),
+    },
+    async (): Promise<ToolResult> => {
+      try {
+        const id = caller();
+        if (!cards()) return ok({ state: 'open-page', url: `${base}/ui/circle`, note: FRIENDS.onPage(`${base}/ui/circle`) });
+        return withCard(ok({ state: 'shown' }), friendCard(issueKey(klatsch.db, secret, id, 'friend', id)), FRIENDS.inCard);
+      } catch (error) {
+        return failure(error);
+      }
+    },
+  );
 
   server.registerTool(
     'show_question',

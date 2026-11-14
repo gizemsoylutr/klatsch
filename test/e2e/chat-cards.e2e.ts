@@ -111,4 +111,29 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     assert.equal((await eveChat.call('klatsch_card', { key: card.key, decision: 'answer', answer: 'Hidden\u200bwords' })).isError, true, 'refused: hidden characters');
     assert.match((await eveChat.call('klatsch_card', { key: card.key, decision: 'answer', answer: 'Yes, fine.' })).data.message, /Answer sent/);
   });
+
+  it('"add a friend" in the chat: the card makes the link on a click, the model never sees it, and it works', async () => {
+    const shown = await aliceChat.call('add_friend');
+    assert.equal(shown.data.state, 'shown');
+    const card = shown.meta[CARD];
+    assert.equal(card.title, 'Add a friend');
+    assert.equal(relay.klatsch.circlesOf(alice).filter((c) => c.pair).length, 0, 'nothing made before the click');
+    const made = await aliceChat.call('klatsch_card', { key: card.key, decision: 'friend_link' });
+    const link: string = made.data.link;
+    assert.match(link, /\/ui\/invite\//);
+    assert.equal((await aliceChat.call('klatsch_card', { key: card.key, decision: 'friend_link' })).isError, true, 'one link per card');
+    assert.ok(!shown.text.includes('/ui/invite/'));
+    // The link works like the one from the Circle page.
+    const frank = relay.klatsch.ensureUser('frank', 'Frank');
+    const page = await (await import('./harness.ts')).browser(relay, relay.loginLink(frank));
+    assert.match((await page.get(new URL(link).pathname)).html, /Add as a friend\?/);
+    // Elsewhere, the page that makes it.
+    const plainFriend = await plain.call('add_friend');
+    assert.equal(plainFriend.data.state, 'open-page');
+    assert.match(plainFriend.data.url, /\/ui\/circle$/);
+    assert.equal(plainFriend.meta[CARD], undefined);
+    // A friend key cannot decide anything else, and other keys cannot make links.
+    const again = (await aliceChat.call('add_friend')).meta[CARD];
+    assert.equal((await aliceChat.call('klatsch_card', { key: again.key, decision: 'approved' })).isError, true);
+  });
 });

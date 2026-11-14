@@ -110,4 +110,20 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     await expect(card.getByRole('button', { name: 'Send answer' })).toBeEnabled();
     expect(errors).toEqual([]);
   });
+
+  test('Alice makes a friend link in the card and copies it', async ({ page }) => {
+    const shown = await aliceChat.call('add_friend');
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(shown.raw));
+    await expect(card.getByRole('heading', { name: 'Add a friend' })).toBeVisible();
+    await card.getByRole('button', { name: 'Make a link' }).click();
+    await expect(card.getByRole('heading', { name: 'Your friend link' })).toBeVisible();
+    const link = await card.locator('#link').inputValue();
+    expect(link).toMatch(new RegExp(`^${relay.base}/ui/invite/[\\w-]+$`));
+    await card.getByRole('button', { name: 'Copy link' }).click();
+    await expect(card.getByText(/Copied|Selected/)).toBeVisible();
+    await page.screenshot({ path: 'test/ui/screenshots/chat-card-friend.png' });
+    const context = await page.evaluate<string>('JSON.stringify(window.modelContext)');
+    expect(context).not.toContain('/ui/invite/');
+    expect(errors).toEqual([]);
+  });
 });

@@ -15,7 +15,7 @@ import { writeFileAtomic } from './atomic-write.ts';
  *   Disconnecting removes these rules even if the person had added them by hand.
  */
 /** The Klatsch tools every client may call without its own prompt (see docs/security-model.md for why that is safe). */
-export const TOOL_NAMES = ['update_card', 'find_matches', 'request_intro', 'respond_intro', 'ask_person', 'answer_ask', 'friends', 'show_question', 'pending', 'inbox', 'watch', 'thank_note'];
+export const TOOL_NAMES = ['update_card', 'find_matches', 'request_intro', 'respond_intro', 'ask_person', 'answer_ask', 'friends', 'add_friend', 'show_question', 'pending', 'inbox', 'watch', 'thank_note'];
 export const KLATSCH_TOOLS = TOOL_NAMES.map((tool) => `mcp__klatsch__${tool}`);
 
 /** Marks the hook command as ours, so reconnecting replaces it and disconnecting finds it. */
