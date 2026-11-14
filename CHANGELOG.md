@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Home puts friends first: a friends count and "waiting for your answer", questions and answers on both sides for 14 days ("You answered"), and the notes, intros and card only for people who use them.
 - The card shows a drafted question or answer in an editable box: the person changes it and sends it with one click, and their version is what goes (checked like a draft). The assistant is told to put drafts straight into the card, and not to write in the chat whether something was sent, since only the card updates.
 - The assistant is told that Klatsch can notify on a phone or browser, instead of saying it cannot.
 - A card the chat shows again (after a reload, or scrolling back) asks the relay first (`klatsch_card_state`, for the card only) and shows what came of it, or that it was decided on the page, withdrawn or expired, instead of offering its buttons again.

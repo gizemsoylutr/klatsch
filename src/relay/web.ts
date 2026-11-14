@@ -1065,6 +1065,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         config.connectedTextHours,
         klatsch.asksOf(userId),
         c.get('csrf'),
+        klatsch.circlesOf(userId).filter((circle) => circle.pair && circle.people === 2).length,
       )}`,
     );
   });
@@ -2514,6 +2515,7 @@ function dashboard(
   hours: number,
   asks: AskView[],
   csrf: string,
+  friends = 0,
 ) {
   const t = copy.dashboard;
   const shownStatus = (s: SipRow) => (s.failed ? 'tried' : s.status);
@@ -2526,6 +2528,9 @@ function dashboard(
   const accepted = intros.filter((i) => i.state === 'accepted');
   // A question waiting for an answer needs the person too.
   const needs = waiting.length + drafts.length + asks.filter((k) => k.role === 'helper' && k.state === 'open').length;
+  // Notes, intros and cards are the coding side: shown to someone who uses it, not to someone who only asks friends.
+  const notesUser = sips.length > 0 || intros.length > 0 || notes.length > 0;
+  const askedMe = asks.filter((k) => k.role === 'helper' && k.state === 'open').length;
   const chip = (count: number, label: string, hot = false) => html`<li${hot && count ? html` class="hot"` : ''}><b>${count}</b> ${label}</li>`;
   const status = (s: SipRow & { tags: string[] }) =>
     html`<span class="m">${shownStatus(s)} · ${s.tags.join(', ')}${s.status === 'solved'
@@ -2592,7 +2597,11 @@ function dashboard(
       <a class="end" href="/ui/device">${t.codeLink}</a>
     </div>
     <ul class="chips" aria-label="${t.summary}">
-      ${chip(waiting.length, t.chips.intros(waiting.length), true)}${chip(drafts.length, t.chips.drafts(drafts.length), true)}${chip(notes.length, t.chips.notes(notes.length))}${chip(approved.length, t.chips.card())}${chip(accepted.length, t.chips.connected())}
+      ${friends ? chip(friends, t.chips.friends(friends)) : ''}${chip(askedMe, t.chips.asked(), true)}${
+        notesUser
+          ? html`${chip(waiting.length, t.chips.intros(waiting.length), true)}${chip(drafts.length, t.chips.drafts(drafts.length), true)}${chip(notes.length, t.chips.notes(notes.length))}${chip(approved.length, t.chips.card())}${chip(accepted.length, t.chips.connected())}`
+          : ''
+      }
     </ul>
     ${helped.total
       ? html`<div class="helped">
@@ -2622,19 +2631,21 @@ function dashboard(
                 <div class="main">
                   <span class="t">${k.role === 'helper' ? copy.asks.toYou(k.other.name) : copy.asks.fromYou(k.other.name)} <span class="m">@${k.other.handle}</span></span>
                   <span>“${k.question}”</span>
-                  ${k.answer ? html`<span><span class="m">${copy.asks.answerLabel}</span> “${k.answer}”</span>${k.tried ? html`<span class="pill warn">${t.didNotWork}</span>` : ''}` : ''}
+                  ${k.answer ? html`<span><span class="m">${k.role === 'helper' ? copy.asks.yourAnswerLabel : copy.asks.answerLabel}</span> “${k.answer}”</span>${k.tried ? html`<span class="pill warn">${t.didNotWork}</span>` : ''}` : ''}
                   <span class="m">${k.tags.join(', ')}${k.role === 'asker' && k.state === 'open' ? ` · ${copy.asks.waiting}` : ''}${k.state === 'declined' ? ` · ${copy.asks.declined}` : ''}</span>
                 </div>
                 <div class="acts">${
-                  k.role === 'helper'
+                  k.role === 'helper' && k.state === 'open'
                     ? html`${button(`/ui/asks/${k.id}/decline`, copy.asks.decline, csrf)}${button(`/ui/asks/${k.id}/send`, copy.asks.draft, csrf)}`
+                    : k.role === 'helper'
+                      ? html`<span class="m">${k.state === 'answered' ? copy.asks.youAnswered : copy.asks.youDeclined}</span>`
                     : k.state === 'answered'
                       ? html`<span class="m">${copy.asks.answerSent}</span>`
                       : k.state === 'open'
                         ? button(`/ui/asks/${k.id}/withdraw`, copy.asks.withdraw, csrf, 'link')
                         : ''
                 }</div>
-                ${k.role === 'helper'
+                ${k.role === 'helper' && k.state === 'open'
                   ? html`<form class="answer" method="post" action="/ui/asks/${k.id}/answer">
                       <input type="hidden" name="csrf" value="${csrf}" />
                       <label for="answer-${k.id}">${copy.asks.yourAnswer}</label>
@@ -2650,14 +2661,14 @@ function dashboard(
         </section>`
       : ''}
 
-    <section class="sec">
+    ${notesUser ? html`<section class="sec">
       ${count(t.needsHeading, needs)}
       ${needs
         ? html`<ul class="list">${introItems}${draftItems}</ul>
             ${waiting.length ? html`<p class="hint">${copy.incomingIntro.note} <strong>${copy.consent.allowAlways}:</strong> ${copy.consent.allowAlwaysNote}</p>` : ''}
             ${drafts.length ? html`<p class="hint">${t.draftsNote}</p>` : ''}`
         : html`<p class="hint">${t.needsNone}</p>`}
-    </section>
+    </section>` : asks.length ? '' : html`<section class="sec"><p class="hint">${t.friendsNone}</p></section>`}
 
     ${notes.length
       ? html`<section class="sec">
@@ -2682,7 +2693,7 @@ function dashboard(
         </section>`
       : ''}
 
-    <div class="split">
+    ${notesUser ? html`<div class="split">
       <section class="sec">
         ${count(t.cardHeading, approved.length)}
         <ul class="list">
@@ -2700,5 +2711,5 @@ function dashboard(
         <h2>${t.acceptedHeading} <em>${accepted.length} · ${t.acceptedSub(hours)}</em></h2>
         <ul class="list plain">${accepted.map(connected)}</ul>
       </section>
-    </div>`;
+    </div>` : ''}`;
 }

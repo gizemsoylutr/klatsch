@@ -1413,7 +1413,7 @@ export class Klatsch {
   /** The questions a person asked and was asked, for their own Home, while they last and the two share a private circle. */
   asksOf(userId: string): AskView[] {
     const rows = this.db
-      .prepare(`SELECT * FROM asks WHERE (asker_id = ? OR (helper_id = ? AND state = 'open')) AND state != 'withdrawn' AND expires_at > ? ORDER BY created_at DESC`)
+      .prepare(`SELECT * FROM asks WHERE (asker_id = ? OR helper_id = ?) AND state != 'withdrawn' AND expires_at > ? ORDER BY created_at DESC`)
       .all(userId, userId, Date.now()) as NonNullable<ReturnType<Klatsch['askRow']>>[];
     return rows
       .filter((row) => this.sharePrivateCircle(row.asker_id, row.helper_id))

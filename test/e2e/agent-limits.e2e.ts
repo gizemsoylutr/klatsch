@@ -24,13 +24,14 @@ function withHost(base: string, path: string, host: string): Promise<number> {
 describe('agent limits: an agent can ask, never approve, and never reach the human side', () => {
   let relay: Relay;
   let aliceBrowser: Browser, bobBrowser: Browser;
+  let aliceId = '';
   let rogue: Awaited<ReturnType<typeof agent>>;
   let token = '';
   let approvalId = '';
 
   before(async () => {
     relay = await startRelay({ approvalWaitMs: 300 });
-    const alice = relay.klatsch.ensureUser('alice', 'Alice');
+    const alice = (aliceId = relay.klatsch.ensureUser('alice', 'Alice'));
     const bob = relay.klatsch.ensureUser('bob', 'Bob');
     relay.klatsch.addMember(relay.klatsch.ensureCircle('demo', alice), bob, alice);
     aliceBrowser = await browser(relay, relay.loginLink(alice));
@@ -48,7 +49,8 @@ describe('agent limits: an agent can ask, never approve, and never reach the hum
     const sneaky = await rogue.call('update_card', { status: 'solved', tags: ['javascript'], summary: 'shared without asking' });
     assert.equal(sneaky.data.state, 'pending-approval');
     approvalId = new URL(rogue.dialogs[0]!.url!).pathname.split('/').at(-1)!;
-    assert.match((await aliceBrowser.get('/ui')).html, /Your card <em>0<\/em>/);
+    assert.doesNotMatch((await aliceBrowser.get('/ui')).html, /Your card <em>[1-9]/, 'nothing on her card');
+    assert.ok(!relay.klatsch.sipsOf(aliceId).some((s) => s.state === 'approved'), 'nothing shared');
   });
 
   it("another person's browser cannot open or decide the approval", async () => {
@@ -66,7 +68,8 @@ describe('agent limits: an agent can ask, never approve, and never reach the hum
     });
     assert.equal(decide.status, 401);
     assert.equal((await aliceBrowser.get(`/ui/approvals/${approvalId}`)).status, 200, 'the approval is still open for Alice');
-    assert.match((await aliceBrowser.get('/ui')).html, /Your card <em>0<\/em>/);
+    assert.doesNotMatch((await aliceBrowser.get('/ui')).html, /Your card <em>[1-9]/, 'nothing on her card');
+    assert.ok(!relay.klatsch.sipsOf(aliceId).some((s) => s.state === 'approved'), 'nothing shared');
   });
 
   it('unknown tags are refused without echoing them, before any approval', async () => {

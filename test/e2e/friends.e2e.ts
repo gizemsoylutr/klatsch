@@ -100,6 +100,13 @@ describe('friends: a link, a question about anything, an answer typed by hand th
     assert.equal(quote.from, '@eve');
     assert.match((await aliceBrowser.get('/ui')).html, /Sent to your AI/);
     assert.ok((await eveBrowser.post(`/ui/asks/${askId}/answer`, { answer: 'again' })).status >= 400, 'answered once');
+    // Home keeps the conversation on both sides, and counts the friend; no coding-only chips for people who only ask.
+    const eveHome = (await eveBrowser.get('/ui')).html;
+    assert.ok(eveHome.includes(QUESTION) && eveHome.includes(ANSWER));
+    assert.match(eveHome, /You answered/);
+    assert.ok(!eveHome.includes('action="/ui/asks/' + askId + '/answer"'), 'no answer box once answered');
+    assert.match(eveHome, /<b>1<\/b> friend</);
+    assert.ok(!eveHome.includes('intro requests'));
     await aliceBrowser.post(`/ui/asks/${askId}/send`);
     assert.ok(!JSON.stringify((await aliceAgent.call('inbox')).data.events).includes(ANSWER), 'a click on an old page does not send it twice');
   });

@@ -34,7 +34,8 @@ describe('approval by code: no dialog, the human types the code in their browser
     assert.equal(asked.data.approve_url, `${relay.base}/ui/device`);
     assert.match(asked.data.code, CODE);
     code = asked.data.code;
-    assert.match((await aliceBrowser.get('/ui')).html, /Your card <em>0<\/em>/);
+    assert.doesNotMatch((await aliceBrowser.get('/ui')).html, /Your card <em>[1-9]/, 'nothing on her card');
+    assert.ok(!relay.klatsch.sipsOf(alice).some((s) => s.state === 'approved'), 'nothing shared');
   });
 
   it('Alice opens the page from her dashboard', async () => {
