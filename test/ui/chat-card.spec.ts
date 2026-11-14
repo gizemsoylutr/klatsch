@@ -72,7 +72,7 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     const asked = await aliceChat.call('ask_person', { handle: '@eve', question: QUESTION });
     const { card, errors } = await openCard(page, aliceChat, JSON.parse(asked.raw));
     await expect(card.getByRole('heading', { name: 'Ask Eve (@eve)?' })).toBeVisible();
-    await expect(card.getByText(QUESTION)).toBeVisible();
+    await expect(card.getByLabel('Question (you can change it)')).toHaveValue(QUESTION);
     await expect(card.locator('b')).toHaveCount(0);
     await page.screenshot({ path: 'test/ui/screenshots/chat-card-ask.png' });
     await card.getByRole('button', { name: 'Ask', exact: true }).click();
@@ -170,6 +170,19 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     const { card, errors } = await openCard(page, eveChat, JSON.parse(shown.raw));
     await expect(card.getByText(/Not open any more/)).toBeVisible();
     await expect(card.getByRole('button', { name: 'Send answer' })).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('Alice changes her question in the card and sends it with one click', async ({ page }) => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Drafted by the AI?' });
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(asked.raw));
+    const box = card.getByLabel('Question (you can change it)');
+    await expect(box).toHaveValue('Drafted by the AI?');
+    await box.fill('Written by Alice herself?');
+    await page.screenshot({ path: 'test/ui/screenshots/chat-card-edit.png' });
+    await card.getByRole('button', { name: 'Ask', exact: true }).click();
+    await expect(card.getByText(/^Asked\./)).toBeVisible();
+    expect(relay.klatsch.asksOf(eveId).some((k) => k.question === 'Written by Alice herself?')).toBe(true);
     expect(errors).toEqual([]);
   });
 });

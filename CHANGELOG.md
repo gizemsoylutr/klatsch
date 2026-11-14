@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The card shows a drafted question or answer in an editable box: the person changes it and sends it with one click, and their version is what goes (checked like a draft). The assistant is told to put drafts straight into the card, and not to write in the chat whether something was sent, since only the card updates.
+- The assistant is told that Klatsch can notify on a phone or browser, instead of saying it cannot.
 - A card the chat shows again (after a reload, or scrolling back) asks the relay first (`klatsch_card_state`, for the card only) and shows what came of it, or that it was decided on the page, withdrawn or expired, instead of offering its buttons again.
 - Landing and sign-in pages lead with "Ask your friends. From any chat." and a two-line lead; ChatGPT is marked as tried live.
 - Turning notifications on reloads the page, so it shows them on; a browser that has them says so and offers "Turn off here" (`POST /ui/push/unsubscribe`, this device only).

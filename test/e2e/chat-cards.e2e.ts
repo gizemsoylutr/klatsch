@@ -153,4 +153,24 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     // Someone else's key tells them nothing.
     assert.equal((await eveChat.call('klatsch_card_state', { key: card.key })).data.state, 'gone');
   });
+
+  it('the person changes the drafted words in the card; what they send is their version', async () => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Draft question?' });
+    const card = asked.meta[CARD];
+    assert.equal(card.edit.value, 'Draft question?');
+    assert.equal((await aliceChat.call('klatsch_card', { key: card.key, decision: 'approved', text: '   ' })).isError, true, 'not empty');
+    assert.equal((await aliceChat.call('klatsch_card', { key: card.key, decision: 'approved', text: 'Hidden\u200bword' })).isError, true, 'checked like a draft');
+    await aliceChat.call('klatsch_card', { key: card.key, decision: 'approved', text: 'My own question, changed.' });
+    const ask = relay.klatsch.asksOf(eve).find((k) => k.question === 'My own question, changed.');
+    assert.ok(ask, 'Eve reads the edited question');
+    assert.ok(!relay.klatsch.asksOf(eve).some((k) => k.question === 'Draft question?'));
+    // Eve's agent drafts an answer; she changes it in her card and sends it.
+    await eveChat.call('klatsch_card', { key: (await eveChat.call('show_question', { ask_id: ask!.id })).meta[CARD].key, decision: 'draft' });
+    await eveChat.call('inbox');
+    const answered = await eveChat.call('answer_ask', { ask_id: ask!.id, answer: 'Drafted answer.' });
+    assert.equal(answered.meta[CARD].edit.value, 'Drafted answer.');
+    await eveChat.call('klatsch_card', { key: answered.meta[CARD].key, decision: 'approved', text: 'Eve’s own answer.' });
+    const quote = ((await aliceChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote' && e.quote?.includes('own answer'))!;
+    assert.equal(quote.quote, 'Eve’s own answer.');
+  });
 });

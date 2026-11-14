@@ -45,6 +45,8 @@ export interface Card {
   lines: CardLine[];
   note: string;
   actions: CardAction[];
+  /** The drafted words, editable before sending: the edited text goes with the decision. */
+  edit?: { label: string; value: string; max: number };
   /** A text box for the person's own answer, sent with the `answer` action. */
   answerBox?: { label: string; placeholder: string; max: number };
   flags?: string[];
@@ -101,7 +103,8 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
       return {
         key,
         title: `Ask ${view.to.name} (@${view.to.handle})?`,
-        lines: [{ label: 'Question', text: view.question }, ...tags(view.tags)],
+        lines: tags(view.tags),
+        edit: { label: 'Question', value: view.question, max: 500 },
         note: `Only ${view.to.name} reads this, with your name.`,
         actions: [
           { decision: 'declined', label: 'Not now' },
@@ -113,10 +116,8 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
       return {
         key,
         title: `Send your answer to ${view.from.name}?`,
-        lines: [
-          { label: 'Their question', text: view.question },
-          { label: 'Your answer', text: view.answer },
-        ],
+        lines: [{ label: 'Their question', text: view.question }],
+        edit: { label: 'Your answer', value: view.answer, max: 500 },
         note: `Only ${view.from.name} reads it, and it goes to the AI they asked with.`,
         actions: [
           { decision: 'declined', label: 'Not now' },
@@ -282,6 +283,12 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     parts.push(dl);
     if (card.flags && card.flags.length) parts.push(el('p', 'Check before sending: it may contain ' + card.flags.join(', ') + '.', 'flags'));
     let box;
+    let edit;
+    if (card.edit) {
+      const label = el('label', card.edit.label + ' (you can change it)'); label.htmlFor = 'edit';
+      edit = el('textarea'); edit.id = 'edit'; edit.maxLength = card.edit.max; edit.value = card.edit.value;
+      parts.push(label, edit);
+    }
     if (card.answerBox) {
       const id = 'answer';
       const label = el('label', card.answerBox.label); label.htmlFor = id;
@@ -298,7 +305,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
         if (action.decision === 'answer' && !answer) { box.focus(); return; }
         buttons.forEach((x) => (x.disabled = true));
         try {
-          const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: action.decision, ...(action.decision === 'answer' ? { answer } : {}) } });
+          const edited = edit && action.decision !== 'declined' && edit.value.trim() !== card.edit.value.trim() ? { text: edit.value } : {};
+          if (edit && action.decision !== 'declined' && !edit.value.trim()) { edit.focus(); buttons.forEach((x) => (x.disabled = false)); return; }
+          const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: action.decision, ...(action.decision === 'answer' ? { answer } : {}), ...edited } });
           if (result.isError) {
             let why = 'That did not work.';
             try { why = JSON.parse(result.content[0].text).message || why; } catch {}

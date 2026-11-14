@@ -264,6 +264,8 @@ export interface Choice {
   matchIn?: string[];
   /** Also on the Notes page of the private circles it is shared in. Only ever ticked by the human, on an open note. */
   feed?: boolean;
+  /** The question or answer as the person edited it before sending: their words replace the agent's draft. */
+  text?: string;
 }
 
 export interface UserRow {
@@ -310,6 +312,8 @@ export interface CircleView {
 const ASK_DAYS = 14;
 /** An answer typed on the page: the same bound as an agent's draft. */
 const ANSWER_MAX = 500;
+/** A question, drafted or edited: the same bound as the tool's input. */
+const QUESTION_MAX = 500;
 const ASKS_OPEN = 5;
 const ASKS_PER_DAY = 10;
 
@@ -1233,9 +1237,9 @@ export class Klatsch {
         } else if (approval.action === 'send_intro') {
           result = { intro_id: this.requestIntro(userId, p.match_id!).introId };
         } else if (approval.action === 'ask_person') {
-          result = { ask_id: this.createAsk(userId, p.handle!, JSON.parse(p.tags!) as string[], p.question!) };
+          result = { ask_id: this.createAsk(userId, p.handle!, JSON.parse(p.tags!) as string[], this.editedText(choice.text, p.question!, QUESTION_MAX)) };
         } else if (approval.action === 'answer_ask') {
-          this.answerAsk(userId, p.ask_id!, p.answer!, p.tried === 'true');
+          this.answerAsk(userId, p.ask_id!, this.editedText(choice.text, p.answer!, ANSWER_MAX), p.tried === 'true');
           result = { ask_id: p.ask_id };
         } else {
           result = { intro_id: p.intro_id, state: this.approveIntro(userId, p.intro_id!, 'web', choice.always) };
@@ -1341,6 +1345,16 @@ export class Klatsch {
   /** Throws unless this question waits for `helperId`. */
   checkAnswerable(helperId: string, askId: string): void {
     this.openAskFor(helperId, askId);
+  }
+
+  /** The person's own edit of a drafted question or answer, checked like the draft was; the draft when there is none. */
+  private editedText(edited: string | undefined, draft: string, max: number): string {
+    if (edited === undefined) return draft;
+    const text = edited.trim();
+    if (!text) throw new KlatschError('invalid', ASK.emptyAnswer);
+    if (text.length > max) throw new KlatschError('invalid', `At most ${max} characters.`);
+    refuseHidden(text);
+    return text;
   }
 
   /** The person asked writes the answer themselves, on their page: their click is the approval. */
