@@ -457,7 +457,7 @@ describe('the bare relay address', () => {
     const t = setup();
     const browser = await t.app.request(`${BASE}/`, { headers: { Accept: 'text/html,application/xhtml+xml' } });
     assert.equal(browser.status, 200);
-    assert.equal(browser.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+    assert.equal(browser.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
     assert.equal(browser.headers.get('referrer-policy'), 'same-origin');
     assert.equal(browser.headers.get('cache-control'), 'no-store');
     const page = await browser.text();

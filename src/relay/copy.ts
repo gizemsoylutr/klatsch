@@ -557,6 +557,20 @@ export const copy = {
     invalid: 'This invite is not valid. Invites work once and last seven days.',
   },
 
+  /** Notifications on a phone or browser (Web Push): a line, never what anyone wrote. */
+  push: {
+    heading: 'Notifications on this device',
+    line: 'A notification when someone asks you something or answers you. It never shows what they wrote.',
+    devices: (n: number) => (n === 0 ? 'Off on every device.' : n === 1 ? 'On for 1 device.' : `On for ${n} devices.`),
+    turnOn: 'Turn on here',
+    turnOff: 'Turn off everywhere',
+    done: 'On. This device gets Klatsch notifications.',
+    failed: 'That did not work. Try again, or use email notifications.',
+    denied: 'Notifications are blocked for Klatsch in this browser. Allow them in its settings, then try again.',
+    unsupported: 'This browser cannot get notifications from a web page. On an iPhone, add Klatsch to the Home Screen first.',
+    iphone: 'On an iPhone: tap Share, then Add to Home Screen, open Klatsch from there and turn notifications on.',
+  },
+
   /** A circle with a public join link: who joins, what members see, what turning the link on means. */
   commons: {
     heading: (name: string) => `Join ${name}`,

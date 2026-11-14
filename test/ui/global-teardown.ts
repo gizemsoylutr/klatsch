@@ -11,6 +11,12 @@ const NOT_IN_A_BROWSER = new Set([
   // The agents' endpoint, driven by the real MCP client in every scenario, never by a page.
   'ALL /mcp',
   // Plain text for assistants that read a site before suggesting it (test/e2e/oauth.e2e.ts).
+  // What a browser fetches for notifications and the home screen, not as a page: the worker, the manifest, its
+  // icon, and the subscription the script posts, which needs a real push service (test/e2e/push.e2e.ts).
+  'GET /ui/sw.js',
+  'GET /ui/manifest.webmanifest',
+  'GET /ui/icon.svg',
+  'POST /ui/push/subscribe',
   'GET /llms.txt',
   // The side of `klatsch connect` that waits in the terminal: JSON, refused with an Origin, so no page can use it.
   'POST /ui/connect/start',

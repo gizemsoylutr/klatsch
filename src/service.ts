@@ -1,3 +1,4 @@
+import { pushEndpoint, pushKeyValid, type PushSubscriptionRow } from './notify/push.ts';
 import { claim, setResult, type Approval } from './auth/approvals.ts';
 import { claimEmailConfirmation, type EmailConfirmation } from './auth/email-confirmations.ts';
 import { mailboxOf } from './auth/email-logins.ts';
@@ -722,6 +723,42 @@ export class Klatsch {
       }
       this.setVerifiedEmail(userId, confirmation.email, 'web');
     });
+  }
+
+  /**
+   * A browser asked for notifications on this device: its push subscription, checked (a known push service, keys
+   * of the right size). At most ten devices per person; the oldest goes. Saving the same endpoint again moves it.
+   */
+  savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): void {
+    const endpoint = pushEndpoint(sub.endpoint);
+    if (!endpoint || !pushKeyValid(sub.p256dh) || Buffer.from(sub.auth, 'base64url').length !== 16) {
+      throw new KlatschError('invalid', 'This browser sent a subscription Klatsch cannot use.');
+    }
+    transaction(this.db, () => {
+      // Someone else's device: never taken over. Signing in as another person here starts with notifications off.
+      const holder = this.db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?').get(endpoint) as { user_id: string } | undefined;
+      if (holder && holder.user_id !== userId) throw new KlatschError('invalid', 'This browser gets notifications for someone else. Turn them off there first.');
+      this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, userId);
+      this.db.prepare('INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(newId('push'), userId, endpoint, sub.p256dh, sub.auth, Date.now());
+      this.db
+        .prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND rowid NOT IN (SELECT rowid FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 10)')
+        .run(userId, userId);
+      this.audit(userId, 'web', 'push.on');
+    });
+  }
+
+  pushSubscriptionsOf(userId: string): PushSubscriptionRow[] {
+    return this.db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId) as unknown as PushSubscriptionRow[];
+  }
+
+  forgetPushSubscription(id: string): void {
+    this.db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(id);
+  }
+
+  /** Notifications off on every device of this person. */
+  pushOff(userId: string): void {
+    this.db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
+    this.audit(userId, 'web', 'push.off');
   }
 
   setEmailNotifications(userId: string, on: boolean): void {

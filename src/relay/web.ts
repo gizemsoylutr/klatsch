@@ -48,6 +48,8 @@ import {
 } from '@simplewebauthn/server';
 import { copy } from './copy.ts';
 import { PASSKEY_SCRIPT } from './passkey-script.ts';
+import { ICON_SVG, MANIFEST, PUSH_SCRIPT, SERVICE_WORKER } from './push-script.ts';
+import { vapidFromSecret } from '../notify/push.ts';
 import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer } from './layout.ts';
 
 const COOKIE = 'klatsch_session';
@@ -190,15 +192,15 @@ const routePattern = (path: string) =>
 
 type Env = { Variables: { userId: string; csrf: string; session: string } };
 
-const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 /** The pages with a passkey button: the same, plus the one same-origin script and its posts back to the relay. */
-const SCRIPT_CSP = "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /**
  * The OAuth consent page: its form is answered with a redirect back to the client, and browsers check that
  * redirect against form-action too, so that one origin (a registered, validated redirect URI's) is added.
  */
-const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self' ";
+const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self' ";
 const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin}; frame-ancestors 'none'; base-uri 'none'`;
 
 /** The headers of every page the relay serves to a browser: the web UI and the landing page at `/`. */
@@ -864,6 +866,25 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     return c.body(PASSKEY_SCRIPT);
   });
 
+  // Notifications on a phone or browser (Web Push): the page script, the service worker, and what a home screen needs.
+  web.get('/push.js', (c) => {
+    c.header('Content-Type', 'text/javascript; charset=utf-8');
+    return c.body(PUSH_SCRIPT);
+  });
+  web.get('/sw.js', (c) => {
+    c.header('Content-Type', 'text/javascript; charset=utf-8');
+    c.header('Cache-Control', 'no-cache');
+    return c.body(SERVICE_WORKER);
+  });
+  web.get('/manifest.webmanifest', (c) => {
+    c.header('Content-Type', 'application/manifest+json');
+    return c.body(MANIFEST);
+  });
+  web.get('/icon.svg', (c) => {
+    c.header('Content-Type', 'image/svg+xml');
+    return c.body(ICON_SVG);
+  });
+
   web.post('/auth/passkey/options', async (c) => {
     const at = passkeyAt(c);
     if (!at) return c.notFound();
@@ -1046,16 +1067,30 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     );
   });
 
+  web.post('/push/subscribe', async (c) => {
+    const form = await c.req.parseBody();
+    const field = (name: string) => (typeof form[name] === 'string' ? (form[name] as string) : '');
+    try {
+      klatsch.savePushSubscription(c.get('userId'), { endpoint: field('endpoint'), p256dh: field('p256dh'), auth: field('auth') });
+    } catch (error) {
+      if (error instanceof KlatschError) return c.text(error.message, 400);
+      throw error;
+    }
+    return c.text('ok');
+  });
+  web.post('/push/off', (c) => attempt(c, () => klatsch.pushOff(c.get('userId')), '/ui/settings#notifications'));
+
   web.get('/settings', (c) => {
     const userId = c.get('userId');
-    if (passkeyAt(c)) c.header('Content-Security-Policy', SCRIPT_CSP);
+    // Settings runs the passkey and the notifications scripts, both same-origin.
+    c.header('Content-Security-Policy', SCRIPT_CSP);
     const user = klatsch.user(userId);
     const badge = user.badge_id ? `${config.publicUrl}/badge/${user.badge_id}.svg` : undefined;
     return show(
       c,
       copy.settings.title,
       'settings',
-      settingsPage(user, otherSessions(db, secret, userId, c.get('session')), { list: passkeysOf(db, userId), here: Boolean(passkeyAt(c)) }, Boolean(klatsch.mailer), Boolean(github(c)), Boolean(google(c)), klatsch.grantsOf(userId), { ...klatsch.helped(userId), badge, home: config.publicUrl }, c.get('csrf')),
+      settingsPage(user, otherSessions(db, secret, userId, c.get('session')), { list: passkeysOf(db, userId), here: Boolean(passkeyAt(c)) }, Boolean(klatsch.mailer), Boolean(github(c)), Boolean(google(c)), klatsch.grantsOf(userId), { ...klatsch.helped(userId), badge, home: config.publicUrl }, c.get('csrf'), { devices: klatsch.pushSubscriptionsOf(userId).length, key: vapidFromSecret(secret).publicKey }),
     );
   });
 
@@ -2139,6 +2174,24 @@ function circlePage(userId: string, allCircles: CircleView[], base: string, csrf
     })}`;
 }
 
+/** Notifications on this phone or browser (Web Push). The button shows only where the script finds push support. */
+function pushSettings(push: { devices: number; key: string }, csrf: string) {
+  const t = copy.push;
+  return html`<section class="sec" id="notifications">
+      <h2>${t.heading}</h2>
+      <div class="group">
+        <div class="row">
+          <div class="main"><span>${t.line}</span><span class="m">${t.devices(push.devices)}</span></div>
+          <button type="button" class="primary" data-push data-key="${push.key}" data-csrf="${csrf}" data-done="${t.done}" data-failed="${t.failed}" data-denied="${t.denied}" data-unsupported="${t.unsupported}" hidden>${t.turnOn}</button>
+          ${push.devices ? button('/ui/push/off', t.turnOff, csrf, 'link') : ''}
+        </div>
+      </div>
+      <p id="push-status" class="hint" role="status" hidden></p>
+      <p class="hint">${t.iphone}</p>
+      <script src="/ui/push.js" defer></script>
+    </section>`;
+}
+
 /** The client picker's entries: `copilot` stands for both Copilot clients, which connect differently. */
 type Pick = keyof typeof copy.tokens.pick;
 
@@ -2265,7 +2318,7 @@ type GoogleStep =
 /** What Settings shows of thanks: the counts, the badge's link while it is on, and the relay's address for the Markdown link. */
 type Helped = { month: number; total: number; badge: string | undefined; home: string };
 
-function settingsPage(user: UserRow, elsewhere: number, passkeys: { list: PasskeyView[]; here: boolean }, canMail: boolean, gitHub: boolean, canGoogle: boolean, grants: GrantView[], helped: Helped, csrf: string) {
+function settingsPage(user: UserRow, elsewhere: number, passkeys: { list: PasskeyView[]; here: boolean }, canMail: boolean, gitHub: boolean, canGoogle: boolean, grants: GrantView[], helped: Helped, csrf: string, push: { devices: number; key: string }) {
   const linked = user.github_id !== null;
   const t = copy.settings;
   return html`<div class="ph"><h1>${t.title}</h1></div>
@@ -2295,6 +2348,7 @@ function settingsPage(user: UserRow, elsewhere: number, passkeys: { list: Passke
         </div>
       </div>
     </section>
+    ${pushSettings(push, csrf)}
     ${passkeys.here || passkeys.list.length ? passkeySettings(passkeys.list, passkeys.here, csrf) : ''}
     <p class="hint">${copy.consent.heading}: ${copy.consent.hint}</p>
     ${grantList(copy.consent.showHeading, grants.filter((g) => g.kind === 'show'), csrf)}

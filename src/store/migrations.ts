@@ -601,4 +601,16 @@ export const migrations: string[] = [
   );
   CREATE INDEX app_keys_by_user ON app_keys (user_id);
   `,
+  // Web Push: a browser's subscription per device, for content-free notifications ("Something new in your circle").
+  `
+  CREATE TABLE push_subscriptions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX push_subscriptions_by_user ON push_subscriptions (user_id);
+  `,
 ];

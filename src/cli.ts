@@ -20,6 +20,7 @@ import { notifications } from './copy/notifications.ts';
 import { loadEmbedder } from './match/semantic.ts';
 import { seedVocabulary } from './match/vocabulary.ts';
 import { emailFromEnv } from './notify/email.ts';
+import { sendPush, vapidFromSecret } from './notify/push.ts';
 import { createRelay } from './relay/app.ts';
 import { Klatsch, type Notifier } from './service.ts';
 import { openDb } from './store/db.ts';
@@ -93,11 +94,23 @@ function open(config: Config, demo = false): { klatsch: Klatsch; secret: Buffer 
   const email = emailFromEnv(process.env, db, (handle) => personalBase(config, demo, handle));
   // Hosted, nobody sits at the relay's terminal or desktop.
   const hosted = isHosted(config);
+  // Web Push to the person's phones and browsers: the same content-free line, sent after the answer, never awaited.
+  const vapid = vapidFromSecret(secret);
+  const pushSubject = config.operator ? `mailto:${config.operator.email}` : config.publicUrl;
+  let pushTo: (user: { id: string }, message: string) => void = () => {};
   const notify: Notifier = (user, message) => {
     if (!hosted) localNotifier(user, message);
     email?.notify(user, message);
+    pushTo(user, message);
   };
   const klatsch = new Klatsch(db, config, notify, email?.confirm, email?.signIn);
+  pushTo = (user, message) => {
+    for (const subscription of klatsch.pushSubscriptionsOf(user.id)) {
+      void sendPush(vapid, pushSubject, subscription, { title: notifications.desktopTitle, body: message, url: '/ui' }).then((outcome) => {
+        if (outcome === 'gone') klatsch.forgetPushSubscription(subscription.id);
+      });
+    }
+  };
   // Every command needs the key: what people wrote is sealed in the database.
   klatsch.useSecret(secret);
   return { klatsch, secret };

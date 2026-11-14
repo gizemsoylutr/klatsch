@@ -3,6 +3,7 @@
 // answers in hers, and the card shows what happened. No console errors, nothing rendered as HTML from the data.
 import { expect, test, type Page } from '@playwright/test';
 import { agent, startRelay, type Relay } from '../e2e/harness.ts';
+import { person } from './people.ts';
 
 const QUESTION = 'Which bakery near the station did you like? <b>not bold</b>';
 
@@ -87,6 +88,13 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     const quote = ((await aliceChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
     expect(quote.quote).toBe('The small one on the corner.');
     expect(errors).toEqual([]);
+    // Alice's Klatsch page shows the same answer, already sent to her AI.
+    const alice = await person(page.context().browser()!, relay, 'Alice', import.meta.filename, relay.loginLink(aliceId));
+    await alice.open(`${relay.base}/ui`);
+    await expect(alice.page.getByText('The small one on the corner.')).toBeVisible();
+    await expect(alice.page.getByText('Sent to your AI')).toBeVisible();
+    await alice.expectCleanBrowser();
+    await alice.context.close();
   });
 
   test('when the answer cannot go (Alice withdrew it), the card says so and keeps its buttons', async ({ page }) => {

@@ -273,6 +273,15 @@ What keeps the model from deciding:
 
 Accepted risk: the last three protections rest on the chat app keeping to the MCP Apps standard. A chat app that showed `_meta` to the model and let the model call app-only tools would let a tricked model approve. Where that matters more than staying in the chat, decide on the Klatsch page: every request still has one, and clients without cards never get a key.
 
+### Notifications on a phone or browser (Web Push)
+
+Settings offers notifications on the device in hand. A notification carries the same content-free line as email and desktop notifications ("Something new in your circle"); what someone wrote never goes through a push service.
+
+- **No library, standard crypto.** Messages are encrypted for the browser (RFC 8291, aes128gcm) and the relay identifies itself with VAPID (RFC 8292), both on `node:crypto`; the encryption is tested against the RFC's own test vector. The VAPID key is derived from the server secret, so it needs no file and survives a restore.
+- **The relay posts only to push services.** A subscription is kept only when its endpoint is https on a known push service (Google, Mozilla, Apple, Microsoft) and a path its subscriptions have, stored as normalised, with a public key that is a point on P-256 and a 16-byte auth secret, and the relay never follows a redirect, so a subscription cannot make the relay send requests anywhere else. A push service's 404 or 410 forgets it; other failures are logged by status only.
+- **Bounded and revocable.** At most ten devices per person (the oldest goes); "Turn off everywhere" forgets them all, and deleting the account removes them. A device's subscription belongs to the person who turned it on: nobody else can take it over by posting its endpoint. Signing out keeps it (the line is content-free); turn it off in Settings before handing a browser to someone else.
+- **Same-origin scripts only.** `/ui/push.js` runs on Settings under `script-src 'self'; worker-src 'self'`; the service worker shows the line and opens Klatsch on a tap, and never fetches. On an iPhone, notifications need Klatsch added to the Home Screen (`/ui/manifest.webmanifest`).
+
 ### Apps connected by OAuth
 
 Some MCP clients cannot be handed a token: ChatGPT and claude.ai connectors only speak OAuth. For them the relay is its own OAuth 2.1 authorization server, on a relay with an https public URL (or on this machine):

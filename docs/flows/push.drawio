@@ -1,0 +1,21 @@
+<mxfile host="klatsch" type="device">
+  <diagram id="push" name="push">
+    <mxGraphModel dx="1000" dy="640" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="640" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="push notifications: offered in Settings, one subscription per device, off in one click" style="text;html=1;fontSize=16;fontStyle=1;align=left;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="40" y="10" width="920" height="40" as="geometry"/></mxCell>
+        <mxCell id="lane-agent" value="Agent (MCP client)" style="swimlane;html=1;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="20" y="60" width="320" height="580" as="geometry"/></mxCell>
+        <mxCell id="lane-person" value="Person (browser)" style="swimlane;html=1;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="340" y="60" width="320" height="580" as="geometry"/></mxCell>
+        <mxCell id="lane-relay" value="Relay" style="swimlane;html=1;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="660" y="60" width="320" height="580" as="geometry"/></mxCell>
+        <mxCell id="s0" value="1. the service worker, the page script, the manifest and the icon need no session" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1"><mxGeometry x="360" y="120" width="280" height="80" as="geometry"/></mxCell>
+        <mxCell id="s1" value="2. Settings offers it with the relay’s public key and its same-origin script" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1"><mxGeometry x="680" y="240" width="280" height="80" as="geometry"/></mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s0" target="s1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="s2" value="3. a browser’s subscription is kept; anything not from a push service, or with wrong keys, is refused" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1"><mxGeometry x="360" y="360" width="280" height="80" as="geometry"/></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s1" target="s2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="s3" value="4. at most ten devices; &quot;Turn off everywhere&quot; forgets them all" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1"><mxGeometry x="680" y="480" width="280" height="80" as="geometry"/></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s2" target="s3"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
