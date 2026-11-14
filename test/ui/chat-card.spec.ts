@@ -22,6 +22,9 @@ const HOST = `<!doctype html><html><body style="margin:0"><iframe id="card" sand
       frame.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: window.toolResult }, '*');
     } else if (msg.method === 'tools/call') {
       reply(await window.klatschCall(msg.params));
+    } else if (msg.method === 'ui/message') {
+      window.messages = (window.messages || []).concat([msg.params]);
+      reply({});
     } else if (msg.method === 'ui/update-model-context') {
       window.modelContext.push(msg.params);
       reply({});
@@ -124,6 +127,20 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     await page.screenshot({ path: 'test/ui/screenshots/chat-card-friend.png' });
     const context = await page.evaluate<string>('JSON.stringify(window.modelContext)');
     expect(context).not.toContain('/ui/invite/');
+    expect(errors).toEqual([]);
+  });
+
+  test('"Draft with my AI" sends the question to Eve’s AI and asks it to start, so nobody has to type', async ({ page }) => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Draft this one?' });
+    await aliceChat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
+    const ask = relay.klatsch.asksOf(eveId).find((k) => k.question === 'Draft this one?')!;
+    const shown = await eveChat.call('show_question', { ask_id: ask.id });
+    const { card, errors } = await openCard(page, eveChat, JSON.parse(shown.raw));
+    await card.getByRole('button', { name: 'Draft with my AI' }).click();
+    await expect(card.getByText(/Sent to your AI/)).toBeVisible();
+    await expect.poll(() => page.evaluate<number>('(window.messages || []).length')).toBe(1);
+    const quote = ((await eveChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
+    expect(quote.quote).toBe('Draft this one?');
     expect(errors).toEqual([]);
   });
 });

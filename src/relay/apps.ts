@@ -280,6 +280,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
           const sc = result.structuredContent || {};
           if (typeof sc.link === 'string') { showLink(sc.message || 'Your link', sc.link); return; }
           finish(sc.message || 'Done.');
+          // "Draft with my AI": the person's click asks the assistant to start, so it does not wait for a message.
+          if (action.decision === 'draft') {
+            app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read the question I just sent you from my Klatsch inbox and draft an answer for me to approve.' }] }).catch(() => {});
+          }
         } catch (error) {
           buttons.forEach((x) => (x.disabled = false));
           root.append(el('p', 'That did not work. Try again, or decide on your Klatsch page.', 'flags'));

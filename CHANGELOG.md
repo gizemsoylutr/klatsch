@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- "Draft with my AI" in the card also asks the assistant to start drafting, so the person need not type a message.
 - The card copies a friend link with the browser's copy command where a chat app blocks the clipboard, and can open WhatsApp or email with the link filled in.
 - A second friend link between two people who are friends already adds nothing ("already friends"); duplicates made before are closed.
 - A PNG icon (`/icon.png`, `/favicon.ico`, `/apple-touch-icon.png`), and the MCP server names its website and icon, for chat apps and home screens.
