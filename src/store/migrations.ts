@@ -648,4 +648,10 @@ export const migrations: string[] = [
   `
   ALTER TABLE app_keys ADD COLUMN outcome TEXT;
   `,
+  // Review accounts: a password for the one account the operator names (directory reviewers need one), and a
+  // demo friend that answers at once, so a reviewer can try the whole flow alone.
+  `
+  ALTER TABLE users ADD COLUMN password_hash TEXT;
+  ALTER TABLE users ADD COLUMN demo INTEGER NOT NULL DEFAULT 0 CHECK (demo IN (0, 1));
+  `,
 ];

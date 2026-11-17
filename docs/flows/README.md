@@ -33,6 +33,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | quote hand-off: Alice sends Bob's sip to her own agent | 7 | [quote-handoff.drawio](quote-handoff.drawio) |
 | request intro: find matches first, then ask for an intro to one | 6 | [request-intro.drawio](request-intro.drawio) |
 | return after sign-in: an approval opened signed out is decided after the login link | 3 | [return-after-sign-in.drawio](return-after-sign-in.drawio) |
+| review account: a password for one account, and a demo friend for the whole round trip | 5 | [review.drawio](review.drawio) |
 | semantic matching: different tags, the same problem | 7 | [semantic-matching.drawio](semantic-matching.drawio) |
 | sessions: Alice signs in on two browsers and signs out the other one from Settings | 2 | [sessions.drawio](sessions.drawio) |
 | share and intro: Alice asks, Bob accepts, names are exchanged in the browsers only | 8 | [share-and-intro.drawio](share-and-intro.drawio) |

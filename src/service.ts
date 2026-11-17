@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+import { hashPassword, newReviewPassword, passwordMatches } from './auth/review.ts';
 import { pushEndpoint, pushKeyValid, type PushSubscriptionRow } from './notify/push.ts';
 import { claim, setResult, type Approval } from './auth/approvals.ts';
 import { claimEmailConfirmation, type EmailConfirmation } from './auth/email-confirmations.ts';
@@ -312,6 +314,14 @@ export interface CircleView {
 const ASK_DAYS = 14;
 /** An answer typed on the page: the same bound as an agent's draft. */
 const ANSWER_MAX = 500;
+/** The demo friend of a review account: answers at once, and always has one question waiting. */
+const DEMO_HANDLE = 'klatsch-demo';
+const DEMO = {
+  question: 'Hi! I am the Klatsch demo friend. What would you like to ask a friend through your AI? Answer me here.',
+  answer: (question: string) => `Hi, this is the Klatsch demo friend. You asked: “${question.slice(0, 300)}” A real friend reads it in their own chat and answers there; this answer came back to the chat you asked from.`,
+};
+/** A stored hash nobody's password matches, compared when a handle has none, so both cases take as long. */
+const DUMMY_HASH = hashPassword(randomBytes(16).toString('hex'));
 /** A question, drafted or edited: the same bound as the tool's input. */
 const QUESTION_MAX = 500;
 const ASKS_OPEN = 5;
@@ -1311,6 +1321,8 @@ export class Klatsch {
     if (always) this.event(helper.id, 'ask.question', id);
     this.audit(askerId, 'web', 'ask.create', id);
     this.notifyUser(helper.id, notifications.other);
+    // The demo friend answers at once, so a reviewer sees the whole round trip alone.
+    if (this.isDemo(helper.id)) this.answerAsk(helper.id, id, DEMO.answer(question), false, 'cli');
     return id;
   }
 
@@ -1357,6 +1369,55 @@ export class Klatsch {
     return text;
   }
 
+  // ---------- review accounts ----------
+
+  /**
+   * Sets up a directory reviewer: the account (made if missing) gets a new password, and a demo friend that
+   * answers at once, with one question from the demo friend waiting. Returns the password, once.
+   */
+  setReviewAccount(handle: string, name: string): string {
+    const password = newReviewPassword();
+    transaction(this.db, () => {
+      const reviewer = this.ensureUser(handle, name);
+      this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), reviewer);
+      const demo = this.ensureUser(DEMO_HANDLE, 'Klatsch Demo');
+      this.db.prepare('UPDATE users SET demo = 1 WHERE id = ?').run(demo);
+      if (!this.friendshipOf(reviewer, demo)) {
+        const circle = this.friendCircle(demo);
+        this.addMember(circle, reviewer, demo);
+      }
+      this.seedDemoQuestion(demo, reviewer);
+      this.audit(reviewer, 'cli', 'review.account');
+    });
+    return password;
+  }
+
+  /** The person behind a review account's handle and password; anything else is simply not found. */
+  passwordSignIn(handle: string, password: string): string | undefined {
+    const row = this.db.prepare('SELECT id, password_hash FROM users WHERE handle = ?').get(handle.trim().replace(/^@/, '').toLowerCase()) as
+      | { id: string; password_hash: string | null }
+      | undefined;
+    // The same work whether or not the handle has a password, so timing tells nobody which accounts are review accounts.
+    const ok = passwordMatches(password, row?.password_hash ?? DUMMY_HASH) && Boolean(row?.password_hash);
+    if (!ok || !row) return undefined;
+    this.audit(row.id, 'web', 'review.signin');
+    return row.id;
+  }
+
+  hasReviewAccounts(): boolean {
+    return Boolean(this.db.prepare('SELECT 1 FROM users WHERE password_hash IS NOT NULL').get());
+  }
+
+  private isDemo(userId: string): boolean {
+    return Boolean((this.db.prepare('SELECT demo FROM users WHERE id = ?').get(userId) as { demo: number } | undefined)?.demo);
+  }
+
+  /** The demo friend's question to the reviewer, unless one is still waiting. */
+  private seedDemoQuestion(demo: string, reviewer: string): void {
+    const waiting = this.db.prepare(`SELECT 1 FROM asks WHERE asker_id = ? AND helper_id = ? AND state = 'open' AND expires_at > ?`).get(demo, reviewer, Date.now());
+    if (!waiting) this.createAsk(demo, this.user(reviewer).handle, [], DEMO.question);
+  }
+
   /** The person asked writes the answer themselves, on their page: their click is the approval. */
   answerByHand(helperId: string, askId: string, answer: string): void {
     const text = answer.trim();
@@ -1375,6 +1436,8 @@ export class Klatsch {
     this.event(row.asker_id, 'ask.answered', askId);
     this.event(row.asker_id, 'ask.answer', askId);
     this.audit(helperId, via, 'ask.answer', askId);
+    // A reviewer answered the demo friend: the next reviewer finds a new question waiting.
+    if (this.isDemo(row.asker_id)) this.seedDemoQuestion(row.asker_id, helperId);
     this.notifyUser(row.asker_id, notifications.other);
   }
 
@@ -1401,6 +1464,7 @@ export class Klatsch {
     this.db.prepare(`UPDATE asks SET state = 'declined', question_for_agent = 0 WHERE id = ?`).run(askId);
     this.event(row.asker_id, 'ask.declined', askId);
     this.audit(helperId, 'web', 'ask.decline', askId);
+    if (this.isDemo(row.asker_id)) this.seedDemoQuestion(row.asker_id, helperId);
   }
 
   /** The asker takes the question back: it leaves the other person's page and their agent's inbox. */

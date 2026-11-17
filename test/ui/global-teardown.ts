@@ -19,6 +19,8 @@ const NOT_IN_A_BROWSER = new Set([
   'POST /ui/push/subscribe',
   'POST /ui/push/unsubscribe',
   'GET /llms.txt',
+  // OpenAI's domain check, read by their server (test/e2e/review.e2e.ts).
+  'GET /.well-known/openai-apps-challenge',
   // The icon as PNG for chat apps and home screens (test/e2e/oauth.e2e.ts).
   'GET /icon.png',
   'GET /favicon.ico',

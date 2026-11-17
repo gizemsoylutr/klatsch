@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review accounts for chat app directories: `klatsch review-account --user <handle>` gives one account a password (scrypt, shown once) for `/ui/review-login`, and a demo friend `@klatsch-demo` that answers at once and always has a question waiting. Every tool states all three hints. `/.well-known/openai-apps-challenge` serves `KLATSCH_OPENAI_CHALLENGE` for OpenAI's domain check.
 - Home puts friends first: a friends count and "waiting for your answer", questions and answers on both sides for 14 days ("You answered"), and the notes, intros and card only for people who use them.
 - The card shows a drafted question or answer in an editable box: the person changes it and sends it with one click, and their version is what goes (checked like a draft). The assistant is told to put drafts straight into the card, and not to write in the chat whether something was sent, since only the card updates.
 - The assistant is told that Klatsch can notify on a phone or browser, instead of saying it cannot.

@@ -565,6 +565,18 @@ export const copy = {
     invalid: 'This invite is not valid. Invites work once and last seven days.',
   },
 
+  /** The sign-in page for a directory reviewer's account. */
+  review: {
+    title: 'Review account',
+    lead: 'For reviewers of a chat app directory, with the handle and password they were given.',
+    handle: 'Handle',
+    password: 'Password',
+    signIn: 'Sign in',
+    failed: 'That handle and password do not match a review account.',
+    note: 'Everyone else signs in with a link, GitHub, Google or a passkey.',
+    link: 'Reviewing Klatsch for a directory? Sign in with the review account',
+  },
+
   /** Notifications on a phone or browser (Web Push): a line, never what anyone wrote. */
   push: {
     heading: 'Notifications on this device',

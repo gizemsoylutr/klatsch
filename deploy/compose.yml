@@ -21,6 +21,7 @@ services:
       # Who runs this relay, for its /privacy and /terms pages (docs/self-hosting.md). All or none.
       KLATSCH_OPERATOR_NAME: ${KLATSCH_OPERATOR_NAME:-}
       KLATSCH_OPERATOR_EMAIL: ${KLATSCH_OPERATOR_EMAIL:-}
+      KLATSCH_OPENAI_CHALLENGE: ${KLATSCH_OPENAI_CHALLENGE:-}
       KLATSCH_OPERATOR_PROCESSORS: ${KLATSCH_OPERATOR_PROCESSORS:-}
     volumes:
       - data:/data

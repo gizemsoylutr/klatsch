@@ -60,6 +60,7 @@ const USAGE = `Usage:
   klatsch token --user <handle> [--demo] [--data ...]      issue a new agent token
   klatsch revoke --user <handle> [--demo] [--data ...]     revoke all of a user's agent tokens
   klatsch login --user <handle> [--demo] [--data ...]      print a new web login link (valid 10 minutes)
+  klatsch review-account --user <handle> [--name <name>]  a directory reviewer's account: a new password (shown once) and a demo friend
   klatsch delete --user <handle> --yes [--data ...]        delete that person's account and everything they
                                                            shared, at once, as the privacy page promises when
                                                            they ask by email (the same as Settings, Delete account)
@@ -630,6 +631,16 @@ function main(): void {
       if (owner && owner.id !== id) throw new Error('That address already belongs to another person here.');
       klatsch.setVerifiedEmail(id, address, 'cli');
       console.log(`@${values.user} can now sign in by email at that address.`);
+      return;
+    }
+    case 'review-account': {
+      // A chat app directory's reviewers sign in with a username and password: this account, and only this one, has one.
+      if (!values.user) throw new Error(USAGE);
+      const { klatsch, secret } = open(base);
+      klatsch.useSecret(secret);
+      const password = klatsch.setReviewAccount(values.user, values.name ?? 'Klatsch Review');
+      console.log(`Review account @${values.user}, with the demo friend @klatsch-demo. Sign in at ${base.publicUrl}/ui/review-login`);
+      console.log(`Password (shown once): ${password}`);
       return;
     }
     case 'delete': {

@@ -283,6 +283,15 @@ Settings offers notifications on the device in hand. A notification carries the 
 - **Bounded and revocable.** At most ten devices per person (the oldest goes); "Turn off everywhere" forgets them all, and deleting the account removes them. A device's subscription belongs to the person who turned it on: nobody else can take it over by posting its endpoint. Signing out keeps it (the line is content-free); turn it off in Settings before handing a browser to someone else.
 - **Same-origin scripts only.** `/ui/push.js` runs on Settings under `script-src 'self'; worker-src 'self'`; the service worker shows the line and opens Klatsch on a tap, and never fetches. On an iPhone, notifications need Klatsch added to the Home Screen (`/ui/manifest.webmanifest`).
 
+### Review accounts (directory reviewers)
+
+A chat app's directory reviewers sign in with a username and password, without email links or codes. Klatsch has no passwords for people; the operator can give exactly one kind of account a password with `klatsch review-account --user <handle>`, which prints a new random password once.
+
+- **Only named accounts.** `/ui/review-login` exists only while some account has a password, and a password works only for an account the operator set up. Every other person's sign-in is unchanged.
+- **Stored safely, checked in constant time.** scrypt with a random salt; a handle without a password is checked against a dummy hash, so timing does not tell which accounts are review accounts. Ten tries an hour per address and per handle; the form needs the page's form token and Origin.
+- **A demo friend, not real people.** The review account's only friend is `@klatsch-demo`, which answers every question at once with a fixed text and always has one question waiting. A reviewer never reaches anyone real unless someone adds them as a friend.
+- **Ending it.** `klatsch delete --user <handle> --yes` removes the account; running `review-account` again changes the password.
+
 ### Apps connected by OAuth
 
 Some MCP clients cannot be handed a token: ChatGPT and claude.ai connectors only speak OAuth. For them the relay is its own OAuth 2.1 authorization server, on a relay with an https public URL (or on this machine):

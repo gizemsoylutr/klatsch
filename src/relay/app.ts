@@ -114,6 +114,8 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
   // and no email sign-in beside it (then the buttons just say "Sign in").
   const github = (c: Context) => Boolean(config.github) && !config.google && !klatsch.mailer && baseFor(config, c.req.header('host')) === config.publicUrl;
   app.get('/llms.txt', (c: Context) => c.text(llmsTxt(config.publicUrl)));
+  // The value OpenAI's developer platform gives to prove the domain, when the operator set it.
+  app.get('/.well-known/openai-apps-challenge', (c: Context) => (process.env.KLATSCH_OPENAI_CHALLENGE ? c.text(process.env.KLATSCH_OPENAI_CHALLENGE) : c.notFound()));
   // The icon as a bitmap, for chat apps, link previews and home screens; /favicon.ico for clients that only try that.
   const png = (size: number, rounded = true) => (c: Context) => {
     c.header('Content-Type', 'image/png');

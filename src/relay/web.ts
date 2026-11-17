@@ -266,6 +266,39 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     return returns.take(key) ?? '/ui';
   };
 
+  // ---------- review accounts (a chat app directory's reviewers: a handle and a password, no codes) ----------
+
+  const allowReviewAddress = perKeyLimit(10, HOUR_MS);
+  const allowReviewHandle = perKeyLimit(10, HOUR_MS);
+  const reviewForm = (c: Context, failed: boolean) =>
+    c.html(
+      signInScreen(
+        copy.review.title,
+        html`<p class="lead">${copy.review.lead}</p>
+          ${failed ? html`<p class="flag" role="alert">${copy.review.failed}</p>` : ''}
+          <form class="mail" method="post" action="/ui/review-login">
+            <input type="hidden" name="csrf" value="${formToken(c)}" />
+            <input type="text" name="handle" maxlength="40" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="${copy.review.handle}" aria-label="${copy.review.handle}" />
+            <input type="password" name="password" maxlength="100" required autocomplete="current-password" placeholder="${copy.review.password}" aria-label="${copy.review.password}" />
+            <button class="primary">${copy.review.signIn}</button>
+          </form>
+          <p>${copy.review.note}</p>`,
+      ),
+      failed ? 401 : 200,
+    );
+  web.get('/review-login', (c) => (klatsch.hasReviewAccounts() ? reviewForm(c, false) : c.notFound()));
+  web.post('/review-login', async (c) => {
+    if (!klatsch.hasReviewAccounts()) return c.notFound();
+    const refused = await refusedForm(c);
+    if (refused) return refused;
+    const form = await c.req.parseBody();
+    const handle = typeof form.handle === 'string' ? form.handle.slice(0, 40) : '';
+    const password = typeof form.password === 'string' ? form.password.slice(0, 100) : '';
+    if (!allowReviewAddress(address(c)) || !allowReviewHandle(handle.toLowerCase())) return c.html(notice(copy.signIn.busyTitle, html`<p class="sub">${copy.signIn.busy}</p>`), 429);
+    const userId = klatsch.passwordSignIn(handle, password);
+    return userId ? signIn(c, userId) : reviewForm(c, true);
+  });
+
   web.get('/login', (c) => {
     const login = consumeLogin(db, secret, c.req.query('t') ?? '');
     if (!login) return c.html(notice(copy.signIn.expiredTitle, html`<p class="sub">${copy.signIn.expired}</p>${loginHelp}${githubButton(c)}`), 401);
@@ -996,12 +1029,12 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
               passkey ? passkeyBox(token, Boolean(github(c) || google(c) || klatsch.signInMailer)) : ''
             }${github(c) ? html`${githubLink(GITHUB_PATH, t.github)}<p>${t.githubNote}</p><span class="or">${t.or}</span>` : ''}${google(c) ? html`${googleLink(GOOGLE_PATH, t.google)}<p>${t.googleNote}</p><span class="or">${t.or}</span>` : ''}${
               klatsch.signInMailer ? emailForm(c, token) : ''
-            }<p>${t.loginLink}</p>${open ? '' : html`<p>${t.inviteNeeded}</p>`}${isHosted(config) ? '' : html`<p>${t.help}</p>`}`,
+            }<p>${t.loginLink}</p>${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}${open ? '' : html`<p>${t.inviteNeeded}</p>`}${isHosted(config) ? '' : html`<p>${t.help}</p>`}`,
           ),
           401,
         );
       }
-      return c.html(signInScreen(t.notSignedInTitle, html`<p class="lead">${t.notSignedIn}</p><p>${t.help}</p><p>${t.inviteNeeded}</p>`), 401);
+      return c.html(signInScreen(t.notSignedInTitle, html`<p class="lead">${t.notSignedIn}</p><p>${t.help}</p><p>${t.inviteNeeded}</p>${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}`), 401);
     }
     // A renewed session gets a cookie that lives as long as it now does.
     if (found.expiresAt) setCookie(c, COOKIE, session, { httpOnly: true, sameSite: 'Lax', secure, path: '/ui', maxAge: Math.floor((found.expiresAt - Date.now()) / 1000) });
