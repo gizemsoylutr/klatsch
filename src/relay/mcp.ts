@@ -596,7 +596,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     {
       title: 'State of a Klatsch card',
       description: 'Used by the Klatsch card in the chat when it is shown again. Not for the model.',
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({ key: z.string().min(20).max(100) }),
       _meta: { ui: { resourceUri: CARD_URI, visibility: ['app'] } },
       scopeChallenge: requireScopes('inbox:read'),
@@ -675,7 +675,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'List friends',
       description:
         'Your human\'s friends on Klatsch, by handle only: people they can ask anything with ask_person. People in a shared private circle can be asked too, by the handle your human gives. Read-only. To add a friend, your human uses "Add a friend" on their Klatsch Circle page and sends the link.',
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({}),
       outputSchema: friendsOutput,
       scopeChallenge: requireScopes('inbox:read'),
@@ -698,7 +698,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     {
       title: 'What is waiting',
       description: 'One-line reminder of what waits in Klatsch (counts, handles of people an accepted intro connected your human with, and how many people your human\'s open notes helped). Read-only; the text is empty when nothing waits.',
-      annotations: { readOnlyHint: true, openWorldHint: false },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({}),
       outputSchema: pendingOutput,
       scopeChallenge: requireScopes('inbox:read'),
