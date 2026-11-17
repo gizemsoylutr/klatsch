@@ -23,11 +23,13 @@ export function sniff(bytes: Uint8Array): AttachmentKind | undefined {
   if (at(bytes, 0, 'GIF8')) return { mime: 'image/gif', kind: 'image' };
   if (at(bytes, 0, 'RIFF') && at(bytes, 8, 'WEBP')) return { mime: 'image/webp', kind: 'image' };
   if (at(bytes, 0, '%PDF-')) return { mime: 'application/pdf', kind: 'pdf' };
-  if (at(bytes, 0, 'ID3') || (bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0)) return { mime: 'audio/mpeg', kind: 'audio' };
+  // MP3: an ID3 tag, or an MPEG-1 Layer III frame header (FF FB, FF FA, FF F3, FF F2).
+  if (at(bytes, 0, 'ID3') || (bytes[0] === 0xff && [0xfb, 0xfa, 0xf3, 0xf2].includes(bytes[1]!))) return { mime: 'audio/mpeg', kind: 'audio' };
   if (at(bytes, 0, 'OggS')) return { mime: 'audio/ogg', kind: 'audio' };
   if (at(bytes, 0, 'RIFF') && at(bytes, 8, 'WAVE')) return { mime: 'audio/wav', kind: 'audio' };
   if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return { mime: 'audio/webm', kind: 'audio' };
-  // ISO media (m4a, a phone's voice memo): "ftyp" at 4; audio brands only, never video.
+  // ISO media (a phone's voice memo: M4A on iPhones, isom or mp42 on many Android phones). These brands can also
+  // hold video; the file is served as audio/mp4, sandboxed, which a browser plays as sound or not at all.
   if (at(bytes, 4, 'ftyp')) {
     const brand = String.fromCharCode(...bytes.subarray(8, 12));
     if (['M4A ', 'M4B ', 'mp42', 'isom', 'dash'].includes(brand)) return { mime: 'audio/mp4', kind: 'audio' };

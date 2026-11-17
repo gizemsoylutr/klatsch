@@ -57,7 +57,8 @@ export const HANDLE = /^[a-z0-9][a-z0-9-]{0,38}$/;
 /** `@handle` for an agent, or nothing for a handle stored before handles were checked. */
 export const agentHandle = (handle: string | undefined): string | undefined => (handle && HANDLE.test(handle) ? `@${handle}` : undefined);
 
-export type Via = 'mcp' | 'web' | 'cli';
+/** Where an action came from; 'dialog' is a decision in a chat app's card or dialog. */
+export type Via = 'mcp' | 'web' | 'cli' | 'dialog';
 
 export type SipStatus = UpdateCardInput['status'];
 /** Who reads a solved sip: the members it matches at once (`open`), or only after an intro its author allowed (`ask`). */
@@ -349,7 +350,7 @@ export interface InboxEvent {
   /** The quoted note's link card, delivered with it on the same consent. */
   source?: Source;
   /** Files that came with a question or an answer: names and types; the person opens them on their Klatsch page. */
-  files?: { name: string; type: string; size: number }[];
+  files?: { type: string; size: number }[];
 }
 
 export class Klatsch {
@@ -946,6 +947,8 @@ export class Klatsch {
    * Someone removed from the circle can only come back on an invite its owner created after the removal, which clears the removal.
    */
   acceptInvite(userId: string, invite: Invite): 'joined' | 'already-member' | 'already-friends' {
+    // Outsiders hold a review account's password: it reaches no real people, by invite or friend link.
+    if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account has the demo friend only.');
     return transaction(this.db, () => {
       if (this.memberRole(userId, invite.circleId)) return 'already-member';
       // A second friend link between the same two people: they are friends already, so the new one is closed unused.
@@ -973,7 +976,7 @@ export class Klatsch {
    */
   mayInvite(userId: string, circleId: string): boolean {
     const role = this.memberRole(userId, circleId);
-    if (!role) return false;
+    if (!role || this.isReviewAccount(userId)) return false;
     // A friendship has its one invite, from the person who made it; an ended one takes nobody.
     const kind = this.db.prepare('SELECT pair, ended_at FROM circles WHERE id = ?').get(circleId) as { pair: number; ended_at: number | null };
     if (kind.ended_at !== null || (kind.pair && role !== 'owner')) return false;
@@ -1447,13 +1450,14 @@ export class Klatsch {
    * A file with a question (by the asker, while it waits) or its answer (by the person asked, while it waits or
    * within ten minutes of answering). Its type is read from its bytes; it is sealed, and goes with the question.
    */
-  attach(userId: string, askId: string, file: { name: string; bytes: Uint8Array }): { id: string; name: string; mime: string; size: number } {
+  attach(userId: string, askId: string, file: { name: string; bytes: Uint8Array }, via: Via = 'web'): { id: string; name: string; mime: string; size: number } {
     this.dropExpiredAttachments();
     const row = this.askRow(askId);
     if (!row || row.expires_at <= Date.now() || !this.sharePrivateCircle(row.asker_id, row.helper_id)) throw new KlatschError('forbidden', ASK.notOpen);
     const answeredAt = (this.db.prepare('SELECT answered_at FROM asks WHERE id = ?').get(askId) as { answered_at: number | null }).answered_at;
+    const recent = row.state === 'answered' && answeredAt !== null && answeredAt > Date.now() - 10 * 60 * 1000;
     const side =
-      row.asker_id === userId && row.state === 'open'
+      row.asker_id === userId && (row.state === 'open' || (recent && this.isDemo(row.helper_id)))
         ? 'question'
         : row.helper_id === userId && (row.state === 'open' || (row.state === 'answered' && answeredAt !== null && answeredAt > Date.now() - 10 * 60 * 1000))
           ? 'answer'
@@ -1472,7 +1476,7 @@ export class Klatsch {
     this.db
       .prepare('INSERT INTO attachments (id, ask_id, user_id, side, name, mime, size, data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, askId, userId, side, sealText(this.db, name), kind.mime, bytes.length, sealBytes(this.db, bytes), Date.now(), row.expires_at);
-    this.audit(userId, 'web', 'attach', askId);
+    this.audit(userId, via, 'attach', askId);
     // The other person hears of it like of the question or the answer: a line, never the file.
     const other = side === 'question' ? row.helper_id : row.asker_id;
     if (row.state !== 'open' || side === 'question') this.notifyUser(other, notifications.other);
@@ -1481,6 +1485,7 @@ export class Klatsch {
 
   /** The files with a question and its answer, for its two people only: names, types and sizes, never the bytes. */
   attachmentsOf(userId: string, askId: string): { id: string; side: 'question' | 'answer'; name: string; mime: string; size: number }[] {
+    this.dropExpiredAttachments();
     const row = this.askRow(askId);
     if (!row || (row.asker_id !== userId && row.helper_id !== userId) || !this.sharePrivateCircle(row.asker_id, row.helper_id)) return [];
     return this.db
@@ -1495,7 +1500,7 @@ export class Klatsch {
       | { ask_id: string; name: string; mime: string; data: Uint8Array }
       | undefined;
     const ask = row && this.askRow(row.ask_id);
-    if (!row || !ask || (ask.asker_id !== userId && ask.helper_id !== userId) || !this.sharePrivateCircle(ask.asker_id, ask.helper_id)) {
+    if (!row || !ask || ask.state === 'withdrawn' || (ask.asker_id !== userId && ask.helper_id !== userId) || !this.sharePrivateCircle(ask.asker_id, ask.helper_id)) {
       throw new KlatschError('not-found', ATTACH.gone);
     }
     const bytes = openBytes(this.db, row.data);
@@ -1561,6 +1566,8 @@ export class Klatsch {
   withdrawAsk(askerId: string, askId: string): void {
     const result = this.db.prepare(`UPDATE asks SET state = 'withdrawn', question_for_agent = 0 WHERE id = ? AND asker_id = ? AND state = 'open'`).run(askId, askerId);
     if (!result.changes) throw new KlatschError('forbidden', ASK.notOpen);
+    // Taken back: its files go with it, so an old link opens nothing.
+    this.db.prepare('DELETE FROM attachments WHERE ask_id = ?').run(askId);
     this.audit(askerId, 'web', 'ask.withdraw', askId);
   }
 
@@ -1610,7 +1617,7 @@ export class Klatsch {
       ...(() => {
         const files = this.attachmentsOf(userId, askId)
           .filter((f) => f.side === (answer ? 'answer' : 'question'))
-          .map((f) => ({ name: f.name, type: f.mime, size: f.size }));
+          .map((f) => ({ type: f.mime, size: f.size }));
         return files.length ? { files } : {};
       })(),
     };

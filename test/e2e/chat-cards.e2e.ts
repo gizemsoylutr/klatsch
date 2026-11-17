@@ -185,8 +185,9 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     assert.match(shown.meta[CARD].files[0].url, /\/ui\/attachments\//);
     assert.ok(!shown.text.includes('photo.png'), 'the model does not see the file name either');
     await eveChat.call('klatsch_card', { key: shown.meta[CARD].key, decision: 'draft' });
-    const quote = ((await eveChat.call('inbox')).data.events as { type?: string; quote?: string; files?: { name: string }[] }[]).find((e) => e.quote === 'Look at this photo?')!;
-    assert.deepEqual(quote.files?.map((f) => f.name), ['photo.png'], 'once she sends it to her AI, it hears what came with it');
+    const quote = ((await eveChat.call('inbox')).data.events as { type?: string; quote?: string; files?: { type: string; name?: string }[] }[]).find((e) => e.quote === 'Look at this photo?')!;
+    assert.deepEqual(quote.files?.map((f) => f.type), ['image/png'], 'once she sends it to her AI, it hears what came with it');
+    assert.equal(quote.files?.[0]?.name, undefined, 'by type and size: a file name is the sender’s free text');
     // A file the relay does not take is refused, and nothing is asked.
     const second = await aliceChat.call('ask_person', { handle: '@eve', question: 'And this text file?' });
     const refused = await aliceChat.call('klatsch_card', { key: second.meta[CARD].key, decision: 'approved', files: [{ name: 'notes.txt', data: Buffer.from('hello world, plain text').toString('base64') }] });

@@ -545,7 +545,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           const said = (message: string) => ({ content: [{ type: 'text' as const, text: message }], structuredContent: { message } });
           // A friend link: made by the person's click, returned to the card only (the card shows it to copy).
           let link: string | undefined;
-          const files = (input.files ?? []).map((f) => ({ name: f.name, bytes: Buffer.from(f.data, 'base64') }));
+          const files = input.decision === 'approved' || input.decision === 'answer' ? (input.files ?? []).map((f) => ({ name: f.name, bytes: Buffer.from(f.data, 'base64') })) : [];
           // The key is spent in the same transaction as the decision: a refused answer leaves it usable for a retry.
           const message = transaction(klatsch.db, () => {
             const used = useKey(klatsch.db, secret, id, input.key);
@@ -574,13 +574,13 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
               if (decision === 'approved' && files.length) {
                 const askId = approval.action === 'ask_person' ? String(result?.ask_id ?? '') : approval.action === 'answer_ask' ? approval.payload.ask_id! : '';
                 if (!askId) throw new KlatschError('invalid', CARD_NOTES.notOffered);
-                for (const file of files) klatsch.attach(id, askId, file);
+                for (const file of files) klatsch.attach(id, askId, file, 'dialog');
               }
               return decision === 'declined' ? CARD_NOTES.declined : (CARD_NOTES.approved[approval.action] ?? CARD_NOTES.done);
             }
             if (input.decision === 'answer') {
               klatsch.answerByHand(id, used.ref, input.answer ?? '');
-              for (const file of files) klatsch.attach(id, used.ref, file);
+              for (const file of files) klatsch.attach(id, used.ref, file, 'dialog');
               return CARD_NOTES.answered;
             }
             if (input.decision === 'draft') return CARD_NOTES.drafting(klatsch.sendAskToAgent(id, used.ref).from);

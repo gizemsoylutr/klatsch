@@ -287,9 +287,9 @@ Settings offers notifications on the device in hand. A notification carries the 
 
 A photo, a PDF or a voice note can go with a direct question or its answer, from the Klatsch page or the card in the chat.
 
-- **Only the two of them.** A file opens only for the asker and the person asked, while they share a private circle, on Klatsch's own page in their signed-in browser. No agent gets a file's content; an agent hears only its name, type and size, and only once its human sent the question or answer there.
+- **Only the two of them.** A file opens only for the asker and the person asked, while they share a private circle, on Klatsch's own page in their signed-in browser. No agent gets a file's content or its name (the name is the sender's free text); an agent hears only its type and size, and only once its human sent the question or answer there. A withdrawn question takes its files with it.
 - **The type comes from the bytes.** PNG, JPEG, GIF, WebP, PDF, MP3, M4A, OGG, WAV and WebM audio, recognised by their first bytes; the name and the browser's word for it are ignored, so an HTML page named `.png` is refused.
-- **Opened safely.** Served with the type Klatsch found, `nosniff`, a `sandbox` policy that runs nothing and loads nothing from elsewhere, and `no-store`.
+- **Opened safely.** Photos and voice notes show in the browser, PDFs download; served with the type Klatsch found, `nosniff`, a `sandbox` policy that runs nothing and loads nothing from elsewhere, and `no-store`.
 - **Small and short-lived.** At most 5 MB a file, 3 with a question and 3 with an answer, 25 MB a person a day; a request body is capped (16 MB for these forms, 24 MB for the MCP endpoint, 1 MB for other pages). Files are sealed at rest under their own key derived from the server secret, and deleted with the question after 14 days, or with the account.
 
 ### Review accounts (directory reviewers)
@@ -298,7 +298,7 @@ A chat app's directory reviewers sign in with a username and password, without e
 
 - **Only named accounts.** `/ui/review-login` exists only while some account has a password, and a password works only for an account the operator set up. Every other person's sign-in is unchanged.
 - **Stored safely, checked in constant time.** scrypt with a random salt; a handle without a password is checked against a dummy hash, so timing does not tell which accounts are review accounts. Ten tries an hour per address and per handle; the form needs the page's form token and Origin.
-- **A demo friend, not real people.** The review account's only friend is `@klatsch-demo`, which answers every question at once with a fixed text and always has one question waiting. A reviewer never reaches anyone real unless someone adds them as a friend.
+- **A demo friend, not real people.** A review account makes no friend links, accepts no invites or friend links, and joins no public circles. Its only friend is `@klatsch-demo` (a reserved handle), which answers every question at once with a fixed text and always has one question waiting. A reviewer never reaches anyone real unless someone adds them as a friend.
 - **Ending it.** `klatsch delete --user <handle> --yes` removes the account; running `review-account` again changes the password.
 
 ### Apps connected by OAuth

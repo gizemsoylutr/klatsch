@@ -2,6 +2,7 @@
 // that answers at once, and a question from the demo friend always waiting. Nobody else can sign in by password.
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
+import { createInvite, findInvite } from '../../src/auth/invites.ts';
 import { agent, browser, signedOutBrowser, startRelay, type Relay } from './harness.ts';
 
 describe('review account: a password for one account, and a demo friend for the whole round trip', () => {
@@ -33,6 +34,10 @@ describe('review account: a password for one account, and a demo friend for the 
     assert.equal(await relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
     // Outsiders hold its password: it reaches no real people by itself.
     assert.throws(() => relay.klatsch.friendCircle(reviewer), /demo friend only/);
+    // Nor by someone else's link: a review account accepts no invites.
+    const aliceId = relay.klatsch.ensureUser('alice', 'Alice');
+    const link = createInvite(relay.db, relay.secret, relay.klatsch.friendCircle(aliceId), aliceId, relay.base);
+    assert.throws(() => relay.klatsch.acceptInvite(reviewer, findInvite(relay.db, relay.secret, new URL(link.link).pathname.split('/').at(-1)!)!), /demo friend only/);
     // Six reviewers in a row still each get a demo question (the demo friend's seeds have no daily limit).
     for (let i = 0; i < 6; i++) relay.klatsch.setReviewAccount(`reviewer${i}`, 'Reviewer');
   });

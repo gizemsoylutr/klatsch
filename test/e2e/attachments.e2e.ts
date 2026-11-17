@@ -65,6 +65,20 @@ describe('attachments: a photo with the question, a voice note with the answer, 
     assert.ok((await eveBrowser.upload(`/ui/asks/${askId}/attach`, [{ name: 'fourth.ogg', bytes: OGG }])).status >= 400, 'three a side');
   });
 
+  it('a failed file leaves no answer behind; a withdrawn question takes its files with it', async () => {
+    const aliceAgent = await agent(relay, relay.agentToken(alice), personAt(aliceBrowser, 'approved'));
+    const second = (await aliceAgent.call('ask_person', { handle: '@eve', question: 'Second one?' })).data.ask_id;
+    const failed = await eveBrowser.upload(`/ui/asks/${second}/answer`, [{ name: 'ok.ogg', bytes: OGG }, { name: 'bad.txt', bytes: new TextEncoder().encode('plain text, not a file we take') }], { answer: 'Half sent?' });
+    assert.ok(failed.status >= 400);
+    assert.equal(relay.klatsch.asksOf(eve).find((k) => k.id === second)!.state, 'open', 'all or nothing');
+    assert.equal(relay.klatsch.attachmentsOf(eve, second).length, 0);
+    await aliceBrowser.upload(`/ui/asks/${second}/attach`, [{ name: 'p.png', bytes: PNG }]);
+    const id = relay.klatsch.attachmentsOf(alice, second)[0]!.id;
+    await aliceBrowser.post(`/ui/asks/${second}/withdraw`);
+    assert.equal((await eveBrowser.fetchRaw(`/ui/attachments/${id}`)).status, 404, 'an old link opens nothing');
+    await aliceAgent.close();
+  });
+
   it('they go with the question, and with the account', () => {
     relay.db.prepare('UPDATE attachments SET expires_at = 1').run();
     assert.deepEqual(relay.klatsch.attachmentsOf(alice, askId), []);

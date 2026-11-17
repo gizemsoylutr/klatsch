@@ -1,3 +1,4 @@
+import { transaction } from '../store/db.ts';
 import { normalHandle, RESERVED_HANDLES } from '../service.ts';
 import { randomBytes } from 'node:crypto';
 import { getConnInfo } from '@hono/node-server/conninfo';
@@ -1847,10 +1848,11 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const files = await formFiles(form);
     return attempt(
       c,
-      () => {
-        klatsch.answerByHand(c.get('userId'), c.req.param('id'), answer);
-        for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
-      },
+      () =>
+        transaction(db, () => {
+          klatsch.answerByHand(c.get('userId'), c.req.param('id'), answer);
+          for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
+        }),
       '/ui',
       () => c.html(notice(copy.asks.answeredTitle, html`<p class="sub">${copy.asks.answered}</p>${homeLink}`)),
     );
@@ -1858,10 +1860,15 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   // A file with one's own waiting question.
   web.post('/asks/:id/attach', async (c) => {
     const files = await formFiles(await c.req.parseBody({ all: true }));
-    return attempt(c, () => {
-      if (!files.length) throw new KlatschError('invalid', copy.asks.noFile);
-      for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
-    }, '/ui');
+    return attempt(
+      c,
+      () =>
+        transaction(db, () => {
+          if (!files.length) throw new KlatschError('invalid', copy.asks.noFile);
+          for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
+        }),
+      '/ui',
+    );
   });
   // A file, for one of the two people: shown in the browser only where that is safe, sandboxed and never sniffed.
   web.get('/attachments/:id', (c) => {
@@ -1872,7 +1879,8 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p>${homeLink}`), 404);
       throw error;
     }
-    const inline = file.mime.startsWith('image/') || file.mime.startsWith('audio/') || file.mime === 'application/pdf';
+    // A PDF downloads: browsers' PDF viewers do not run under a sandbox policy. Photos and voice notes show inline.
+    const inline = file.mime.startsWith('image/') || file.mime.startsWith('audio/');
     c.header('Content-Type', file.mime);
     c.header('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.name)}`);
     c.header('Content-Security-Policy', FILE_CSP);
