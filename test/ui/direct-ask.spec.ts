@@ -7,6 +7,7 @@ import { person, type Person } from './people.ts';
 test.describe.serial('direct ask: Home shows both sides, and every step is a click', () => {
   let relay: Relay;
   let alice: Person, bob: Person;
+  let aliceId = '';
   let aliceAgent: Awaited<ReturnType<typeof agent>>, bobAgent: Awaited<ReturnType<typeof agent>>;
 
   const approveByCode = async (p: Person, code: string, button: string) => {
@@ -18,7 +19,7 @@ test.describe.serial('direct ask: Home shows both sides, and every step is a cli
 
   test.beforeAll(async ({ browser }) => {
     relay = await startRelay();
-    const a = relay.klatsch.ensureUser('alice', 'Alice');
+    const a = (aliceId = relay.klatsch.ensureUser('alice', 'Alice'));
     const b = relay.klatsch.ensureUser('bob', 'Bob');
     relay.klatsch.addMember(relay.klatsch.ensureCircle('demo', a), b, a);
     alice = await person(browser, relay, 'Alice', import.meta.filename, relay.loginLink(a));
@@ -63,11 +64,29 @@ test.describe.serial('direct ask: Home shows both sides, and every step is a cli
     await approveByCode(alice, asked.data.code, 'Ask');
     await bob.open(`${relay.base}/ui`);
     await bob.page.getByLabel('Your answer').fill('The one by the bridge.');
+    await bob.page.getByLabel(/Add a photo, PDF or voice note/).setInputFiles({ name: 'bridge.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]) });
     await bob.shot('direct-ask-answer-by-hand.png');
     await bob.click(bob.page.getByRole('button', { name: 'Send answer' }));
     await expect(bob.page.getByRole('heading', { name: 'Answer sent' })).toBeVisible();
     await alice.open(`${relay.base}/ui`);
     await expect(alice.page.getByText('The one by the bridge.')).toBeVisible();
+    // The photo came with it, and opens for Alice.
+    const link = alice.page.getByRole('link', { name: /bridge\.png/ });
+    await expect(link).toBeVisible();
+    const href = await link.getAttribute('href');
+    const file = await alice.open(`${relay.base}${href}`);
+    expect(file?.headers()['content-type']).toBe('image/png');
+    // Alice adds a photo to a question still waiting.
+    const waiting = await aliceAgent.call('ask_person', { handle: 'bob', question: 'And this one?' });
+    await approveByCode(alice, waiting.data.code, 'Ask');
+    await alice.open(`${relay.base}/ui`);
+    await alice.page.getByLabel(/Add a photo, PDF or voice note/).first().setInputFiles({ name: 'leaf.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]) });
+    await alice.click(alice.page.getByRole('button', { name: 'Attach' }));
+    await alice.open(`${relay.base}/ui`);
+    await expect(alice.page.getByRole('link', { name: /leaf\.png/ })).toBeVisible();
+    // Taken back, so the next step starts with nothing waiting.
+    const leftover = relay.klatsch.asksOf(aliceId).find((k) => k.question === 'And this one?')!;
+    relay.klatsch.withdrawAsk(aliceId, leftover.id);
   });
 
   test('Bob declines one, and Alice withdraws another', async () => {

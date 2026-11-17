@@ -638,7 +638,7 @@ function main(): void {
       if (!values.user) throw new Error(USAGE);
       const { klatsch, secret } = open(base);
       klatsch.useSecret(secret);
-      const password = klatsch.setReviewAccount(values.user, values.name ?? 'Klatsch Review');
+      const password = klatsch.setReviewAccount(values.user, values.name ?? 'Klatsch Review', { existing: values.yes });
       console.log(`Review account @${values.user}, with the demo friend @klatsch-demo. Sign in at ${base.publicUrl}/ui/review-login`);
       console.log(`Password (shown once): ${password}`);
       return;

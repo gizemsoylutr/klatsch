@@ -12,11 +12,35 @@ export interface Sealer {
   seal(text: string): string;
   /** The text, or undefined when this key did not seal it. */
   open(value: string): string | undefined;
+  /** A file's bytes, sealed the same way under their own label: iv, tag, then the ciphertext. */
+  sealBytes(bytes: Buffer): Buffer;
+  openBytes(value: Buffer): Buffer | undefined;
 }
+
+const FILE_LABEL = 'klatsch-file-v1';
 
 export function sealerFrom(secret: Buffer): Sealer {
   const key = Buffer.from(hkdfSync('sha256', secret, Buffer.alloc(0), LABEL, 32));
+  const fileKey = Buffer.from(hkdfSync('sha256', secret, Buffer.alloc(0), FILE_LABEL, 32));
   return {
+    sealBytes(bytes) {
+      const iv = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', fileKey, iv);
+      cipher.setAAD(Buffer.from(FILE_LABEL));
+      const body = Buffer.concat([cipher.update(bytes), cipher.final()]);
+      return Buffer.concat([iv, cipher.getAuthTag(), body]);
+    },
+    openBytes(value) {
+      if (value.length < 28) return undefined;
+      try {
+        const decipher = createDecipheriv('aes-256-gcm', fileKey, value.subarray(0, 12));
+        decipher.setAAD(Buffer.from(FILE_LABEL));
+        decipher.setAuthTag(value.subarray(12, 28));
+        return Buffer.concat([decipher.update(value.subarray(28)), decipher.final()]);
+      } catch {
+        return undefined;
+      }
+    },
     seal(text) {
       const iv = randomBytes(12);
       const cipher = createCipheriv('aes-256-gcm', key, iv);

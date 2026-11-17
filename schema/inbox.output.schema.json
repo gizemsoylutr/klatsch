@@ -76,6 +76,30 @@
               "title"
             ],
             "additionalProperties": false
+          },
+          "files": {
+            "description": "With a quote from a direct question or answer: files that came with it. Your human opens them on their Klatsch page; you do not get their content.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "type",
+                "size"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [

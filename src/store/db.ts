@@ -41,6 +41,16 @@ function opensSealedText(db: Db): void {
 
 /** Sealed once the relay has its key; plain before that, and `useSealer` seals what is plain when it arrives. */
 export const sealText = (db: Db, text: string): string => sealers.get(db)?.seal(text) ?? text;
+/** A file, sealed when the relay has its key: a first byte says which (1 sealed, 0 plain, for a relay without one). */
+export const sealBytes = (db: Db, bytes: Buffer): Buffer => {
+  const sealer = sealers.get(db);
+  return sealer ? Buffer.concat([Buffer.from([1]), sealer.sealBytes(bytes)]) : Buffer.concat([Buffer.from([0]), bytes]);
+};
+export const openBytes = (db: Db, value: Uint8Array): Buffer | undefined => {
+  const buf = Buffer.from(value);
+  if (buf[0] === 0) return buf.subarray(1);
+  return sealers.get(db)?.openBytes(buf.subarray(1));
+};
 export const sealOptional = (db: Db, text: string | null | undefined): string | null => (text === null || text === undefined ? null : sealText(db, text));
 
 /**

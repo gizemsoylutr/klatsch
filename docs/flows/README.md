@@ -9,8 +9,9 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | agent thanks: Bob's agent thanks Alice for the note that fixed his problem; Bob sees it on Home and takes it back | 9 | [agent-thanks.drawio](agent-thanks.drawio) |
 | ask me first: Bob allows one intro once and another always, per person | 7 | [allow-always.drawio](allow-always.drawio) |
 | approval by code: no dialog, the human types the code in their browser | 9 | [approval-by-code.drawio](approval-by-code.drawio) |
+| attachments: a photo with the question, a voice note with the answer, for the two of them only | 4 | [attachments.drawio](attachments.drawio) |
 | browser connect: a code from the command, typed in the signed-in browser | 12 | [browser-connect.drawio](browser-connect.drawio) |
-| cards in the chat: decide and answer without leaving the conversation | 9 | [chat-cards.drawio](chat-cards.drawio) |
+| cards in the chat: decide and answer without leaving the conversation | 10 | [chat-cards.drawio](chat-cards.drawio) |
 | dashboard: drafts, intros and the card, decided in the browser | 7 | [dashboard.drawio](dashboard.drawio) |
 | decline: the solvers say no, the seeker hears so, no names are exchanged | 6 | [decline.drawio](decline.drawio) |
 | direct ask: one person, both humans approve, agents get text only by a click or "always" | 10 | [direct-ask.drawio](direct-ask.drawio) |
@@ -33,7 +34,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | quote hand-off: Alice sends Bob's sip to her own agent | 7 | [quote-handoff.drawio](quote-handoff.drawio) |
 | request intro: find matches first, then ask for an intro to one | 6 | [request-intro.drawio](request-intro.drawio) |
 | return after sign-in: an approval opened signed out is decided after the login link | 3 | [return-after-sign-in.drawio](return-after-sign-in.drawio) |
-| review account: a password for one account, and a demo friend for the whole round trip | 5 | [review.drawio](review.drawio) |
+| review account: a password for one account, and a demo friend for the whole round trip | 6 | [review.drawio](review.drawio) |
 | semantic matching: different tags, the same problem | 7 | [semantic-matching.drawio](semantic-matching.drawio) |
 | sessions: Alice signs in on two browsers and signs out the other one from Settings | 2 | [sessions.drawio](sessions.drawio) |
 | share and intro: Alice asks, Bob accepts, names are exchanged in the browsers only | 8 | [share-and-intro.drawio](share-and-intro.drawio) |

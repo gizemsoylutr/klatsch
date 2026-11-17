@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ASK, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -22,7 +22,8 @@ import type { UpdateCardInput } from './schema/index.ts';
 import { cleanQuote, hasHiddenCharacters } from './quote.ts';
 import { checkSource, clip, SOURCE_AUTHOR_MAX, SOURCE_REFUSED, SOURCE_TITLE_MAX, type Source } from './source.ts';
 import { sealerFrom } from './store/sealed.ts';
-import { afterCommit, sealOptional, sealText, transaction, useSealer, type Db } from './store/db.ts';
+import { afterCommit, openBytes, sealBytes, sealOptional, sealText, transaction, useSealer, type Db } from './store/db.ts';
+import { ATTACHMENT_BYTES_PER_DAY, ATTACHMENT_MAX_BYTES, ATTACHMENTS_PER_SIDE, cleanName, sniff } from './attachments.ts';
 import { completeWatches, WAKES } from './watches.ts';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -208,6 +209,8 @@ export interface AskView {
   tried: boolean;
   state: 'open' | 'answered' | 'declined' | 'withdrawn';
   createdAt: number;
+  /** Files with it: names, types and sizes, never the bytes. */
+  attachments: { id: string; side: 'question' | 'answer'; name: string; mime: string; size: number }[];
 }
 
 /**
@@ -316,10 +319,14 @@ const ASK_DAYS = 14;
 const ANSWER_MAX = 500;
 /** The demo friend of a review account: answers at once, and always has one question waiting. */
 const DEMO_HANDLE = 'klatsch-demo';
+/** Handles nobody can pick: the demo friend's, and names that would look like Klatsch speaking. */
+export const RESERVED_HANDLES: ReadonlySet<string> = new Set([DEMO_HANDLE, 'klatsch', 'admin', 'support', 'review']);
 const DEMO = {
   question: 'Hi! I am the Klatsch demo friend. What would you like to ask a friend through your AI? Answer me here.',
   answer: (question: string) => `Hi, this is the Klatsch demo friend. You asked: “${question.slice(0, 300)}” A real friend reads it in their own chat and answers there; this answer came back to the chat you asked from.`,
 };
+/** A handle as people type it: no @, no spaces, lower case. */
+export const normalHandle = (handle: string) => handle.trim().replace(/^@/, '').toLowerCase();
 /** A stored hash nobody's password matches, compared when a handle has none, so both cases take as long. */
 const DUMMY_HASH = hashPassword(randomBytes(16).toString('hex'));
 /** A question, drafted or edited: the same bound as the tool's input. */
@@ -341,6 +348,8 @@ export interface InboxEvent {
   note?: string;
   /** The quoted note's link card, delivered with it on the same consent. */
   source?: Source;
+  /** Files that came with a question or an answer: names and types; the person opens them on their Klatsch page. */
+  files?: { name: string; type: string; size: number }[];
 }
 
 export class Klatsch {
@@ -420,7 +429,7 @@ export class Klatsch {
     return transaction(this.db, () => {
       let id = this.userByGitHub(github.id);
       if (!id) {
-        if (!HANDLE.test(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
+        if (!HANDLE.test(handle) || RESERVED_HANDLES.has(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
         id = newId('usr');
         this.db
           .prepare('INSERT INTO users (id, handle, display_name, github_id, github_login, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -457,7 +466,7 @@ export class Klatsch {
         if (this.usersByEmail(google.email).length || this.mailboxTaken(google.email) || this.mailboxRemovedFrom(google.email, circle.id, circle.invite)) {
           throw new KlatschError('forbidden', 'This link is not valid.');
         }
-        if (!HANDLE.test(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
+        if (!HANDLE.test(handle) || RESERVED_HANDLES.has(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
         id = newId('usr');
         this.db.prepare('INSERT INTO users (id, handle, display_name, google_sub, google_email, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, handle, google.name, google.sub, google.email, Date.now());
         this.audit(id, 'web', 'google.create');
@@ -541,7 +550,7 @@ export class Klatsch {
       let id = people[0];
       if (!id) {
         if (this.mailboxTaken(email) || this.mailboxRemovedFrom(email, circle.id, circle.invite)) throw new KlatschError('forbidden', 'This link is not valid.');
-        if (!HANDLE.test(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
+        if (!HANDLE.test(handle) || RESERVED_HANDLES.has(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
         id = newId('usr');
         this.db.prepare('INSERT INTO users (id, handle, display_name, created_at) VALUES (?, ?, ?, ?)').run(id, handle, handle, Date.now());
         this.audit(id, 'web', 'email.create');
@@ -622,6 +631,7 @@ export class Klatsch {
    * suffix nobody sees; pages show the other person instead. At most 20 waiting ones per person.
    */
   friendCircle(userId: string): string {
+    if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account has the demo friend only.');
     // Links still waiting (unused, unexpired, friendship not ended), and how many were made in a day.
     const now = Date.now();
     const waiting = this.db
@@ -912,7 +922,13 @@ export class Klatsch {
    * invite from the owner brings someone back), and a full circle takes nobody; both, and a link that is off
    * or unknown, throw with the words the page shows.
    */
+  /** A review account's credentials are held by outsiders: it never reaches real people by itself. */
+  private isReviewAccount(userId: string): boolean {
+    return Boolean((this.db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId) as { password_hash: string | null } | undefined)?.password_hash);
+  }
+
   joinPublic(userId: string, token: string): 'joined' | 'already-member' {
+    if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account does not join public circles.');
     return transaction(this.db, () => {
       const circle = this.publicCircle(token);
       if (!circle) throw new KlatschError('forbidden', 'This join link is not valid.');
@@ -1307,9 +1323,10 @@ export class Klatsch {
    * Runs once the asker's human approved it. Only the person asked reads the question, with the asker's name; it
    * reaches their agent only by their own click, or because they chose to always get this person's notes.
    */
-  private createAsk(askerId: string, handle: string, tags: string[], question: string): string {
+  private createAsk(askerId: string, handle: string, tags: string[], question: string, options: { demo?: boolean } = {}): string {
     const helper = this.askTarget(askerId, handle);
-    if (!this.canAsk(askerId)) throw new KlatschError('forbidden', ASK.tooMany);
+    // The demo friend's own seeded question is not one person's asking: no limit, or a busy review day would fail.
+    if (!options.demo && !this.canAsk(askerId)) throw new KlatschError('forbidden', ASK.tooMany);
     const resolved = this.previewAsk(tags, question).tags;
     const id = newId('k');
     const now = Date.now();
@@ -1375,9 +1392,15 @@ export class Klatsch {
    * Sets up a directory reviewer: the account (made if missing) gets a new password, and a demo friend that
    * answers at once, with one question from the demo friend waiting. Returns the password, once.
    */
-  setReviewAccount(handle: string, name: string): string {
+  setReviewAccount(handle: string, name: string, options: { existing?: boolean } = {}): string {
     const password = newReviewPassword();
     transaction(this.db, () => {
+      // A typo must not hand a real person's account a password that outsiders will hold.
+      const known = this.db.prepare('SELECT id, password_hash FROM users WHERE handle = ?').get(handle) as { id: string; password_hash: string | null } | undefined;
+      if (known && known.password_hash === null && !options.existing) throw new KlatschError('forbidden', `@${handle} is an existing account without a password. Use another handle, or --yes to make it a review account.`);
+      // The demo friend answers in its own name only: a real person who has its handle is never made one.
+      const demoRow = this.db.prepare('SELECT demo FROM users WHERE handle = ?').get(DEMO_HANDLE) as { demo: number } | undefined;
+      if (demoRow && !demoRow.demo) throw new KlatschError('forbidden', `@${DEMO_HANDLE} belongs to a real person here; the demo friend cannot be set up.`);
       const reviewer = this.ensureUser(handle, name);
       this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), reviewer);
       const demo = this.ensureUser(DEMO_HANDLE, 'Klatsch Demo');
@@ -1393,12 +1416,12 @@ export class Klatsch {
   }
 
   /** The person behind a review account's handle and password; anything else is simply not found. */
-  passwordSignIn(handle: string, password: string): string | undefined {
-    const row = this.db.prepare('SELECT id, password_hash FROM users WHERE handle = ?').get(handle.trim().replace(/^@/, '').toLowerCase()) as
+  async passwordSignIn(handle: string, password: string): Promise<string | undefined> {
+    const row = this.db.prepare('SELECT id, password_hash FROM users WHERE handle = ?').get(normalHandle(handle)) as
       | { id: string; password_hash: string | null }
       | undefined;
     // The same work whether or not the handle has a password, so timing tells nobody which accounts are review accounts.
-    const ok = passwordMatches(password, row?.password_hash ?? DUMMY_HASH) && Boolean(row?.password_hash);
+    const ok = (await passwordMatches(password, row?.password_hash ?? DUMMY_HASH)) && Boolean(row?.password_hash);
     if (!ok || !row) return undefined;
     this.audit(row.id, 'web', 'review.signin');
     return row.id;
@@ -1415,7 +1438,74 @@ export class Klatsch {
   /** The demo friend's question to the reviewer, unless one is still waiting. */
   private seedDemoQuestion(demo: string, reviewer: string): void {
     const waiting = this.db.prepare(`SELECT 1 FROM asks WHERE asker_id = ? AND helper_id = ? AND state = 'open' AND expires_at > ?`).get(demo, reviewer, Date.now());
-    if (!waiting) this.createAsk(demo, this.user(reviewer).handle, [], DEMO.question);
+    if (!waiting) this.createAsk(demo, this.user(reviewer).handle, [], DEMO.question, { demo: true });
+  }
+
+  // ---------- files with a question or an answer ----------
+
+  /**
+   * A file with a question (by the asker, while it waits) or its answer (by the person asked, while it waits or
+   * within ten minutes of answering). Its type is read from its bytes; it is sealed, and goes with the question.
+   */
+  attach(userId: string, askId: string, file: { name: string; bytes: Uint8Array }): { id: string; name: string; mime: string; size: number } {
+    this.dropExpiredAttachments();
+    const row = this.askRow(askId);
+    if (!row || row.expires_at <= Date.now() || !this.sharePrivateCircle(row.asker_id, row.helper_id)) throw new KlatschError('forbidden', ASK.notOpen);
+    const answeredAt = (this.db.prepare('SELECT answered_at FROM asks WHERE id = ?').get(askId) as { answered_at: number | null }).answered_at;
+    const side =
+      row.asker_id === userId && row.state === 'open'
+        ? 'question'
+        : row.helper_id === userId && (row.state === 'open' || (row.state === 'answered' && answeredAt !== null && answeredAt > Date.now() - 10 * 60 * 1000))
+          ? 'answer'
+          : undefined;
+    if (!side) throw new KlatschError('forbidden', ATTACH.notNow);
+    const bytes = Buffer.from(file.bytes);
+    if (bytes.length > ATTACHMENT_MAX_BYTES) throw new KlatschError('invalid', ATTACH.tooBig);
+    const kind = sniff(bytes);
+    if (!kind) throw new KlatschError('invalid', ATTACH.wrongType);
+    const count = this.db.prepare('SELECT count(*) AS n FROM attachments WHERE ask_id = ? AND side = ?').get(askId, side) as { n: number };
+    if (count.n >= ATTACHMENTS_PER_SIDE) throw new KlatschError('forbidden', ATTACH.tooMany);
+    const today = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM attachments WHERE user_id = ? AND created_at > ?').get(userId, Date.now() - DAY) as { n: number };
+    if (today.n + bytes.length > ATTACHMENT_BYTES_PER_DAY) throw new KlatschError('forbidden', ATTACH.dayLimit);
+    const id = newId('att');
+    const name = cleanName(file.name, kind);
+    this.db
+      .prepare('INSERT INTO attachments (id, ask_id, user_id, side, name, mime, size, data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, askId, userId, side, sealText(this.db, name), kind.mime, bytes.length, sealBytes(this.db, bytes), Date.now(), row.expires_at);
+    this.audit(userId, 'web', 'attach', askId);
+    // The other person hears of it like of the question or the answer: a line, never the file.
+    const other = side === 'question' ? row.helper_id : row.asker_id;
+    if (row.state !== 'open' || side === 'question') this.notifyUser(other, notifications.other);
+    return { id, name, mime: kind.mime, size: bytes.length };
+  }
+
+  /** The files with a question and its answer, for its two people only: names, types and sizes, never the bytes. */
+  attachmentsOf(userId: string, askId: string): { id: string; side: 'question' | 'answer'; name: string; mime: string; size: number }[] {
+    const row = this.askRow(askId);
+    if (!row || (row.asker_id !== userId && row.helper_id !== userId) || !this.sharePrivateCircle(row.asker_id, row.helper_id)) return [];
+    return this.db
+      .prepare('SELECT id, side, name, mime, size FROM attachments WHERE ask_id = ? AND expires_at > ? ORDER BY created_at')
+      .all(askId, Date.now()) as { id: string; side: 'question' | 'answer'; name: string; mime: string; size: number }[];
+  }
+
+  /** One file, opened for one of the two people while they still share a private circle; one answer for all else. */
+  openAttachment(userId: string, id: string): { name: string; mime: string; bytes: Buffer } {
+    this.dropExpiredAttachments();
+    const row = this.db.prepare('SELECT ask_id, name, mime, data FROM attachments WHERE id = ? AND expires_at > ?').get(id, Date.now()) as
+      | { ask_id: string; name: string; mime: string; data: Uint8Array }
+      | undefined;
+    const ask = row && this.askRow(row.ask_id);
+    if (!row || !ask || (ask.asker_id !== userId && ask.helper_id !== userId) || !this.sharePrivateCircle(ask.asker_id, ask.helper_id)) {
+      throw new KlatschError('not-found', ATTACH.gone);
+    }
+    const bytes = openBytes(this.db, row.data);
+    if (!bytes) throw new KlatschError('not-found', ATTACH.gone);
+    this.audit(userId, 'web', 'attach.open', row.ask_id);
+    return { name: row.name, mime: row.mime, bytes };
+  }
+
+  private dropExpiredAttachments(): void {
+    this.db.prepare('DELETE FROM attachments WHERE expires_at <= ?').run(Date.now());
   }
 
   /** The person asked writes the answer themselves, on their page: their click is the approval. */
@@ -1494,6 +1584,7 @@ export class Klatsch {
           tried: row.answer_failed === 1,
           state: row.state,
           createdAt: row.created_at,
+          attachments: this.attachmentsOf(userId, row.id),
         };
       });
   }
@@ -1516,6 +1607,12 @@ export class Klatsch {
       quote: cleanQuote(answer ? (row.answer ?? '') : row.question),
       text: askQuoteLine(from, answer, auto),
       note: ASK_QUOTE_NOTE(from, answer && row.answer_failed === 1),
+      ...(() => {
+        const files = this.attachmentsOf(userId, askId)
+          .filter((f) => f.side === (answer ? 'answer' : 'question'))
+          .map((f) => ({ name: f.name, type: f.mime, size: f.size }));
+        return files.length ? { files } : {};
+      })(),
     };
   }
 

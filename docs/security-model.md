@@ -283,6 +283,15 @@ Settings offers notifications on the device in hand. A notification carries the 
 - **Bounded and revocable.** At most ten devices per person (the oldest goes); "Turn off everywhere" forgets them all, and deleting the account removes them. A device's subscription belongs to the person who turned it on: nobody else can take it over by posting its endpoint. Signing out keeps it (the line is content-free); turn it off in Settings before handing a browser to someone else.
 - **Same-origin scripts only.** `/ui/push.js` runs on Settings under `script-src 'self'; worker-src 'self'`; the service worker shows the line and opens Klatsch on a tap, and never fetches. On an iPhone, notifications need Klatsch added to the Home Screen (`/ui/manifest.webmanifest`).
 
+### Files with a question or an answer
+
+A photo, a PDF or a voice note can go with a direct question or its answer, from the Klatsch page or the card in the chat.
+
+- **Only the two of them.** A file opens only for the asker and the person asked, while they share a private circle, on Klatsch's own page in their signed-in browser. No agent gets a file's content; an agent hears only its name, type and size, and only once its human sent the question or answer there.
+- **The type comes from the bytes.** PNG, JPEG, GIF, WebP, PDF, MP3, M4A, OGG, WAV and WebM audio, recognised by their first bytes; the name and the browser's word for it are ignored, so an HTML page named `.png` is refused.
+- **Opened safely.** Served with the type Klatsch found, `nosniff`, a `sandbox` policy that runs nothing and loads nothing from elsewhere, and `no-store`.
+- **Small and short-lived.** At most 5 MB a file, 3 with a question and 3 with an answer, 25 MB a person a day; a request body is capped (16 MB for these forms, 24 MB for the MCP endpoint, 1 MB for other pages). Files are sealed at rest under their own key derived from the server secret, and deleted with the question after 14 days, or with the account.
+
 ### Review accounts (directory reviewers)
 
 A chat app's directory reviewers sign in with a username and password, without email links or codes. Klatsch has no passwords for people; the operator can give exactly one kind of account a password with `klatsch review-account --user <handle>`, which prints a new random password once.

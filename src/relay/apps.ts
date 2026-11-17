@@ -50,6 +50,10 @@ export interface Card {
   /** A text box for the person's own answer, sent with the `answer` action. */
   answerBox?: { label: string; placeholder: string; max: number };
   flags?: string[];
+  /** A file picker: photos, PDFs and voice notes go with the decision. */
+  pick?: boolean;
+  /** Files the other person sent, to open in the browser (Klatsch's page, signed in). */
+  files?: { name: string; size: number; url: string }[];
   /** Where the person turns on notifications, offered once the card is done: chat apps cannot tell them when an answer comes. */
   notify?: string;
 }
@@ -103,6 +107,7 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
       return {
         key,
         title: `Ask ${view.to.name} (@${view.to.handle})?`,
+        pick: true,
         lines: tags(view.tags),
         edit: { label: 'Question', value: view.question, max: 500 },
         note: `Only ${view.to.name} reads this, with your name.`,
@@ -116,6 +121,7 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
       return {
         key,
         title: `Send your answer to ${view.from.name}?`,
+        pick: true,
         lines: [{ label: 'Their question', text: view.question }],
         edit: { label: 'Your answer', value: view.answer, max: 500 },
         note: `Only ${view.from.name} reads it, and it goes to the AI they asked with.`,
@@ -156,9 +162,11 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
 }
 
 /** The card for a question someone asked the person directly: its words go to the card only, never the model. */
-export function questionCard(key: string, from: { name: string; handle: string }, question: string): Card {
+export function questionCard(key: string, from: { name: string; handle: string }, question: string, files: { name: string; size: number; url: string }[] = []): Card {
   return {
     key,
+    pick: true,
+    ...(files.length ? { files } : {}),
     title: `${from.name} (@${from.handle}) asks you`,
     lines: [{ label: 'Question', text: question }],
     note: `Only ${from.name} reads your answer, and it goes to the AI they asked with. Your AI here reads the question only if you choose "Draft with my AI".`,
@@ -217,6 +225,7 @@ dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .note { font-size: 13px; color: var(--muted); margin: 0; }
 .flags { font-size: 13px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 8px 10px; margin: 0; }
 label { font-size: 13px; font-weight: 600; }
+input[type=file] { font: inherit; font-size: 13px; color: var(--fg); }
 input[type=text] { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 textarea { width: 100%; min-height: 76px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -281,6 +290,16 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     const dl = el('dl');
     for (const line of card.lines) { dl.append(el('dt', line.label), el('dd', line.text)); }
     parts.push(dl);
+    if (card.files && card.files.length) {
+      const list = el('div', undefined, 'row');
+      list.style.justifyContent = 'flex-start';
+      for (const f of card.files) {
+        const b = el('button', '📎 ' + f.name); b.type = 'button';
+        b.addEventListener('click', () => app.openLink({ url: f.url }).catch(() => {}));
+        list.append(b);
+      }
+      parts.push(el('p', 'Files with it (open in your browser, signed in to Klatsch):', 'note'), list);
+    }
     if (card.flags && card.flags.length) parts.push(el('p', 'Check before sending: it may contain ' + card.flags.join(', ') + '.', 'flags'));
     let box;
     let edit;
@@ -295,6 +314,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       box = el('textarea'); box.id = id; box.maxLength = card.answerBox.max; box.placeholder = card.answerBox.placeholder;
       parts.push(label, box);
     }
+    let picker;
+    if (card.pick) {
+      const label = el('label', 'Add a photo, PDF or voice note (up to 3, 5 MB each)'); label.htmlFor = 'files';
+      picker = el('input'); picker.type = 'file'; picker.id = 'files'; picker.multiple = true;
+      picker.accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm';
+      parts.push(label, picker);
+    }
     parts.push(el('p', card.note, 'note'));
     const row = el('div', undefined, 'row');
     const buttons = card.actions.map((action) => {
@@ -307,7 +333,11 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
         try {
           const edited = edit && action.decision !== 'declined' && edit.value.trim() !== card.edit.value.trim() ? { text: edit.value } : {};
           if (edit && action.decision !== 'declined' && !edit.value.trim()) { edit.focus(); buttons.forEach((x) => (x.disabled = false)); return; }
-          const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: action.decision, ...(action.decision === 'answer' ? { answer } : {}), ...edited } });
+          const chosen = picker && action.decision !== 'declined' && action.decision !== 'draft' ? [...picker.files].slice(0, 3) : [];
+          if (chosen.some((f) => f.size > 5 * 1024 * 1024)) { buttons.forEach((x) => (x.disabled = false)); root.append(el('p', 'A file is at most 5 MB.', 'flags error')); return; }
+          const read = (f) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1] || ''); r.onerror = reject; r.readAsDataURL(f); });
+          const files = await Promise.all(chosen.map(async (f) => ({ name: f.name, data: await read(f) })));
+          const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: action.decision, ...(action.decision === 'answer' ? { answer } : {}), ...edited, ...(files.length ? { files } : {}) } });
           if (result.isError) {
             let why = 'That did not work.';
             try { why = JSON.parse(result.content[0].text).message || why; } catch {}

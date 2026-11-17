@@ -1,3 +1,4 @@
+import { normalHandle, RESERVED_HANDLES } from '../service.ts';
 import { randomBytes } from 'node:crypto';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
@@ -200,6 +201,8 @@ const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; co
  * The OAuth consent page: its form is answered with a redirect back to the client, and browsers check that
  * redirect against form-action too, so that one origin (a registered, validated redirect URI's) is added.
  */
+/** A file someone sent, opened in the browser: sandboxed, nothing runs, nothing loads from elsewhere. */
+const FILE_CSP = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
 const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self' ";
 const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin}; frame-ancestors 'none'; base-uri 'none'`;
 
@@ -208,7 +211,7 @@ export const pageHeaders: MiddlewareHandler = async (c, next) => {
   await next();
   // Only a page with a passkey button set the script policy itself (sign-in and Settings); it keeps it, all else gets none.
   const own = c.res.headers.get('Content-Security-Policy');
-  c.header('Content-Security-Policy', own === SCRIPT_CSP || (own !== null && own.startsWith(CONSENT_CSP_START)) ? own : PAGE_CSP);
+  c.header('Content-Security-Policy', own === SCRIPT_CSP || own === FILE_CSP || (own !== null && own.startsWith(CONSENT_CSP_START)) ? own : PAGE_CSP);
   // same-origin, not no-referrer: under no-referrer browsers send `Origin: null` on form posts,
   // which the Origin checks then refuse. The login token still never leaves this origin.
   c.header('Referrer-Policy', 'same-origin');
@@ -270,6 +273,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
 
   const allowReviewAddress = perKeyLimit(10, HOUR_MS);
   const allowReviewHandle = perKeyLimit(10, HOUR_MS);
+  let reviewChecks = 0;
   const reviewForm = (c: Context, failed: boolean) =>
     c.html(
       signInScreen(
@@ -294,8 +298,17 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const form = await c.req.parseBody();
     const handle = typeof form.handle === 'string' ? form.handle.slice(0, 40) : '';
     const password = typeof form.password === 'string' ? form.password.slice(0, 100) : '';
-    if (!allowReviewAddress(address(c)) || !allowReviewHandle(handle.toLowerCase())) return c.html(notice(copy.signIn.busyTitle, html`<p class="sub">${copy.signIn.busy}</p>`), 429);
-    const userId = klatsch.passwordSignIn(handle, password);
+    const busy = () => c.html(notice(copy.signIn.busyTitle, html`<p class="sub">${copy.signIn.busy}</p>`), 429);
+    if (!allowReviewAddress(addressKey(address(c))) || !allowReviewHandle(normalHandle(handle))) return busy();
+    // scrypt costs memory and time: a few checks at once, never a queue someone can grow.
+    if (reviewChecks >= 4) return busy();
+    reviewChecks++;
+    let userId: string | undefined;
+    try {
+      userId = await klatsch.passwordSignIn(handle, password);
+    } finally {
+      reviewChecks--;
+    }
     return userId ? signIn(c, userId) : reviewForm(c, true);
   });
 
@@ -346,7 +359,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   /** The handle a GitHub login gives, when it is a valid one nobody here has. */
   const freeHandle = (login: string): string | undefined => {
     const handle = login.toLowerCase();
-    return HANDLE.test(handle) && !db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle) ? handle : undefined;
+    return HANDLE.test(handle) && !RESERVED_HANDLES.has(handle) && !db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle) ? handle : undefined;
   };
   /**
    * What a join target shows and how it is accepted, while it is valid: an invite names who invites; a public
@@ -1823,12 +1836,49 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     );
   });
   // The person asked types the answer on their page; it goes to the asker's agent at once (the page says so).
+  /** The files a form sent (input `file`, one or several), read into memory: the body limit keeps them small. */
+  const formFiles = async (form: Record<string, unknown>) => {
+    const sent = ([] as unknown[]).concat(form.file ?? form['file[]'] ?? []).filter((f): f is File => typeof f === 'object' && f !== null && 'arrayBuffer' in f && (f as File).size > 0);
+    return Promise.all(sent.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+  };
   web.post('/asks/:id/answer', async (c) => {
-    const form = await c.req.parseBody();
+    const form = await c.req.parseBody({ all: true });
     const answer = typeof form.answer === 'string' ? form.answer : '';
-    return attempt(c, () => klatsch.answerByHand(c.get('userId'), c.req.param('id'), answer), '/ui', () =>
-      c.html(notice(copy.asks.answeredTitle, html`<p class="sub">${copy.asks.answered}</p>${homeLink}`)),
+    const files = await formFiles(form);
+    return attempt(
+      c,
+      () => {
+        klatsch.answerByHand(c.get('userId'), c.req.param('id'), answer);
+        for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
+      },
+      '/ui',
+      () => c.html(notice(copy.asks.answeredTitle, html`<p class="sub">${copy.asks.answered}</p>${homeLink}`)),
     );
+  });
+  // A file with one's own waiting question.
+  web.post('/asks/:id/attach', async (c) => {
+    const files = await formFiles(await c.req.parseBody({ all: true }));
+    return attempt(c, () => {
+      if (!files.length) throw new KlatschError('invalid', copy.asks.noFile);
+      for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
+    }, '/ui');
+  });
+  // A file, for one of the two people: shown in the browser only where that is safe, sandboxed and never sniffed.
+  web.get('/attachments/:id', (c) => {
+    let file: { name: string; mime: string; bytes: Buffer };
+    try {
+      file = klatsch.openAttachment(c.get('userId'), c.req.param('id'));
+    } catch (error) {
+      if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p>${homeLink}`), 404);
+      throw error;
+    }
+    const inline = file.mime.startsWith('image/') || file.mime.startsWith('audio/') || file.mime === 'application/pdf';
+    c.header('Content-Type', file.mime);
+    c.header('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    c.header('Content-Security-Policy', FILE_CSP);
+    c.header('Cache-Control', 'private, no-store');
+    c.header('Cross-Origin-Resource-Policy', 'same-origin');
+    return c.body(new Uint8Array(file.bytes));
   });
   web.post('/asks/:id/decline', act((u, id) => klatsch.declineAsk(u, id)));
   web.post('/asks/:id/withdraw', act((u, id) => klatsch.withdrawAsk(u, id)));
@@ -2222,6 +2272,10 @@ function circlePage(userId: string, allCircles: CircleView[], base: string, csrf
       </section>`;
     })}`;
 }
+
+/** What the file pickers offer; the relay still reads each file's type from its bytes. */
+const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm';
+const kb = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 
 /** Notifications on this phone or browser (Web Push). The button shows only where the script finds push support. */
 function pushSettings(push: { devices: number; key: string }, csrf: string) {
@@ -2665,6 +2719,9 @@ function dashboard(
                   <span class="t">${k.role === 'helper' ? copy.asks.toYou(k.other.name) : copy.asks.fromYou(k.other.name)} <span class="m">@${k.other.handle}</span></span>
                   <span>“${k.question}”</span>
                   ${k.answer ? html`<span><span class="m">${k.role === 'helper' ? copy.asks.yourAnswerLabel : copy.asks.answerLabel}</span> “${k.answer}”</span>${k.tried ? html`<span class="pill warn">${t.didNotWork}</span>` : ''}` : ''}
+                  ${k.attachments.length
+                    ? html`<span class="files">${k.attachments.map((a) => html`<a href="/ui/attachments/${a.id}" target="_blank" rel="noopener">📎 ${a.name} <span class="m">${kb(a.size)}</span></a>`)}</span>`
+                    : ''}
                   <span class="m">${k.tags.join(', ')}${k.role === 'asker' && k.state === 'open' ? ` · ${copy.asks.waiting}` : ''}${k.state === 'declined' ? ` · ${copy.asks.declined}` : ''}</span>
                 </div>
                 <div class="acts">${
@@ -2678,11 +2735,21 @@ function dashboard(
                         ? button(`/ui/asks/${k.id}/withdraw`, copy.asks.withdraw, csrf, 'link')
                         : ''
                 }</div>
+                ${k.role === 'asker' && k.state === 'open'
+                  ? html`<form class="answer" method="post" action="/ui/asks/${k.id}/attach" enctype="multipart/form-data">
+                      <input type="hidden" name="csrf" value="${csrf}" />
+                      <label for="file-${k.id}" class="m">${copy.asks.attachLabel}</label>
+                      <input id="file-${k.id}" type="file" name="file" multiple accept="${ACCEPT}" required />
+                      <button>${copy.asks.attach}</button>
+                    </form>`
+                  : ''}
                 ${k.role === 'helper' && k.state === 'open'
-                  ? html`<form class="answer" method="post" action="/ui/asks/${k.id}/answer">
+                  ? html`<form class="answer" method="post" action="/ui/asks/${k.id}/answer" enctype="multipart/form-data">
                       <input type="hidden" name="csrf" value="${csrf}" />
                       <label for="answer-${k.id}">${copy.asks.yourAnswer}</label>
                       <textarea id="answer-${k.id}" name="answer" maxlength="500" rows="3" required></textarea>
+                      <label for="file-${k.id}" class="m">${copy.asks.attachLabel}</label>
+                      <input id="file-${k.id}" type="file" name="file" multiple accept="${ACCEPT}" />
                       <p class="m">${copy.asks.answerGoes(k.other.handle)}</p>
                       <button class="primary">${copy.asks.sendAnswer}</button>
                     </form>`

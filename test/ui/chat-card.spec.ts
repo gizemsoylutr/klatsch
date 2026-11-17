@@ -185,4 +185,15 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     expect(relay.klatsch.asksOf(eveId).some((k) => k.question === 'Written by Alice herself?')).toBe(true);
     expect(errors).toEqual([]);
   });
+
+  test('Alice picks a photo in the card; it goes with her question', async ({ page }) => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'With a photo from the card?' });
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(asked.raw));
+    await card.getByLabel(/Add a photo, PDF or voice note/).setInputFiles({ name: 'card.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]) });
+    await card.getByRole('button', { name: 'Ask', exact: true }).click();
+    await expect(card.getByText(/^Asked\./)).toBeVisible();
+    const ask = relay.klatsch.asksOf(eveId).find((k) => k.question === 'With a photo from the card?')!;
+    expect(ask.attachments.map((f) => f.name)).toEqual(['card.png']);
+    expect(errors).toEqual([]);
+  });
 });

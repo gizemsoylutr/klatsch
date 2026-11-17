@@ -173,4 +173,24 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     const quote = ((await aliceChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote' && e.quote?.includes('own answer'))!;
     assert.equal(quote.quote, 'Eve’s own answer.');
   });
+
+  it('files go with a question from the card, show in the other card, and the answering agent hears of them', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82]).toString('base64');
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Look at this photo?' });
+    assert.equal(asked.meta[CARD].pick, true);
+    await aliceChat.call('klatsch_card', { key: asked.meta[CARD].key, decision: 'approved', files: [{ name: 'photo.png', data: png }] });
+    const ask = relay.klatsch.asksOf(eve).find((k) => k.question === 'Look at this photo?')!;
+    assert.deepEqual(ask.attachments.map((f) => f.mime), ['image/png']);
+    const shown = await eveChat.call('show_question', { ask_id: ask.id });
+    assert.match(shown.meta[CARD].files[0].url, /\/ui\/attachments\//);
+    assert.ok(!shown.text.includes('photo.png'), 'the model does not see the file name either');
+    await eveChat.call('klatsch_card', { key: shown.meta[CARD].key, decision: 'draft' });
+    const quote = ((await eveChat.call('inbox')).data.events as { type?: string; quote?: string; files?: { name: string }[] }[]).find((e) => e.quote === 'Look at this photo?')!;
+    assert.deepEqual(quote.files?.map((f) => f.name), ['photo.png'], 'once she sends it to her AI, it hears what came with it');
+    // A file the relay does not take is refused, and nothing is asked.
+    const second = await aliceChat.call('ask_person', { handle: '@eve', question: 'And this text file?' });
+    const refused = await aliceChat.call('klatsch_card', { key: second.meta[CARD].key, decision: 'approved', files: [{ name: 'notes.txt', data: Buffer.from('hello world, plain text').toString('base64') }] });
+    assert.equal(refused.isError, true);
+    assert.ok(!relay.klatsch.asksOf(eve).some((k) => k.question === 'And this text file?'), 'all or nothing');
+  });
 });

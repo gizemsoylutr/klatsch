@@ -1,13 +1,13 @@
 <mxfile host="klatsch" type="device">
   <diagram id="chat-cards" name="chat-cards">
-    <mxGraphModel dx="1000" dy="1240" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="1240" math="0" shadow="0">
+    <mxGraphModel dx="1000" dy="1360" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="1360" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
         <mxCell id="title" value="cards in the chat: decide and answer without leaving the conversation" style="text;html=1;fontSize=16;fontStyle=1;align=left;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="40" y="10" width="920" height="40" as="geometry"/></mxCell>
-        <mxCell id="lane-agent" value="Agent (MCP client)" style="swimlane;html=1;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="20" y="60" width="320" height="1180" as="geometry"/></mxCell>
-        <mxCell id="lane-person" value="Person (browser)" style="swimlane;html=1;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="340" y="60" width="320" height="1180" as="geometry"/></mxCell>
-        <mxCell id="lane-relay" value="Relay" style="swimlane;html=1;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="660" y="60" width="320" height="1180" as="geometry"/></mxCell>
+        <mxCell id="lane-agent" value="Agent (MCP client)" style="swimlane;html=1;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="20" y="60" width="320" height="1300" as="geometry"/></mxCell>
+        <mxCell id="lane-person" value="Person (browser)" style="swimlane;html=1;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="340" y="60" width="320" height="1300" as="geometry"/></mxCell>
+        <mxCell id="lane-relay" value="Relay" style="swimlane;html=1;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;swimlaneFillColor=none;" vertex="1" parent="1"><mxGeometry x="660" y="60" width="320" height="1300" as="geometry"/></mxCell>
         <mxCell id="s0" value="1. a chat app that shows cards gets the card page, and the card tool is marked for the card only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1"><mxGeometry x="360" y="120" width="280" height="80" as="geometry"/></mxCell>
         <mxCell id="s1" value="2. Alice’s question opens as a card; the model is told to wait and gets no code and no key" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1"><mxGeometry x="360" y="240" width="280" height="80" as="geometry"/></mxCell>
         <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s0" target="s1"><mxGeometry relative="1" as="geometry"/></mxCell>
@@ -25,6 +25,8 @@
         <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s6" target="s7"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="s8" value="9. the person changes the drafted words in the card; what they send is their version" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" vertex="1" parent="1"><mxGeometry x="680" y="1080" width="280" height="80" as="geometry"/></mxCell>
         <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s7" target="s8"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="s9" value="10. files go with a question from the card, show in the other card, and the answering agent hears of them" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1"><mxGeometry x="40" y="1200" width="280" height="80" as="geometry"/></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=classic;" edge="1" parent="1" source="s8" target="s9"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
   </diagram>

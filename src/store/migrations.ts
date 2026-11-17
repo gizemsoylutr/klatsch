@@ -654,4 +654,21 @@ export const migrations: string[] = [
   ALTER TABLE users ADD COLUMN password_hash TEXT;
   ALTER TABLE users ADD COLUMN demo INTEGER NOT NULL DEFAULT 0 CHECK (demo IN (0, 1));
   `,
+  // Files with a direct question or its answer (a voice note, a photo, a PDF): sealed, small, gone with the question.
+  `
+  CREATE TABLE attachments (
+    id TEXT PRIMARY KEY,
+    ask_id TEXT NOT NULL REFERENCES asks(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    side TEXT NOT NULL CHECK (side IN ('question', 'answer')),
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX attachments_by_ask ON attachments (ask_id);
+  CREATE INDEX attachments_by_user ON attachments (user_id, created_at);
+  `,
 ];

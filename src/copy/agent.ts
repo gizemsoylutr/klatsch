@@ -49,6 +49,16 @@ export const CARD_NOTES = {
   } as Record<string, string>,
 };
 
+/** Files with a question or an answer. */
+export const ATTACH = {
+  notNow: 'A file can go with your own waiting question, or with your answer while you write it or just after.',
+  tooBig: 'A file is at most 5 MB.',
+  wrongType: 'Klatsch takes photos (PNG, JPEG, GIF, WebP), PDFs and voice notes (MP3, M4A, OGG, WAV, WebM).',
+  tooMany: 'At most 3 files with a question, and 3 with an answer.',
+  dayLimit: 'You sent 25 MB of files today. Try again tomorrow.',
+  gone: 'This file is not here any more, or not for you.',
+};
+
 /** `friends`: whom your human can ask directly. */
 export const FRIENDS = {
   some: (n: number) => `Your human's ${n === 1 ? 'friend' : `${n} friends`}: ask any of them directly with ask_person.`,

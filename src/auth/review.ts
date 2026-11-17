@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
 
 /**
  * Passwords for review accounts only. Klatsch signs people in by email link, GitHub, Google or passkey; a chat
@@ -16,11 +16,14 @@ export function hashPassword(password: string): string {
   return `scrypt$${N}$${R}$${P}$${salt.toString('base64url')}$${key.toString('base64url')}`;
 }
 
-export function passwordMatches(password: string, stored: string): boolean {
+/** Off the event loop (the thread pool), so a check never stalls the relay. */
+export async function passwordMatches(password: string, stored: string): Promise<boolean> {
   const [kind, n, r, p, salt, key] = stored.split('$');
   if (kind !== 'scrypt' || !salt || !key) return false;
   const expected = Buffer.from(key, 'base64url');
-  const actual = scryptSync(password, Buffer.from(salt, 'base64url'), expected.length, { N: Number(n), r: Number(r), p: Number(p) });
+  const actual = await new Promise<Buffer>((resolve, reject) =>
+    scrypt(password, Buffer.from(salt, 'base64url'), expected.length, { N: Number(n), r: Number(r), p: Number(p) }, (error, derived) => (error ? reject(error) : resolve(derived))),
+  );
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 

@@ -17,19 +17,31 @@ describe('review account: a password for one account, and a demo friend for the 
 
   it('without a review account there is no password page, and nobody signs in by password', async () => {
     assert.equal((await fetch(`${relay.base}/ui/review-login`)).status, 404);
-    assert.equal(relay.klatsch.passwordSignIn('alice', 'anything'), undefined);
+    assert.equal(await relay.klatsch.passwordSignIn('alice', 'anything'), undefined);
     assert.equal((await fetch(`${relay.base}/.well-known/openai-apps-challenge`)).status, 404);
   });
 
-  it('the operator sets one up: a password, the demo friend, and a question from the demo friend waiting', () => {
+  it('the operator sets one up: a password, the demo friend, and a question from the demo friend waiting', async () => {
+    assert.throws(() => relay.klatsch.setReviewAccount('alice', 'Alice'), /existing account without a password/, 'never a real person by a typo');
     password = relay.klatsch.setReviewAccount('reviewer', 'Directory Reviewer');
     assert.match(password, /^[A-Za-z0-9]{20}$/);
-    reviewer = relay.klatsch.user(relay.klatsch.passwordSignIn('reviewer', password)!).id;
+    reviewer = relay.klatsch.user((await relay.klatsch.passwordSignIn('reviewer', password))!).id;
     assert.deepEqual(relay.klatsch.askablePeople(reviewer), [{ handle: '@klatsch-demo', friend: true }]);
     const waiting = relay.klatsch.asksOf(reviewer).filter((k) => k.role === 'helper' && k.state === 'open');
     assert.equal(waiting.length, 1);
-    assert.equal(relay.klatsch.passwordSignIn('alice', password), undefined, 'only the review account has a password');
-    assert.equal(relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
+    assert.equal(await relay.klatsch.passwordSignIn('alice', password), undefined, 'only the review account has a password');
+    assert.equal(await relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
+    // Outsiders hold its password: it reaches no real people by itself.
+    assert.throws(() => relay.klatsch.friendCircle(reviewer), /demo friend only/);
+    // Six reviewers in a row still each get a demo question (the demo friend's seeds have no daily limit).
+    for (let i = 0; i < 6; i++) relay.klatsch.setReviewAccount(`reviewer${i}`, 'Reviewer');
+  });
+
+  it('nobody can take the demo friend’s handle, and a real person who has it is never made the demo', async () => {
+    const other = await startRelay();
+    other.klatsch.ensureUser('klatsch-demo', 'Someone Real');
+    assert.throws(() => other.klatsch.setReviewAccount('reviewer', 'Reviewer'), /belongs to a real person/);
+    await other.close();
   });
 
   it('the reviewer signs in with the form; a wrong password is refused; the sign-in page links to it', async () => {

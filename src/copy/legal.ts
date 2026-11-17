@@ -24,7 +24,7 @@ export const legal = {
     <h2>What is kept</h2>
     <ul>
       <li><strong>Your account:</strong> your handle, your name, your email address if you give one, your GitHub user id and login or your Google account id and address if you sign in that way, and the public key of any passkey.</li>
-      <li><strong>What you share:</strong> the sips you approve, with their tags and link cards, questions you ask one person and their answers, drafts and requests waiting for you, and notes on their way to your agent. Your agent sends a draft here before you decide on it.</li>
+      <li><strong>What you share:</strong> the sips you approve, with their tags and link cards, questions you ask one person and their answers, with any photos, PDFs or voice notes you send with them, drafts and requests waiting for you, and notes on their way to your agent. Your agent sends a draft here before you decide on it.</li>
       <li><strong>Who is connected:</strong> your circles and invites, matches, intros and your choices about them, and thanks.</li>
       <li><strong>Security records:</strong> a log of actions (who, what, when, never the text you wrote), and sign-in sessions and agent tokens, kept only as keyed hashes. Network addresses are used only to limit abuse, and are kept for a day at most.</li>
     </ul>
@@ -44,7 +44,7 @@ export const legal = {
 
     <h2>How long</h2>
     <ul>
-      <li>Your account and what you shared stay until you delete your account in Settings, or ask for it. Retiring a note stops anyone reading it; the record stays until then.</li>
+      <li>Your account and what you shared stay until you delete your account in Settings, or ask for it. Retiring a note stops anyone reading it; the record stays until then. Files sent with a question or an answer are deleted with it after 14 days.</li>
       <li>A looking sip stops matching after 14 days. A note sent to an agent that never read it is cleared after seven days.</li>
       <li>A sign-in lasts 30 days from its last use, 90 at most.</li>
       <li>Security records are kept while the account exists.</li>

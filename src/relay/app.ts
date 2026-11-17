@@ -1,3 +1,4 @@
+import { bodyLimit } from 'hono/body-limit';
 import { createMcpHonoApp } from '@modelcontextprotocol/hono';
 import { createMcpHandler, getOAuthProtectedResourceMetadataUrl, OAuthError, OAuthErrorCode, requireBearerAuth, type AuthInfo } from '@modelcontextprotocol/server';
 import type { Context, Hono } from 'hono';
@@ -83,6 +84,12 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
   // KLATSCH_LOG=1: who called which tool, so a hook or client that never reaches the relay shows up. No content.
   const log = Boolean(process.env.KLATSCH_LOG);
 
+  // Request bodies have a ceiling: a card may carry a few small files, a page form only words.
+  app.use('/mcp', bodyLimit({ maxSize: 24 * 1024 * 1024, onError: (c) => c.text('Too large.', 413) }));
+  app.use('/ui/*', async (c, next) => {
+    const files = /^\/ui\/asks\/[^/]+\/(answer|attach)$/.test(c.req.path);
+    return bodyLimit({ maxSize: (files ? 16 : 1) * 1024 * 1024, onError: (cx) => cx.text('Too large.', 413) })(c, next);
+  });
   app.all('/mcp', async (c: Context) => {
     const auth = await gate(c.req.raw);
     if (auth instanceof Response) return auth;

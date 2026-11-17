@@ -127,7 +127,18 @@ export async function browser(relay: Relay, loginLink: string) {
     });
     return { status: response.status, html: await response.text() };
   };
-  return { get, post, loginStatus: login.status };
+  /** A multipart form with files, as a page's file input sends it. */
+  const upload = async (target: string, files: { name: string; bytes: Uint8Array; type?: string }[], fields: Record<string, string> = {}) => {
+    const body = new FormData();
+    body.set('csrf', csrf);
+    for (const [k, v] of Object.entries(fields)) body.set(k, v);
+    for (const f of files) body.append('file', new Blob([new Uint8Array(f.bytes)], { type: f.type ?? 'application/octet-stream' }), f.name);
+    const response = await fetch(new URL(target, relay.base), { method: 'POST', redirect: 'manual', headers: { Cookie: cookie, Origin: relay.base }, body });
+    return { status: response.status, html: await response.text() };
+  };
+  /** The raw response, for files. */
+  const fetchRaw = (target: string) => fetch(new URL(target, relay.base), { headers: { Cookie: cookie }, redirect: 'manual' });
+  return { get, post, upload, fetchRaw, loginStatus: login.status };
 }
 
 export type Browser = Awaited<ReturnType<typeof browser>>;

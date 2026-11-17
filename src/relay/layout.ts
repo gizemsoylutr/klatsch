@@ -90,6 +90,8 @@ main.page { width: 100%; max-width: 980px; margin: 0 auto; padding: 40px 24px 64
 .item form.answer label { font-weight: 600; font-size: 14px; }
 .item form.answer textarea { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; }
 .item form.answer button { justify-self: start; }
+.item .files { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.item form.answer input[type=file] { font: inherit; font-size: 13px; }
 .kind { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; font-size: 14px; font-weight: 600; }
 .kind.ask { background: var(--accent-soft); color: var(--accent-text); }
 .kind.draft { background: var(--warn-soft); color: var(--warn); }

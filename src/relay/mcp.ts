@@ -533,6 +533,8 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           decision: z.enum(['approved', 'always', 'declined', 'answer', 'draft', 'friend_link']),
           answer: z.string().max(500).optional(),
           text: z.string().max(500).optional(),
+          // Files picked in the card, base64: at most 3, 5 MB each (the relay checks the real size and type).
+          files: z.array(z.object({ name: z.string().max(200), data: z.string().max(7_200_000) })).max(3).optional(),
         }),
         _meta: { ui: { resourceUri: CARD_URI, visibility: ['app'] } },
         scopeChallenge: requireScopes('inbox:read'),
@@ -543,6 +545,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           const said = (message: string) => ({ content: [{ type: 'text' as const, text: message }], structuredContent: { message } });
           // A friend link: made by the person's click, returned to the card only (the card shows it to copy).
           let link: string | undefined;
+          const files = (input.files ?? []).map((f) => ({ name: f.name, bytes: Buffer.from(f.data, 'base64') }));
           // The key is spent in the same transaction as the decision: a refused answer leaves it usable for a retry.
           const message = transaction(klatsch.db, () => {
             const used = useKey(klatsch.db, secret, id, input.key);
@@ -563,14 +566,21 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
               }
               const decision = input.decision === 'declined' ? 'declined' : 'approved';
               if (input.text !== undefined && approval.action !== 'ask_person' && approval.action !== 'answer_ask') throw new KlatschError('invalid', CARD_NOTES.notOffered);
-              klatsch.decideApproval(id, approval, decision, {
+              const result = klatsch.decideApproval(id, approval, decision, {
                 ...(input.decision === 'always' ? { always: true } : {}),
                 ...(input.text !== undefined && decision === 'approved' ? { text: input.text } : {}),
               });
+              // Files go with the question just asked, or the answer just sent, in the same transaction.
+              if (decision === 'approved' && files.length) {
+                const askId = approval.action === 'ask_person' ? String(result?.ask_id ?? '') : approval.action === 'answer_ask' ? approval.payload.ask_id! : '';
+                if (!askId) throw new KlatschError('invalid', CARD_NOTES.notOffered);
+                for (const file of files) klatsch.attach(id, askId, file);
+              }
               return decision === 'declined' ? CARD_NOTES.declined : (CARD_NOTES.approved[approval.action] ?? CARD_NOTES.done);
             }
             if (input.decision === 'answer') {
               klatsch.answerByHand(id, used.ref, input.answer ?? '');
+              for (const file of files) klatsch.attach(id, used.ref, file);
               return CARD_NOTES.answered;
             }
             if (input.decision === 'draft') return CARD_NOTES.drafting(klatsch.sendAskToAgent(id, used.ref).from);
@@ -661,7 +671,8 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
         const id = caller();
         const ask = klatsch.questionFor(id, input.ask_id);
         if (!cards()) return ok({ state: 'not-shown', note: NOTES.noCards });
-        const card = questionCard(issueKey(klatsch.db, secret, id, 'ask', input.ask_id), ask.from, ask.question);
+        const files = klatsch.attachmentsOf(id, input.ask_id).filter((f) => f.side === 'question').map((f) => ({ name: f.name, size: f.size, url: `${base}/ui/attachments/${f.id}` }));
+        const card = questionCard(issueKey(klatsch.db, secret, id, 'ask', input.ask_id), ask.from, ask.question, files);
         return withCard(ok({ state: 'shown' }), card, NOTES.questionCard);
       } catch (error) {
         return failure(error);
