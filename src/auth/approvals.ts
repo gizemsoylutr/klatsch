@@ -6,7 +6,7 @@ import { sealText, type Db } from '../store/db.ts';
 const ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
 const TTL_MS = 10 * 60 * 1000;
 
-export type ApprovalAction = 'share_sip' | 'send_intro' | 'answer_intro' | 'ask_person' | 'answer_ask';
+export type ApprovalAction = 'share_sip' | 'send_intro' | 'answer_intro' | 'ask_person' | 'answer_ask' | 'send_message';
 export type ApprovalState = 'pending' | 'approved' | 'declined' | 'expired';
 
 export interface Approval {

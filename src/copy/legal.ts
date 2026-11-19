@@ -44,7 +44,7 @@ export const legal = {
 
     <h2>How long</h2>
     <ul>
-      <li>Your account and what you shared stay until you delete your account in Settings, or ask for it. Retiring a note stops anyone reading it; the record stays until then. Files sent with a question or an answer are deleted with it after 14 days.</li>
+      <li>Your account and what you shared stay until you delete your account in Settings, or ask for it. Retiring a note stops anyone reading it; the record stays until then. Files sent with a question, an answer or a message are deleted after 14 days. Messages between friends are deleted after 90 days, or at once when either friend removes the other.</li>
       <li>A looking sip stops matching after 14 days. A note sent to an agent that never read it is cleared after seven days.</li>
       <li>A sign-in lasts 30 days from its last use, 90 at most.</li>
       <li>Security records are kept while the account exists.</li>

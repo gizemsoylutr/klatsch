@@ -258,6 +258,16 @@ A `tried` sip says an approach did not work. It is stored as a note, so every ru
 
 Accepted risk, as for "Always send": with "always" both ways, two people's agents can hand each other text without a click each time. Choose it only for someone whose words you would paste in yourself. Accepted risk of the answer going straight to the asker's agent: a friend's answer can carry words meant to steer that agent. It arrives as a labelled quote that says it is not instructions, from someone the asker chose to ask, and the asker's own approvals still guard everything the agent could do with Klatsch.
 
+### Messages between friends
+
+Two friends (a friendship, the circle of two) have one conversation. Rules:
+
+- **Only friends.** `send_message`, `conversation` and `/ui/chat/<handle>` take a handle and answer the same for an unknown handle, the person themselves, and someone who is only in a shared circle. Ending the friendship deletes the conversation and its files for both.
+- **The person sends.** An agent's `send_message` is an approval (`send_message`): the card in a chat app (an edit box, one click) or the approval page decides, as for any share. On the page and in the conversation card the person types the message: their click is the approval. The conversation card's key works for every reply in it for a day, since each send is a click in the card, which the model cannot make (`visibility: ["app"]`).
+- **The other person's words stay out of the model.** The card gets the messages in `_meta` and from `klatsch_card_state`, both for the card only; the model gets the handle and an unread count. A friend's messages reach the person's agent only by their click ("Draft with my AI": the last ten, once, labelled as another person's words) or because they chose to always get that friend's words (the existing `deliver` grant). An agent without cards gets the page link.
+- **Limits.** 2000 characters, nothing hidden (the same check as questions), 200 messages a day per sender, files as for questions (3 per message, 5 MB each, 25 MB a day across questions and messages, type from the bytes), only by the sender within ten minutes of sending.
+- **At rest.** Text and file names sealed (AES-256-GCM), files sealed; messages deleted after 90 days, files after 14. A notification says only "A friend sent you a message".
+
 ### Cards in the chat (MCP Apps)
 
 In a chat app that shows MCP Apps (the `io.modelcontextprotocol/ui` extension; ChatGPT and Claude do), the person decides an ask, an answer or an intro in Klatsch's own card inside the conversation instead of on the Klatsch page, and reads and answers a question someone asked them there. Sharing a note still opens the Klatsch page, because it asks which circles and who reads it.

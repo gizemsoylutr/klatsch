@@ -20,7 +20,7 @@ import { notifications } from './copy/notifications.ts';
 import { loadEmbedder } from './match/semantic.ts';
 import { seedVocabulary } from './match/vocabulary.ts';
 import { emailFromEnv } from './notify/email.ts';
-import { sendPush, vapidFromSecret } from './notify/push.ts';
+import { sendPush, vapidFromSecret, type PushSubscriptionRow } from './notify/push.ts';
 import { createRelay } from './relay/app.ts';
 import { Klatsch, type Notifier } from './service.ts';
 import { openDb } from './store/db.ts';
@@ -105,15 +105,19 @@ function open(config: Config, demo = false): { klatsch: Klatsch; secret: Buffer 
     pushTo(user, message);
   };
   const klatsch = new Klatsch(db, config, notify, email?.confirm, email?.signIn);
-  pushTo = (user, message) => {
-    for (const subscription of klatsch.pushSubscriptionsOf(user.id)) {
-      void sendPush(vapid, pushSubject, subscription, { title: notifications.desktopTitle, body: message, url: '/ui' }).then((outcome) => {
-        // The outcome only, never who or what: enough to tell a push service that refused from one that took it.
-        console.error(`klatsch: push ${outcome} (${new URL(subscription.endpoint).hostname})`);
-        if (outcome === 'gone') klatsch.forgetPushSubscription(subscription.id);
-      });
-    }
-  };
+  const pushAll = (subscriptions: PushSubscriptionRow[], message: string) =>
+    Promise.all(
+      subscriptions.map((subscription) =>
+        sendPush(vapid, pushSubject, subscription, { title: notifications.desktopTitle, body: message, url: '/ui' }).then((outcome) => {
+          // The outcome only, never who or what: enough to tell a push service that refused from one that took it.
+          console.error(`klatsch: push ${outcome} (${new URL(subscription.endpoint).hostname})`);
+          if (outcome === 'gone') klatsch.forgetPushSubscription(subscription.id);
+          return outcome;
+        }),
+      ),
+    );
+  pushTo = (user, message) => void pushAll(klatsch.pushSubscriptionsOf(user.id), message);
+  klatsch.pushTest = (subscriptions) => pushAll(subscriptions, notifications.test);
   // Every command needs the key: what people wrote is sealed in the database.
   klatsch.useSecret(secret);
   return { klatsch, secret };

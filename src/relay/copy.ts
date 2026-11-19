@@ -39,7 +39,7 @@ export const copy = {
     eyebrow: ['Open source', 'Works in ChatGPT, Claude and your coding agent'],
     headline: ['Ask your friends.', 'From any chat.'],
     name: 'Klatsch',
-    lead: 'Your AI drafts the question, you approve it, only your friend reads it. Their answer comes back to your chat.',
+    lead: 'Write to a friend from the chat you are in: your AI drafts it, you send it, only your friend reads it. Their reply shows up in your chat.',
     howLink: 'See how it works',
     demo: ['npx klatsch up --demo', 'try it locally in a minute'],
     /** The relay's own MCP address, for chat apps that add a server by its URL. */
@@ -240,7 +240,7 @@ export const copy = {
     chatApp: 'Connecting ChatGPT or Claude? Open the link first, then start the connection again in the chat app.',
     signedInGitHub: (login: string) => `You signed in with GitHub as @${login}, and are in no circle here yet.`,
     signedInGoogle: (email: string) => `You signed in with Google as ${email}, and are in no circle here yet.`,
-    friend: 'Or add a friend: you get a link to send them, and once they open it you can ask each other anything through your AI.',
+    friend: 'Or add a friend: you get a link to send them, and once they open it you can write to each other from any AI chat.',
     selfHost: 'Or run your own:',
     selfHostLink: 'self-hosting guide',
   },
@@ -253,6 +253,7 @@ export const copy = {
     /** The summary chips under the greeting: a count, then what it counts. */
     summary: 'Summary',
     chips: {
+      unread: (n: number) => (n === 1 ? 'new message' : 'new messages'),
       intros: (count: number) => (count === 1 ? 'intro request' : 'intro requests'),
       drafts: (count: number) => (count === 1 ? 'draft' : 'drafts'),
       notes: (count: number) => (count === 1 ? 'note for you' : 'notes for you'),
@@ -310,6 +311,26 @@ export const copy = {
   thanks,
 
 
+  chat: {
+    heading: 'Messages',
+    title: (name: string) => `${name}`,
+    empty: (name: string) => `No messages yet. Write to ${name} here, or ask your AI in any chat: “Write to my friend …”.`,
+    you: 'You',
+    unread: (n: number) => `${n} new`,
+    write: 'Your message',
+    placeholder: 'Write a message',
+    send: 'Send',
+    attachLabel: 'Add a photo, PDF or voice note (up to 3, 5 MB each)',
+    toAgent: 'Draft a reply with my AI',
+    toAgentNote: 'Your AI reads the last messages from them once, the next time it checks Klatsch, labelled as their words.',
+    sentToAgentTitle: 'Sent to your AI',
+    sentToAgent: (from: string) => `Your AI gets your conversation with ${from} the next time it checks Klatsch, once, labelled as their words. Ask it in your chat to draft a reply.`,
+    note: (name: string) => `Only you and ${name} read this conversation. It is kept 90 days, files 14 days, and goes when either of you removes the other as a friend.`,
+    none: 'Your conversations with friends show here. Add a friend, then write from here or from any AI chat.',
+    open: 'Open',
+    noText: 'File',
+  },
+
   asks: {
     heading: 'Asked directly',
     toYou: (name: string) => `${name} asks you`,
@@ -340,6 +361,12 @@ export const copy = {
   },
 
   approval: {
+    sendMessage: {
+      heading: (name: string) => `Send this to ${name}?`,
+      lead: (name: string, handle: string) => html`Only <strong>${name}</strong> (@${handle}) reads it, with your name.`,
+      yes: 'Send',
+      no: 'Not now',
+    },
     askPerson: {
       heading: (name: string) => `Ask ${name} directly?`,
       lead: (name: string, handle: string) => html`Only <strong>${name}</strong> (@${handle}) reads this, with your name. They decide whether to answer.`,
@@ -379,6 +406,8 @@ export const copy = {
     closeNote: 'Your agent sees the outcome; you can close this page.',
     sharedTitle: 'Shared.',
     shared: "It's on your card now.",
+    messageSentTitle: 'Sent.',
+    messageSent: 'Only they read it. Your conversation is on Home.',
     askSentTitle: 'Asked.',
     askSent: 'Only they read it. You see their answer on Home.',
     answerSentTitle: 'Sent.',
@@ -539,7 +568,8 @@ export const copy = {
     invite: 'Invite someone',
     addFriend: 'Add a friend',
     friendsHeading: 'Friends',
-    friendsNote: 'A friend is a circle of two: you can ask each other anything directly, and only the two of you read it.',
+    friendsNote: 'A friend is a circle of two: you write to each other from any AI chat or from here, and only the two of you read it.',
+    message: 'Message',
     friendWaiting: 'Waiting for your friend to open the link.',
     friendInviteTitle: 'Add a friend',
     friendInviteNote: 'Send this link to your friend, by any messenger. It works once, for seven days, and is shown only now. When they open it and sign in, you are friends on Klatsch.',
@@ -553,7 +583,7 @@ export const copy = {
   invite: {
     friendHeading: 'Add as a friend?',
     friendLine: (inviter: string, handle: string) => html`<strong>${inviter}</strong> (@${handle}) wants to add you as a friend on Klatsch.`,
-    friendNote: 'Friends can ask each other anything through their AI. Only the two of you read what you ask and answer, and each of you approves before anything is sent.',
+    friendNote: 'Friends write to each other from any AI chat or from here. Only the two of you read the conversation, and nothing is sent until you send it.',
     friendJoin: 'Add friend',
     alreadyFriends: (handle: string) => `You and @${handle} are already friends. Nothing changed.`,
     heading: 'Join the klatsch?',
@@ -584,7 +614,7 @@ export const copy = {
   /** Notifications on a phone or browser (Web Push): a line, never what anyone wrote. */
   push: {
     heading: 'Notifications on this device',
-    line: 'A notification when someone asks you something or answers you. It never shows what they wrote.',
+    line: 'A notification when a friend writes to you, asks you something or answers you. It never shows what they wrote.',
     devices: (n: number) => (n === 0 ? 'Off on every device.' : n === 1 ? 'On for 1 device.' : `On for ${n} devices.`),
     turnOn: 'Turn on here',
     turnOff: 'Turn off everywhere',
@@ -594,6 +624,20 @@ export const copy = {
     denied: 'Notifications are blocked for Klatsch in this browser. Allow them in its settings, then try again.',
     unsupported: 'This browser cannot get notifications from a web page. On an iPhone, add Klatsch to the Home Screen first.',
     iphone: 'On an iPhone: tap Share, then Add to Home Screen, open Klatsch from there and turn notifications on.',
+    test: 'Send a test notification',
+    testLine: 'Not sure they arrive? Send one to every device that has them on.',
+    testTitle: 'Test notification',
+    testNone: 'No device gets notifications yet. Turn them on here first.',
+    testSent: (sent: number, failed: number, gone: number) =>
+      `Sent to ${sent === 1 ? '1 device' : `${sent} devices`}${failed ? `; ${failed} could not be reached` : ''}${gone ? `; ${gone} no longer exist and were removed` : ''}. It should show within a minute.`,
+    testMissing: 'Nothing showed up? The browser took it, so the device is holding it back. Check:',
+    checks: [
+      'Mac: System Settings › Notifications › your browser (Chrome or Safari): Allow notifications, style Banners or Alerts.',
+      'Mac and iPhone: Focus or Do Not Disturb is off, or lets your browser through.',
+      'Chrome: it has to be running (it can stay in the Dock without windows). In Chrome settings, Privacy › Site settings › Notifications allows klatsch.dev.',
+      'iPhone and iPad: notifications work only from the Home Screen app. Share › Add to Home Screen, open Klatsch there, turn them on again in Settings.',
+      'Android: Settings › Apps › Chrome › Notifications is on.',
+    ],
     offerTitle: 'Know when a friend asks you',
     offerLine: 'Chat apps cannot tell you when something arrives. Turn on notifications on this device: they say only that something is new, never what anyone wrote.',
     offerLater: 'Not now',

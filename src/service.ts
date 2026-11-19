@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ATTACH, ASK, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, MESSAGE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -197,7 +197,25 @@ export type ApprovalView =
   | { action: 'send_intro'; tags: string[]; summary: string }
   | { action: 'answer_intro'; tags: string[]; request: string; circle?: string }
   | { action: 'ask_person'; to: { name: string; handle: string }; tags: string[]; question: string; flags: Flag[] }
-  | { action: 'answer_ask'; from: { name: string; handle: string }; tags: string[]; question: string; answer: string; tried: boolean; flags: Flag[] };
+  | { action: 'answer_ask'; from: { name: string; handle: string }; tags: string[]; question: string; answer: string; tried: boolean; flags: Flag[] }
+  | { action: 'send_message'; to: { name: string; handle: string }; text: string; flags: Flag[] };
+
+/** A conversation with one friend, for the person's own page or card. */
+export interface ConversationView {
+  circleId: string;
+  other: { name: string; handle: string };
+  /** The friend's messages the person has not read yet. */
+  unread: number;
+  /** The person chose to always let their agent read this friend's words. */
+  sends: boolean;
+  messages: { id: string; mine: boolean; text: string; at: number; read: boolean; files: { id: string; name: string; mime: string; size: number }[] }[];
+}
+export interface ConversationSummary {
+  circleId: string;
+  other: { name: string; handle: string };
+  unread: number;
+  last?: { mine: boolean; text: string; at: number };
+}
 
 /** A direct question, as the asker or the person asked sees it on their own page. */
 export interface AskView {
@@ -318,12 +336,20 @@ export interface CircleView {
 const ASK_DAYS = 14;
 /** An answer typed on the page: the same bound as an agent's draft. */
 const ANSWER_MAX = 500;
+/** A message between friends: longer than a question, still one message. */
+export const MESSAGE_MAX = 2000;
+const MESSAGES_PER_DAY = 200;
+const MESSAGE_DAYS = 90;
+const ATTACHMENT_DAYS = 14;
+/** How many of the friend's messages one "Draft with my AI" hands over. */
+const THREAD_FOR_AGENT = 10;
 /** The demo friend of a review account: answers at once, and always has one question waiting. */
 const DEMO_HANDLE = 'klatsch-demo';
 /** Handles nobody can pick: the demo friend's, and names that would look like Klatsch speaking. */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set([DEMO_HANDLE, 'klatsch', 'admin', 'support', 'review']);
 const DEMO = {
   question: 'Hi! I am the Klatsch demo friend. What would you like to ask a friend through your AI? Answer me here.',
+  reply: (text: string) => `Hi, this is the Klatsch demo friend. You wrote: “${text.slice(0, 300)}” A real friend reads it in their own chat, or on their phone, and writes back here.`,
   answer: (question: string) => `Hi, this is the Klatsch demo friend. You asked: “${question.slice(0, 300)}” A real friend reads it in their own chat and answers there; this answer came back to the chat you asked from.`,
 };
 /** A handle as people type it: no @, no spaces, lower case. */
@@ -351,6 +377,8 @@ export interface InboxEvent {
   source?: Source;
   /** Files that came with a question or an answer: names and types; the person opens them on their Klatsch page. */
   files?: { type: string; size: number }[];
+  /** A conversation the human let through: the friend's messages and their own around them, oldest first. */
+  messages?: { from: string; text: string; at: string }[];
 }
 
 export class Klatsch {
@@ -670,6 +698,7 @@ export class Klatsch {
       // Neither loses their sign-in: with no circle left, a person can still add a friend.
       if (other) this.removeMember(owner, circleId, other.user_id, { keepAccess: true });
       this.db.prepare('UPDATE circles SET ended_at = ? WHERE id = ?').run(Date.now(), circleId);
+      this.dropConversation(circleId);
       this.audit(userId, 'web', 'friend.end', circleId);
     });
   }
@@ -766,12 +795,17 @@ export class Klatsch {
    * A browser asked for notifications on this device: its push subscription, checked (a known push service, keys
    * of the right size). At most ten devices per person; the oldest goes. Saving the same endpoint again moves it.
    */
-  savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }): void {
+  savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }, resync = false): 'on' | 'off' {
     const endpoint = pushEndpoint(sub.endpoint);
     if (!endpoint || !pushKeyValid(sub.p256dh) || Buffer.from(sub.auth, 'base64url').length !== 16) {
       throw new KlatschError('invalid', 'This browser sent a subscription Klatsch cannot use.');
     }
-    transaction(this.db, () => {
+    return transaction(this.db, () => {
+      if (resync) {
+        // The page re-sends what the browser holds on every visit, so a row lost on the relay comes back; but not
+        // one the person turned off from another device: that browser is told so and drops it.
+        if (this.db.prepare('SELECT 1 FROM push_off WHERE endpoint = ? AND user_id = ?').get(endpoint, userId)) return 'off' as const;
+      } else this.db.prepare('DELETE FROM push_off WHERE endpoint = ?').run(endpoint);
       // Someone else's device: never taken over. Signing in as another person here starts with notifications off.
       const holder = this.db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?').get(endpoint) as { user_id: string } | undefined;
       if (holder && holder.user_id !== userId) throw new KlatschError('invalid', 'This browser gets notifications for someone else. Turn them off there first.');
@@ -780,12 +814,32 @@ export class Klatsch {
       this.db
         .prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND rowid NOT IN (SELECT rowid FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 10)')
         .run(userId, userId);
-      this.audit(userId, 'web', 'push.on');
+      if (!resync) this.audit(userId, 'web', 'push.on');
+      return 'on' as const;
     });
   }
 
   pushSubscriptionsOf(userId: string): PushSubscriptionRow[] {
     return this.db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId) as unknown as PushSubscriptionRow[];
+  }
+
+  /**
+   * Sends a test notification to every device of this person and says how each push service answered. Set by
+   * whoever runs the relay with a push key (the CLI); without one there is nothing to test.
+   */
+  pushTest?: (subscriptions: PushSubscriptionRow[]) => Promise<('sent' | 'gone' | 'failed')[]>;
+  private lastPushTest = new Map<string, number>();
+
+  async testPush(userId: string): Promise<{ sent: number; failed: number; gone: number }> {
+    const subscriptions = this.pushSubscriptionsOf(userId);
+    if (!this.pushTest || subscriptions.length === 0) return { sent: 0, failed: 0, gone: 0 };
+    const last = this.lastPushTest.get(userId) ?? 0;
+    if (Date.now() - last < 30_000) throw new KlatschError('invalid', 'You just sent a test notification. Wait half a minute, then try again.');
+    this.lastPushTest.set(userId, Date.now());
+    const outcomes = await this.pushTest(subscriptions);
+    this.audit(userId, 'web', 'push.test');
+    const count = (o: string) => outcomes.filter((x) => x === o).length;
+    return { sent: count('sent'), failed: count('failed'), gone: count('gone') };
   }
 
   forgetPushSubscription(id: string): void {
@@ -802,6 +856,9 @@ export class Klatsch {
 
   /** Notifications off on every device of this person. */
   pushOff(userId: string): void {
+    this.db
+      .prepare('INSERT OR REPLACE INTO push_off (endpoint, user_id, created_at) SELECT endpoint, user_id, ? FROM push_subscriptions WHERE user_id = ?')
+      .run(Date.now(), userId);
     this.db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(userId);
     this.audit(userId, 'web', 'push.off');
   }
@@ -1229,6 +1286,10 @@ export class Klatsch {
       const preview = this.previewAsk(JSON.parse(p.tags!) as string[], p.question!);
       return { action: 'ask_person', to: { name: helper.display_name, handle: helper.handle }, tags: preview.tags, question: p.question!, flags: preview.flags };
     }
+    if (approval.action === 'send_message') {
+      const { other } = this.friendFor(userId, p.handle!);
+      return { action: 'send_message', to: { name: other.display_name, handle: other.handle }, text: p.text!, flags: this.previewMessage(p.text!) };
+    }
     if (approval.action === 'answer_ask') {
       const ask = this.openAskFor(userId, p.ask_id!);
       refuseHidden(p.answer!);
@@ -1267,6 +1328,8 @@ export class Klatsch {
           result = { intro_id: this.requestIntro(userId, p.match_id!).introId };
         } else if (approval.action === 'ask_person') {
           result = { ask_id: this.createAsk(userId, p.handle!, JSON.parse(p.tags!) as string[], this.editedText(choice.text, p.question!, QUESTION_MAX)) };
+        } else if (approval.action === 'send_message') {
+          result = { message_id: this.sendMessage(userId, p.handle!, this.editedText(choice.text, p.text!, MESSAGE_MAX), 'web') };
         } else if (approval.action === 'answer_ask') {
           this.answerAsk(userId, p.ask_id!, this.editedText(choice.text, p.answer!, ANSWER_MAX), p.tried === 'true');
           result = { ask_id: p.ask_id };
@@ -1469,8 +1532,7 @@ export class Klatsch {
     if (!kind) throw new KlatschError('invalid', ATTACH.wrongType);
     const count = this.db.prepare('SELECT count(*) AS n FROM attachments WHERE ask_id = ? AND side = ?').get(askId, side) as { n: number };
     if (count.n >= ATTACHMENTS_PER_SIDE) throw new KlatschError('forbidden', ATTACH.tooMany);
-    const today = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM attachments WHERE user_id = ? AND created_at > ?').get(userId, Date.now() - DAY) as { n: number };
-    if (today.n + bytes.length > ATTACHMENT_BYTES_PER_DAY) throw new KlatschError('forbidden', ATTACH.dayLimit);
+    if (this.bytesToday(userId) + bytes.length > ATTACHMENT_BYTES_PER_DAY) throw new KlatschError('forbidden', ATTACH.dayLimit);
     const id = newId('att');
     const name = cleanName(file.name, kind);
     this.db
@@ -1496,6 +1558,7 @@ export class Klatsch {
   /** One file, opened for one of the two people while they still share a private circle; one answer for all else. */
   openAttachment(userId: string, id: string): { name: string; mime: string; bytes: Buffer } {
     this.dropExpiredAttachments();
+    if (id.startsWith('mf_')) return this.openMessageFile(userId, id);
     const row = this.db.prepare('SELECT ask_id, name, mime, data FROM attachments WHERE id = ? AND expires_at > ?').get(id, Date.now()) as
       | { ask_id: string; name: string; mime: string; data: Uint8Array }
       | undefined;
@@ -1509,8 +1572,255 @@ export class Klatsch {
     return { name: row.name, mime: row.mime, bytes };
   }
 
+  /** A file with a message, for its two friends while they are friends; one answer for everything else. */
+  private openMessageFile(userId: string, id: string): { name: string; mime: string; bytes: Buffer } {
+    const row = this.db
+      .prepare('SELECT f.name, f.mime, f.data, m.id AS message_id, m.circle_id, m.sender_id, m.recipient_id FROM message_files f JOIN messages m ON m.id = f.message_id WHERE f.id = ? AND f.expires_at > ?')
+      .get(id, Date.now()) as { name: string; mime: string; data: Uint8Array; message_id: string; circle_id: string; sender_id: string; recipient_id: string } | undefined;
+    if (!row || (row.sender_id !== userId && row.recipient_id !== userId) || this.friendshipOf(row.sender_id, row.recipient_id) !== row.circle_id) {
+      throw new KlatschError('not-found', ATTACH.gone);
+    }
+    const bytes = openBytes(this.db, row.data);
+    if (!bytes) throw new KlatschError('not-found', ATTACH.gone);
+    this.audit(userId, 'web', 'attach.open', row.message_id);
+    return { name: row.name, mime: row.mime, bytes };
+  }
+
   private dropExpiredAttachments(): void {
     this.db.prepare('DELETE FROM attachments WHERE expires_at <= ?').run(Date.now());
+    this.db.prepare('DELETE FROM message_files WHERE expires_at <= ?').run(Date.now());
+  }
+
+  // ---------- messages between friends ----------
+
+  /**
+   * The friend a handle names, with the friendship the conversation lives in. Everyone else, unknown handles and
+   * the person themselves get one answer, so a handle tells an agent nothing about who is on the relay.
+   */
+  friendFor(userId: string, handle: string): { circleId: string; other: UserRow } {
+    const clean = normalHandle(handle);
+    const row = HANDLE.test(clean) ? (this.db.prepare('SELECT id FROM users WHERE handle = ?').get(clean) as { id: string } | undefined) : undefined;
+    const circleId = row && row.id !== userId ? this.friendshipOf(userId, row.id) : undefined;
+    if (!row || !circleId) throw new KlatschError('invalid', MESSAGE.noFriend);
+    return { circleId, other: this.user(row.id) };
+  }
+
+  /** A message's own checks, before anyone approves it: nothing hidden, not empty, not too long; identifiers flagged. */
+  previewMessage(text: string): Flag[] {
+    const clean = text.trim();
+    if (!clean) throw new KlatschError('invalid', MESSAGE.empty);
+    if (clean.length > MESSAGE_MAX) throw new KlatschError('invalid', MESSAGE.tooLong);
+    refuseHidden(clean);
+    return detect(clean);
+  }
+
+  /** Whether `userId` may send another message now. */
+  canMessage(userId: string): boolean {
+    const today = this.db.prepare('SELECT count(*) AS n FROM messages WHERE sender_id = ? AND created_at > ?').get(userId, Date.now() - DAY) as { n: number };
+    return today.n < MESSAGES_PER_DAY;
+  }
+
+  /**
+   * Sends a message the person approved (in the card, on the approval page) or typed themselves (on their page,
+   * in the card): their click is the approval. Only the friend reads it. It reaches the friend's agent only if
+   * the friend chose to always get this person's words there.
+   */
+  sendMessage(senderId: string, handle: string, text: string, via: Via = 'web'): string {
+    const { circleId, other } = this.friendFor(senderId, handle);
+    this.previewMessage(text);
+    if (!this.canMessage(senderId)) throw new KlatschError('forbidden', MESSAGE.tooMany);
+    this.dropOldMessages();
+    const id = newId('m');
+    const always = this.hasGrant(other.id, senderId, 'deliver');
+    this.db
+      .prepare('INSERT INTO messages (id, circle_id, sender_id, recipient_id, body, created_at, for_agent) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, circleId, senderId, other.id, sealText(this.db, text.trim()), Date.now(), always ? 1 : 0);
+    this.event(other.id, always ? 'message.thread' : 'message.received', id);
+    this.audit(senderId, via, 'message.send', id);
+    this.notifyUser(other.id, notifications.message);
+    // The demo friend writes back at once, so a reviewer sees a conversation alone.
+    if (this.isDemo(other.id)) {
+      this.db.prepare('UPDATE messages SET read_at = ? WHERE id = ?').run(Date.now(), id);
+      this.sendMessage(other.id, this.user(senderId).handle, DEMO.reply(text.trim()), 'cli');
+    }
+    return id;
+  }
+
+  /** A file with a message, by its sender, within ten minutes of sending it. Its type is read from its bytes. */
+  attachToMessage(userId: string, messageId: string, file: { name: string; bytes: Uint8Array }, via: Via = 'web'): { id: string; name: string; mime: string; size: number } {
+    this.dropExpiredAttachments();
+    const row = this.db.prepare('SELECT sender_id, recipient_id, circle_id, created_at FROM messages WHERE id = ?').get(messageId) as
+      | { sender_id: string; recipient_id: string; circle_id: string; created_at: number }
+      | undefined;
+    if (!row || row.sender_id !== userId || row.created_at < Date.now() - 10 * 60 * 1000 || this.friendshipOf(row.sender_id, row.recipient_id) !== row.circle_id) {
+      throw new KlatschError('forbidden', ATTACH.notNow);
+    }
+    const bytes = Buffer.from(file.bytes);
+    if (bytes.length > ATTACHMENT_MAX_BYTES) throw new KlatschError('invalid', ATTACH.tooBig);
+    const kind = sniff(bytes);
+    if (!kind) throw new KlatschError('invalid', ATTACH.wrongType);
+    const count = this.db.prepare('SELECT count(*) AS n FROM message_files WHERE message_id = ?').get(messageId) as { n: number };
+    if (count.n >= ATTACHMENTS_PER_SIDE) throw new KlatschError('forbidden', ATTACH.tooMany);
+    if (this.bytesToday(userId) + bytes.length > ATTACHMENT_BYTES_PER_DAY) throw new KlatschError('forbidden', ATTACH.dayLimit);
+    const id = newId('mf');
+    const name = cleanName(file.name, kind);
+    this.db
+      .prepare('INSERT INTO message_files (id, message_id, user_id, name, mime, size, data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, messageId, userId, sealText(this.db, name), kind.mime, bytes.length, sealBytes(this.db, bytes), Date.now(), Date.now() + ATTACHMENT_DAYS * DAY);
+    this.audit(userId, via, 'message.attach', messageId);
+    return { id, name, mime: kind.mime, size: bytes.length };
+  }
+
+  /** What a person uploaded in the last day, with questions and with messages together. */
+  private bytesToday(userId: string): number {
+    const since = Date.now() - DAY;
+    const a = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM attachments WHERE user_id = ? AND created_at > ?').get(userId, since) as { n: number };
+    const b = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM message_files WHERE user_id = ? AND created_at > ?').get(userId, since) as { n: number };
+    return a.n + b.n;
+  }
+
+  /**
+   * The conversation with one friend, oldest first, for the person's own page or their card in the chat: the
+   * last `limit` messages, with their files (names, types, sizes). `markRead` marks the friend's messages read.
+   */
+  conversation(userId: string, handle: string, options: { limit?: number; markRead?: boolean } = {}): ConversationView {
+    const { circleId, other } = this.friendFor(userId, handle);
+    this.dropOldMessages();
+    this.dropExpiredAttachments();
+    const rows = (
+      this.db
+        .prepare('SELECT id, sender_id, body, created_at, read_at FROM messages WHERE circle_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
+        .all(circleId, options.limit ?? 50) as { id: string; sender_id: string; body: string; created_at: number; read_at: number | null }[]
+    ).reverse();
+    const files = (messageId: string) =>
+      this.db
+        .prepare('SELECT id, name, mime, size FROM message_files WHERE message_id = ? AND expires_at > ? ORDER BY created_at')
+        .all(messageId, Date.now()) as { id: string; name: string; mime: string; size: number }[];
+    const unread = this.unreadFrom(userId, circleId);
+    if (options.markRead && unread) {
+      transaction(this.db, () => {
+        this.db.prepare('UPDATE messages SET read_at = ? WHERE circle_id = ? AND recipient_id = ? AND read_at IS NULL').run(Date.now(), circleId, userId);
+        // Read on the page or in the card: the agent's inbox no longer says it waits.
+        this.db
+          .prepare(`UPDATE events SET read_at = ? WHERE user_id = ? AND kind = 'message.received' AND read_at IS NULL AND ref IN (SELECT id FROM messages WHERE circle_id = ?)`)
+          .run(Date.now(), userId, circleId);
+      });
+    }
+    return {
+      circleId,
+      other: { name: other.display_name, handle: other.handle },
+      unread,
+      sends: this.hasGrant(userId, other.id, 'deliver'),
+      messages: rows.map((r) => ({ id: r.id, mine: r.sender_id === userId, text: r.body, at: r.created_at, read: r.read_at !== null, files: files(r.id) })),
+    };
+  }
+
+  private unreadFrom(userId: string, circleId: string): number {
+    return (this.db.prepare('SELECT count(*) AS n FROM messages WHERE circle_id = ? AND recipient_id = ? AND read_at IS NULL').get(circleId, userId) as { n: number }).n;
+  }
+
+  /** Every friend with the last message and how many of theirs wait unread: for Home, the Circle page and `friends`. */
+  conversationsOf(userId: string): ConversationSummary[] {
+    this.dropOldMessages();
+    const friends = this.db
+      .prepare(
+        `SELECT c.id AS circle_id, u.id AS user_id, u.handle, u.display_name FROM memberships mine
+         JOIN circles c ON c.id = mine.circle_id AND c.pair = 1 AND c.ended_at IS NULL
+         JOIN memberships o ON o.circle_id = c.id AND o.user_id != mine.user_id JOIN users u ON u.id = o.user_id
+         WHERE mine.user_id = ?`,
+      )
+      .all(userId) as { circle_id: string; user_id: string; handle: string; display_name: string }[];
+    return friends
+      .map((f) => {
+        const last = this.db.prepare('SELECT sender_id, body, created_at FROM messages WHERE circle_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(f.circle_id) as
+          | { sender_id: string; body: string; created_at: number }
+          | undefined;
+        return {
+          circleId: f.circle_id,
+          other: { name: f.display_name, handle: f.handle },
+          unread: this.unreadFrom(userId, f.circle_id),
+          ...(last ? { last: { mine: last.sender_id === userId, text: last.body, at: last.created_at } } : {}),
+        };
+      })
+      .sort((a, b) => (b.last?.at ?? 0) - (a.last?.at ?? 0) || a.other.handle.localeCompare(b.other.handle));
+  }
+
+  /**
+   * The person hands the conversation to their own agent, once, by a click in their session (page or card): the
+   * friend's recent messages go to its inbox, so it can draft a reply. Nothing reaches the agent otherwise.
+   */
+  sendConversationToAgent(userId: string, handle: string, via: Via = 'web'): { from: string } {
+    const { circleId, other } = this.friendFor(userId, handle);
+    const from = agentHandle(other.handle);
+    if (!from) throw new KlatschError('forbidden', MESSAGE.noFriend);
+    transaction(this.db, () => {
+      this.db
+        .prepare(
+          `UPDATE messages SET for_agent = 1 WHERE id IN (SELECT id FROM messages WHERE circle_id = ? AND recipient_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ${THREAD_FOR_AGENT})`,
+        )
+        .run(circleId, userId, Date.now() - 7 * DAY);
+      this.event(userId, 'message.thread', circleId, true);
+      this.audit(userId, via, 'message.send-to-agent', circleId);
+    });
+    return { from };
+  }
+
+  /**
+   * The conversation for an agent, once per click or "always": the friend's messages its human let through (and
+   * the human's own last words around them, for context), cleaned and labelled; then the flags are cleared.
+   */
+  private deliverThread(userId: string, ref: string): InboxEvent | undefined {
+    const circleId = ref.startsWith('m_')
+      ? (this.db.prepare('SELECT circle_id FROM messages WHERE id = ? AND recipient_id = ?').get(ref, userId) as { circle_id: string } | undefined)?.circle_id
+      : ref;
+    if (!circleId) return undefined;
+    const otherId = (this.db.prepare('SELECT user_id FROM memberships WHERE circle_id = ? AND user_id != ?').get(circleId, userId) as { user_id: string } | undefined)?.user_id;
+    if (!otherId || this.friendshipOf(userId, otherId) !== circleId) return undefined;
+    const waiting = this.db.prepare('SELECT min(created_at) AS since FROM messages WHERE circle_id = ? AND recipient_id = ? AND for_agent = 1').get(circleId, userId) as {
+      since: number | null;
+    };
+    if (waiting.since === null) return undefined;
+    const rows = this.db
+      .prepare(
+        `SELECT sender_id, body, created_at, for_agent FROM messages WHERE circle_id = ? AND created_at >= ? ORDER BY created_at, rowid LIMIT ${THREAD_FOR_AGENT * 2}`,
+      )
+      .all(circleId, waiting.since) as { sender_id: string; body: string; created_at: number; for_agent: number }[];
+    this.db.prepare('UPDATE messages SET for_agent = 0 WHERE circle_id = ? AND recipient_id = ? AND for_agent = 1').run(circleId, userId);
+    const from = agentHandle(this.user(otherId).handle);
+    if (!from) return undefined;
+    const auto = this.hasGrant(userId, otherId, 'deliver');
+    const messages = rows
+      .filter((r) => r.sender_id === userId || r.for_agent === 1)
+      .map((r) => ({ from: r.sender_id === userId ? 'you' : from, text: clip(cleanQuote(r.body), MESSAGE_MAX), at: new Date(r.created_at).toISOString() }));
+    this.audit(userId, 'mcp', 'message.deliver', circleId);
+    return {
+      kind: 'message.thread',
+      ref: circleId,
+      at: new Date().toISOString(),
+      type: 'quote',
+      from,
+      quote: clip(messages.filter((m) => m.from !== 'you').map((m) => m.text).join('\n'), 2000),
+      messages,
+      text: MESSAGE.threadLine(from, auto),
+      note: MESSAGE.threadNote(from, auto),
+    };
+  }
+
+  /** Messages are kept 90 days. */
+  private dropOldMessages(): void {
+    const old = Date.now() - MESSAGE_DAYS * DAY;
+    if (!this.db.prepare('SELECT 1 FROM messages WHERE created_at < ? LIMIT 1').get(old)) return;
+    transaction(this.db, () => {
+      this.db.prepare('DELETE FROM message_files WHERE message_id IN (SELECT id FROM messages WHERE created_at < ?)').run(old);
+      this.db.prepare('DELETE FROM messages WHERE created_at < ?').run(old);
+    });
+  }
+
+  /** A friendship ended: its conversation and files go, for both. */
+  private dropConversation(circleId: string): void {
+    this.db.prepare('DELETE FROM message_files WHERE message_id IN (SELECT id FROM messages WHERE circle_id = ?)').run(circleId);
+    this.db.prepare(`DELETE FROM events WHERE kind IN ('message.received', 'message.thread') AND (ref = ? OR ref IN (SELECT id FROM messages WHERE circle_id = ?))`).run(circleId, circleId);
+    this.db.prepare('DELETE FROM messages WHERE circle_id = ?').run(circleId);
   }
 
   /** The person asked writes the answer themselves, on their page: their click is the approval. */
@@ -2334,7 +2644,16 @@ export class Klatsch {
     const notesMatched = (
       this.db.prepare(`SELECT count(DISTINCT ref) AS n FROM events WHERE user_id = ? AND read_at IS NULL AND kind = 'note.seen'`).get(userId) as { n: number }
     ).n;
+    const writers = this.db
+      .prepare(
+        `SELECT DISTINCT u.handle FROM events e JOIN messages m ON m.id = e.ref JOIN users u ON u.id = m.sender_id
+         WHERE e.user_id = ? AND e.read_at IS NULL AND e.kind IN ('message.received', 'message.thread')`,
+      )
+      .all(userId) as { handle: string }[];
+    const messagesFrom = writers.map((row) => agentHandle(row.handle)).filter((h): h is string => Boolean(h)).slice(0, 10);
     return {
+      messages: count('message.received') + count('message.thread'),
+      messagesFrom,
       matches: count('match.new'),
       introRequests: count('intro.requested'),
       introsAccepted: count('intro.accepted'),
@@ -2539,6 +2858,16 @@ export class Klatsch {
           const auto = Boolean((this.db.prepare('SELECT wakes FROM events WHERE id = ?').get(row.id) as { wakes: number } | undefined)?.wakes);
           const delivered = this.deliverAsk(userId, row.ref, row.kind === 'ask.answer', auto);
           return delivered ? [delivered] : [];
+        }
+        if (row.kind === 'message.thread') {
+          const delivered = this.deliverThread(userId, row.ref);
+          return delivered ? [delivered] : [];
+        }
+        if (row.kind === 'message.received') {
+          const sender = (this.db.prepare('SELECT sender_id FROM messages WHERE id = ? AND recipient_id = ?').get(row.ref, userId) as { sender_id: string } | undefined)?.sender_id;
+          const other = sender ? agentHandle(this.user(sender).handle) : undefined;
+          if (!other) return [];
+          return [{ kind: row.kind, ref: row.ref, text: this.render(row.kind, row.ref, other), at, with: other }];
         }
         if (row.kind.startsWith('ask.')) {
           const ask = this.askRow(row.ref);

@@ -1,5 +1,5 @@
 import { transaction } from '../store/db.ts';
-import { normalHandle, RESERVED_HANDLES } from '../service.ts';
+import { normalHandle, RESERVED_HANDLES, type ConversationSummary, type ConversationView } from '../service.ts';
 import { randomBytes } from 'node:crypto';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
@@ -1096,13 +1096,15 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const offer = Boolean(passkeyAt(c)) && user.passkey_offer_dismissed_at === null && passkeysOf(db, userId).length === 0;
     // Notifications are offered once on Home, when no device has them and the passkey offer is not showing.
     const pushOffer = !offer && user.push_offer_dismissed_at === null && klatsch.pushSubscriptionsOf(userId).length === 0;
-    if (offer || pushOffer) c.header('Content-Security-Policy', SCRIPT_CSP);
+    // A device that has them re-sends its subscription from Home, so one the relay lost comes back by itself.
+    const pushSync = !pushOffer && klatsch.pushSubscriptionsOf(userId).length > 0;
+    if (offer || pushOffer || pushSync) c.header('Content-Security-Policy', SCRIPT_CSP);
     return show(
       c,
       user.display_name,
       'home',
       // On the first Home after signing in, the script opens the browser's own passkey dialog by itself, once.
-      html`${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${dashboard(
+      html`${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
         user,
         klatsch.sipsOf(userId),
         klatsch.introsOf(userId),
@@ -1113,6 +1115,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         klatsch.asksOf(userId),
         c.get('csrf'),
         klatsch.circlesOf(userId).filter((circle) => circle.pair && circle.people === 2).length,
+        klatsch.conversationsOf(userId),
       )}`,
     );
   });
@@ -1127,6 +1130,29 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       throw error;
     }
     return c.text('ok');
+  });
+  // Every visit re-sends this browser's subscription: a device the relay lost (a restore, the ten-device limit)
+  // gets notifications again without anyone noticing it had stopped. "off": turned off from another device.
+  web.post('/push/sync', async (c) => {
+    const form = await c.req.parseBody();
+    const field = (name: string) => (typeof form[name] === 'string' ? (form[name] as string) : '');
+    try {
+      return c.text(klatsch.savePushSubscription(c.get('userId'), { endpoint: field('endpoint'), p256dh: field('p256dh'), auth: field('auth') }, true));
+    } catch (error) {
+      if (error instanceof KlatschError) return c.text(error.message, 400);
+      throw error;
+    }
+  });
+  web.post('/push/test', async (c) => {
+    const t = copy.push;
+    try {
+      const { sent, failed, gone } = await klatsch.testPush(c.get('userId'));
+      const body = sent + failed + gone === 0 ? html`<p class="sub">${t.testNone}</p>` : html`<p class="sub">${t.testSent(sent, failed, gone)}</p>${pushChecks()}`;
+      return c.html(notice(t.testTitle, html`${body}<p><a href="/ui/settings#notifications">${copy.settings.title}</a></p>`, false));
+    } catch (error) {
+      if (error instanceof KlatschError) return c.html(notice(t.testTitle, html`<p class="sub">${error.message}</p>`, false), 429);
+      throw error;
+    }
   });
   web.post('/push/off', (c) => attempt(c, () => klatsch.pushOff(c.get('userId')), '/ui/settings#notifications'));
   // "Turn off here": this browser's own subscription only.
@@ -1689,6 +1715,17 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
           ${choices(t.yes, t.no)}`,
       );
     }
+    if (what.action === 'send_message') {
+      const t = copy.approval.sendMessage;
+      return card(
+        t.heading(what.to.name),
+        pair(what.to.name, viewer(c).name, { leftBlue: true }),
+        html`<p class="sub">${t.lead(what.to.name, what.to.handle)}</p>
+          <p class="quote">“${what.text}”</p>
+          ${flagList(what.flags)}
+          ${choices(t.yes, t.no)}`,
+      );
+    }
     if (what.action === 'answer_ask') {
       const t = copy.approval.answerAsk;
       return card(
@@ -1743,6 +1780,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     if (approval.action === 'share_sip') return done(t.sharedTitle, t.shared, true);
     if (approval.action === 'send_intro') return done(t.askedTitle, t.asked, true);
     if (approval.action === 'ask_person') return done(t.askSentTitle, t.askSent, true);
+    if (approval.action === 'send_message') return done(t.messageSentTitle, t.messageSent, true);
     if (approval.action === 'answer_ask') return done(t.answerSentTitle, t.answerSent, true);
     const introId = approval.payload.intro_id!;
     const intro = klatsch.introOf(userId, introId);
@@ -1887,6 +1925,42 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     c.header('Cache-Control', 'private, no-store');
     c.header('Cross-Origin-Resource-Policy', 'same-origin');
     return c.body(new Uint8Array(file.bytes));
+  });
+  // One conversation per friend: read (which marks their messages read), write with files, or hand it to one's AI.
+  web.get('/chat/:handle', (c) => {
+    let view: ConversationView;
+    try {
+      view = klatsch.conversation(c.get('userId'), c.req.param('handle'), { markRead: true });
+    } catch (error) {
+      if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p>${homeLink}`), 404);
+      throw error;
+    }
+    return show(c, view.other.name, 'home', chatPage(view, c.get('csrf')));
+  });
+  web.post('/chat/:handle', async (c) => {
+    const form = await c.req.parseBody({ all: true });
+    const text = typeof form.text === 'string' ? form.text : '';
+    const files = await formFiles(form);
+    const back = `/ui/chat/${encodeURIComponent(normalHandle(c.req.param('handle')))}`;
+    return attempt(
+      c,
+      () =>
+        transaction(db, () => {
+          const id = klatsch.sendMessage(c.get('userId'), c.req.param('handle'), text, 'web');
+          for (const file of files) klatsch.attachToMessage(c.get('userId'), id, file);
+        }),
+      back,
+      () => c.redirect(`${back}#end`, 303),
+    );
+  });
+  web.post('/chat/:handle/agent', (c) => {
+    let from = '';
+    return attempt(
+      c,
+      () => void (from = klatsch.sendConversationToAgent(c.get('userId'), c.req.param('handle')).from),
+      '/ui',
+      () => c.html(notice(copy.chat.sentToAgentTitle, html`<p class="sub">${copy.chat.sentToAgent(from)}</p>${homeLink}`)),
+    );
   });
   web.post('/asks/:id/decline', act((u, id) => klatsch.declineAsk(u, id)));
   web.post('/asks/:id/withdraw', act((u, id) => klatsch.withdrawAsk(u, id)));
@@ -2242,6 +2316,65 @@ function joinLink(circle: CircleView, base: string, csrf: string) {
   </div>`;
 }
 
+/** When a message was written: the time today, else the day. */
+function when(at: number): string {
+  const d = new Date(at);
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toISOString().slice(11, 16) + ' UTC' : d.toISOString().slice(0, 10);
+}
+
+function chatPage(view: ConversationView, csrf: string) {
+  const t = copy.chat;
+  const handle = encodeURIComponent(view.other.handle);
+  return html`<div class="ph"><h1>${view.other.name} <span>@${view.other.handle}</span></h1><a class="end" href="/ui">${copy.layout.home}</a></div>
+    <section class="sec">
+      ${view.messages.length
+        ? html`<ol class="thread" aria-label="${t.heading}">
+            ${view.messages.map(
+              (m) => html`<li class="msg${m.mine ? ' mine' : ''}">
+                <span class="m">${m.mine ? t.you : view.other.name} · ${when(m.at)}</span>
+                <p>${m.text}</p>
+                ${m.files.length ? html`<span class="files">${m.files.map((f) => html`<a href="/ui/attachments/${f.id}">📎 ${f.name}</a> `)}</span>` : ''}
+              </li>`,
+            )}
+          </ol>`
+        : html`<p class="hint">${t.empty(view.other.name)}</p>`}
+      <form id="end" class="reply" method="post" action="/ui/chat/${handle}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="${csrf}" />
+        <label for="text">${t.write}</label>
+        <textarea id="text" name="text" maxlength="2000" required placeholder="${t.placeholder}"></textarea>
+        <label for="file" class="m">${t.attachLabel}</label>
+        <input id="file" type="file" name="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" />
+        <div class="acts"><button class="primary">${t.send}</button></div>
+      </form>
+      ${view.messages.some((m) => !m.mine)
+        ? html`<div class="acts">${button(`/ui/chat/${handle}/agent`, t.toAgent, csrf)}</div><p class="hint">${t.toAgentNote}</p>`
+        : ''}
+      <p class="hint">${t.note(view.other.name)}</p>
+    </section>`;
+}
+
+/** Home's list of conversations: newest first, the friend's unread count, the last line. */
+function messagesSection(conversations: ConversationSummary[]) {
+  const t = copy.chat;
+  if (!conversations.length) return '';
+  return html`<section class="sec">
+    <h2>${t.heading} <em>${conversations.reduce((n, x) => n + x.unread, 0)}</em></h2>
+    <ul class="list">
+      ${conversations.map(
+        (x) => html`<li class="item">
+          ${avatar(x.other.name, { blue: true })}
+          <div class="main">
+            <span class="t"><a href="/ui/chat/${encodeURIComponent(x.other.handle)}">${x.other.name}</a> <span class="m">@${x.other.handle}</span>${x.unread ? html` <span class="pill open">${t.unread(x.unread)}</span>` : ''}</span>
+            ${x.last ? html`<span class="m">${x.last.mine ? `${t.you}: ` : ''}${x.last.text.length > 120 ? `${x.last.text.slice(0, 120)}…` : x.last.text}</span>` : ''}
+          </div>
+          <div class="acts"><a class="btn ${x.unread ? 'primary' : 'quiet'}" href="/ui/chat/${encodeURIComponent(x.other.handle)}">${t.open}</a></div>
+        </li>`,
+      )}
+    </ul>
+  </section>`;
+}
+
 function circlePage(userId: string, allCircles: CircleView[], base: string, csrf: string) {
   const t = copy.circle;
   const friends = allCircles.filter((c) => c.pair);
@@ -2256,7 +2389,7 @@ function circlePage(userId: string, allCircles: CircleView[], base: string, csrf
             return html`<li class="item">
               ${avatar(other?.displayName ?? '?', { blue: true })}
               <div class="main">${other ? html`<span class="t">${other.displayName} <span class="m">@${other.handle}</span></span>` : html`<span class="m">${t.friendWaiting}</span>`}</div>
-              <div class="acts">${button(`/ui/friends/${f.id}/end`, t.endFriendship, csrf, 'link')}</div>
+              <div class="acts">${other ? html`<a class="btn quiet" href="/ui/chat/${encodeURIComponent(other.handle)}">${t.message}</a>` : ''}${button(`/ui/friends/${f.id}/end`, t.endFriendship, csrf, 'link')}</div>
             </li>`;
           })}</ul>
           <p class="hint">${t.friendsNote}</p>
@@ -2285,6 +2418,12 @@ function circlePage(userId: string, allCircles: CircleView[], base: string, csrf
 const ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm';
 const kb = (bytes: number) => (bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 
+/** Why a notification the push service took may still not show: the device settings to look at. */
+function pushChecks() {
+  const t = copy.push;
+  return html`<p class="sub">${t.testMissing}</p><ul class="sub">${t.checks.map((line) => html`<li>${line}</li>`)}</ul>`;
+}
+
 /** Notifications on this phone or browser (Web Push). The button shows only where the script finds push support. */
 function pushSettings(push: { devices: number; key: string }, csrf: string) {
   const t = copy.push;
@@ -2297,6 +2436,7 @@ function pushSettings(push: { devices: number; key: string }, csrf: string) {
           <button type="button" data-push-off hidden>${t.turnOffHere}</button>
           ${push.devices ? button('/ui/push/off', t.turnOff, csrf, 'link') : ''}
         </div>
+        ${push.devices ? html`<div class="row"><div class="main"><span>${t.testLine}</span></div>${button('/ui/push/test', t.test, csrf)}</div>` : ''}
       </div>
       <p id="push-status" class="hint" role="status" hidden></p>
       <p class="hint">${t.iphone}</p>
@@ -2611,6 +2751,7 @@ function dashboard(
   asks: AskView[],
   csrf: string,
   friends = 0,
+  conversations: ConversationSummary[] = [],
 ) {
   const t = copy.dashboard;
   const shownStatus = (s: SipRow) => (s.failed ? 'tried' : s.status);
@@ -2622,7 +2763,8 @@ function dashboard(
   const waiting = intros.filter((i) => i.state === 'awaiting-solver' && i.role === 'solver');
   const accepted = intros.filter((i) => i.state === 'accepted');
   // A question waiting for an answer needs the person too.
-  const needs = waiting.length + drafts.length + asks.filter((k) => k.role === 'helper' && k.state === 'open').length;
+  const unread = conversations.reduce((n, x) => n + x.unread, 0);
+  const needs = waiting.length + drafts.length + asks.filter((k) => k.role === 'helper' && k.state === 'open').length + unread;
   // Notes, intros and cards are the coding side: shown to someone who uses it, not to someone who only asks friends.
   const notesUser = sips.length > 0 || intros.length > 0 || notes.length > 0;
   const askedMe = asks.filter((k) => k.role === 'helper' && k.state === 'open').length;
@@ -2692,12 +2834,13 @@ function dashboard(
       <a class="end" href="/ui/device">${t.codeLink}</a>
     </div>
     <ul class="chips" aria-label="${t.summary}">
-      ${friends ? chip(friends, t.chips.friends(friends)) : ''}${chip(askedMe, t.chips.asked(), true)}${
+      ${friends ? chip(friends, t.chips.friends(friends)) : ''}${friends ? chip(unread, t.chips.unread(unread), true) : ''}${chip(askedMe, t.chips.asked(), true)}${
         notesUser
           ? html`${chip(waiting.length, t.chips.intros(waiting.length), true)}${chip(drafts.length, t.chips.drafts(drafts.length), true)}${chip(notes.length, t.chips.notes(notes.length))}${chip(approved.length, t.chips.card())}${chip(accepted.length, t.chips.connected())}`
           : ''
       }
     </ul>
+    ${messagesSection(conversations)}
     ${helped.total
       ? html`<div class="helped">
           <span class="heart" aria-hidden="true">${heart(16)}</span>

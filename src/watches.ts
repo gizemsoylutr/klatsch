@@ -23,7 +23,7 @@ export interface Watch {
  * own action does not wake them: they just did it, and their agent got the result in the same call.
  * A quote is the exception: the human sends it to their agent on purpose, from the web page.
  */
-export const WAKES = ['match.new', 'intro.requested', 'intro.accepted', 'intro.declined', 'quote.received', 'ask.received', 'ask.answered', 'ask.declined', 'ask.question', 'ask.answer'] as const;
+export const WAKES = ['match.new', 'intro.requested', 'intro.accepted', 'intro.declined', 'quote.received', 'ask.received', 'ask.answered', 'ask.declined', 'ask.question', 'ask.answer', 'message.received', 'message.thread'] as const;
 
 export const WATCH_LIMIT_PER_USER = 5;
 const KEEP_FINISHED_MS = 7 * 24 * 60 * 60 * 1000;

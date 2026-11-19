@@ -126,29 +126,40 @@ export async function sendPush(
   subscription: PushSubscriptionRow,
   message: { title: string; body: string; url: string },
   fetcher: typeof fetch = fetch,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms)),
 ): Promise<'sent' | 'gone' | 'failed'> {
   if (!pushEndpointAllowed(subscription.endpoint)) return 'gone';
-  try {
-    const response = await fetcher(subscription.endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: vapidHeader(vapid, subscription.endpoint, subject),
-        'Content-Encoding': 'aes128gcm',
-        'Content-Type': 'application/octet-stream',
-        TTL: String(24 * 3600),
-        Urgency: 'normal',
-      },
-      body: new Uint8Array(encryptPush(Buffer.from(JSON.stringify(message)), subscription)),
-      signal: AbortSignal.timeout(10_000),
-      // A push service never needs to send the message elsewhere.
-      redirect: 'error',
-    });
-    await response.body?.cancel();
-    if (response.status === 404 || response.status === 410) return 'gone';
-    if (!response.ok) console.error(`klatsch: push service answered ${response.status}`);
-    return response.ok ? 'sent' : 'failed';
-  } catch {
-    console.error('klatsch: push service unreachable');
-    return 'failed';
+  // A busy push service (429, 5xx) or a dropped connection gets two more tries, after its Retry-After (at most
+  // 30 s) or 2 s then 8 s; anything else is final. Urgency high: a person wrote, and phones in power saving
+  // hold back "normal" pushes, iPhones above all.
+  for (let attempt = 0; ; attempt++) {
+    let wait = [2_000, 8_000][attempt];
+    try {
+      const response = await fetcher(subscription.endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: vapidHeader(vapid, subscription.endpoint, subject),
+          'Content-Encoding': 'aes128gcm',
+          'Content-Type': 'application/octet-stream',
+          TTL: String(24 * 3600),
+          Urgency: 'high',
+        },
+        body: new Uint8Array(encryptPush(Buffer.from(JSON.stringify(message)), subscription)),
+        signal: AbortSignal.timeout(10_000),
+        // A push service never needs to send the message elsewhere.
+        redirect: 'error',
+      });
+      await response.body?.cancel();
+      if (response.status === 404 || response.status === 410) return 'gone';
+      if (response.ok) return 'sent';
+      console.error(`klatsch: push service answered ${response.status}`);
+      if (response.status !== 429 && response.status < 500) return 'failed';
+      const after = Number(response.headers.get('retry-after'));
+      if (Number.isFinite(after) && after > 0) wait = Math.min(after * 1000, 30_000);
+    } catch {
+      console.error('klatsch: push service unreachable');
+    }
+    if (wait === undefined) return 'failed';
+    await sleep(wait);
   }
 }

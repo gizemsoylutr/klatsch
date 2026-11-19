@@ -9,6 +9,32 @@
  */
 export const PUSH_SCRIPT = `'use strict';
 (() => {
+  const bytes = (text) => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (ch) => ch.charCodeAt(0));
+  const same = (a, b) => a && b && a.byteLength === b.byteLength && new Uint8Array(a).every((v, i) => v === b[i]);
+  // On every visit where this browser has them: update the service worker, renew a subscription made with an
+  // old key, and re-send it, so a device the relay lost gets notifications again. Never asks for permission.
+  window.klatschPushSync = async (key, csrf) => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    const registration = await navigator.serviceWorker.getRegistration('/ui/');
+    if (!registration) return;
+    registration.update().catch(() => {});
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) return;
+    const wanted = bytes(key);
+    if (!same(subscription.options && subscription.options.applicationServerKey, wanted)) {
+      await subscription.unsubscribe();
+      subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: wanted });
+    }
+    const json = subscription.toJSON();
+    const response = await fetch('/ui/push/sync', { method: 'POST', body: new URLSearchParams({ csrf, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth }), credentials: 'same-origin', redirect: 'error' });
+    // Turned off from another device: drop it here too, so the page no longer says it is on.
+    if (response.ok && (await response.text()) === 'off') await subscription.unsubscribe();
+  };
+  const sync = document.querySelector('[data-push-sync]');
+  if (sync) window.klatschPushSync(sync.dataset.key, sync.dataset.csrf).catch(() => {});
+})();
+(() => {
   const button = document.querySelector('button[data-push]');
   const off = document.querySelector('button[data-push-off]');
   const status = document.getElementById('push-status');
@@ -26,6 +52,7 @@ export const PUSH_SCRIPT = `'use strict';
   };
   (async () => {
     try {
+      await window.klatschPushSync(button.dataset.key, button.dataset.csrf).catch(() => {});
       const registration = await navigator.serviceWorker.getRegistration('/ui/');
       const existing = registration && Notification.permission === 'granted' ? await registration.pushManager.getSubscription() : null;
       if (existing) showOn();
@@ -78,11 +105,26 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {}; } catch {}
   const title = typeof data.title === 'string' ? data.title.slice(0, 80) : 'Klatsch';
   const body = typeof data.body === 'string' ? data.body.slice(0, 200) : 'Something new on Klatsch.';
-  event.waitUntil(self.registration.showNotification(title, { body, tag: 'klatsch', icon: '/ui/icon.svg' }));
+  // One Klatsch entry in the notification centre, but every new one alerts again: without renotify a browser
+  // swaps the old entry for the new one in silence, and the person never hears that something arrived.
+  event.waitUntil(self.registration.showNotification(title, { body, tag: 'klatsch', renotify: true, icon: '/icon.png', badge: '/icon.png' }));
 });
+// A fixed worker takes over at once instead of waiting until every Klatsch tab is closed.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+// A tap brings an open Klatsch tab to the front and shows Home there; only without one does it open a new window.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow('/ui'));
+  event.waitUntil((async () => {
+    const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const tab = open.find((client) => new URL(client.url).pathname.startsWith('/ui'));
+    if (tab) {
+      await tab.focus();
+      if ('navigate' in tab) await tab.navigate('/ui').catch(() => {});
+      return;
+    }
+    await self.clients.openWindow('/ui');
+  })());
 });
 `;
 

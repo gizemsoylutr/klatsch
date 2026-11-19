@@ -97,4 +97,52 @@ describe('push notifications: offered in Settings, one subscription per device, 
     assert.ok((await aliceBrowser.post('/ui/push/off')).status < 400);
     assert.equal(relay.klatsch.pushSubscriptionsOf(alice).length, 0);
   });
+
+  it('"Send a test notification" reaches every device of hers, says how it went, and cannot be spammed', async () => {
+    assert.match((await aliceBrowser.post('/ui/push/test')).html, /No device gets notifications yet/);
+    await aliceBrowser.post('/ui/push/subscribe', subscription());
+    await aliceBrowser.post('/ui/push/subscribe', subscription());
+    assert.match((await aliceBrowser.get('/ui/settings')).html, /action="\/ui\/push\/test"/);
+    const seen: number[] = [];
+    relay.klatsch.pushTest = async (subs) => {
+      seen.push(subs.length);
+      return ['sent', 'gone'];
+    };
+    const tested = await aliceBrowser.post('/ui/push/test');
+    assert.equal(tested.status, 200);
+    assert.deepEqual(seen, [2]);
+    assert.match(tested.html, /Sent to 1 device; 1 no longer exist/);
+    assert.match(tested.html, /Focus or Do Not Disturb/);
+    assert.equal((await aliceBrowser.post('/ui/push/test')).status, 429, 'not twice in half a minute');
+    assert.deepEqual(seen, [2]);
+  });
+
+  it('the service worker alerts again for every new notification', async () => {
+    const sw = await (await fetch(`${relay.base}/ui/sw.js`)).text();
+    assert.match(sw, /renotify: true/);
+  });
+
+  it('Home re-sends a device’s subscription on each visit; one turned off elsewhere is told "off" and stays off', async () => {
+    const mine = subscription();
+    await aliceBrowser.post('/ui/push/subscribe', mine);
+    const home = (await aliceBrowser.get('/ui')).html;
+    assert.match(home, /data-push-sync data-key="[\w-]+"/);
+    assert.match(home, /<script src="\/ui\/push\.js" defer><\/script>/);
+    relay.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(mine.endpoint);
+    const back = await aliceBrowser.post('/ui/push/sync', mine);
+    assert.equal(back.html, 'on', 'a device the relay lost comes back');
+    assert.ok(relay.klatsch.pushSubscriptionsOf(alice).some((s) => s.endpoint === mine.endpoint));
+    await aliceBrowser.post('/ui/push/off');
+    assert.equal((await aliceBrowser.post('/ui/push/sync', mine)).html, 'off');
+    assert.equal(relay.klatsch.pushSubscriptionsOf(alice).length, 0, 'turning off everywhere holds');
+    assert.equal((await aliceBrowser.post('/ui/push/subscribe', mine)).status, 200, 'turning it on here again works');
+    assert.equal((await aliceBrowser.post('/ui/push/sync', mine)).html, 'on');
+  });
+
+  it('the service worker takes over at once and a tap brings an open Klatsch tab to the front', async () => {
+    const sw = await (await fetch(`${relay.base}/ui/sw.js`)).text();
+    assert.match(sw, /skipWaiting\(\)/);
+    assert.match(sw, /clients\.claim\(\)/);
+    assert.match(sw, /\.focus\(\)/);
+  });
 });

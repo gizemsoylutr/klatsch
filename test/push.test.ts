@@ -63,7 +63,20 @@ describe('web push', () => {
     const broken = (async () => {
       throw new Error('down');
     }) as unknown as typeof fetch;
-    assert.equal(await sendPush(vapid, 'mailto:x@example.org', sub, { title: 'K', body: 'b', url: '/ui' }, broken), 'failed');
+    const waits: number[] = [];
+    const sleep = async (ms: number) => void waits.push(ms);
+    assert.equal(await sendPush(vapid, 'mailto:x@example.org', sub, { title: 'K', body: 'b', url: '/ui' }, broken, sleep), 'failed');
+    assert.deepEqual(waits, [2_000, 8_000], 'two more tries when the service cannot be reached');
+    assert.equal(headers.Urgency, 'high', 'a person wrote: phones in power saving must not hold it back');
+    // Busy (429, 5xx): tried again, after Retry-After when it says one; refused (400, 403): final at once.
+    let calls = 0;
+    const busyThenOk = (async () => (++calls === 1 ? new Response(null, { status: 429, headers: { 'Retry-After': '5' } }) : new Response(null, { status: 201 }))) as unknown as typeof fetch;
+    waits.length = 0;
+    assert.equal(await sendPush(vapid, 'mailto:x@example.org', sub, { title: 'K', body: 'b', url: '/ui' }, busyThenOk, sleep), 'sent');
+    assert.deepEqual(waits, [5_000]);
+    seen.length = 0;
+    assert.equal(await sendPush(vapid, 'mailto:x@example.org', sub, { title: 'K', body: 'b', url: '/ui' }, answer(403), sleep), 'failed');
+    assert.equal(seen.length, 1);
     assert.equal(await sendPush(vapid, 'mailto:x@example.org', { ...sub, endpoint: 'https://evil.example/x' }, { title: 'K', body: 'b', url: '/ui' }, answer(201)), 'gone');
   });
 

@@ -671,4 +671,77 @@ export const migrations: string[] = [
   CREATE INDEX attachments_by_ask ON attachments (ask_id);
   CREATE INDEX attachments_by_user ON attachments (user_id, created_at);
   `,
+  // Messages between two friends: one conversation per friendship, each message sealed, gone with the friendship
+  // or after 90 days. A message from the friend reaches the person's agent only by their click or their "always".
+  // A card key may also keep a conversation open in the chat; sending a message is an approval of its own.
+  `
+  CREATE TABLE messages (
+    id TEXT PRIMARY KEY,
+    circle_id TEXT NOT NULL REFERENCES circles(id),
+    sender_id TEXT NOT NULL REFERENCES users(id),
+    recipient_id TEXT NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    read_at INTEGER,
+    for_agent INTEGER NOT NULL DEFAULT 0 CHECK (for_agent IN (0, 1)),
+    CHECK (sender_id != recipient_id)
+  );
+  CREATE INDEX messages_by_circle ON messages (circle_id, created_at);
+  CREATE INDEX messages_by_recipient ON messages (recipient_id, read_at);
+  CREATE INDEX messages_by_sender ON messages (sender_id, created_at);
+  CREATE TABLE message_files (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES messages(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX message_files_by_message ON message_files (message_id);
+  CREATE INDEX message_files_by_user ON message_files (user_id, created_at);
+  CREATE TABLE approvals_v3 (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    code_hash TEXT NOT NULL UNIQUE,
+    action TEXT NOT NULL CHECK (action IN ('share_sip', 'send_intro', 'answer_intro', 'ask_person', 'answer_ask', 'send_message')),
+    payload TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'approved', 'declined')),
+    result TEXT,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    payload_key TEXT
+  );
+  INSERT INTO approvals_v3 (id, user_id, code_hash, action, payload, state, result, created_at, expires_at, decided_at, payload_key)
+    SELECT id, user_id, code_hash, action, payload, state, result, created_at, expires_at, decided_at, payload_key FROM approvals;
+  DROP TABLE approvals;
+  ALTER TABLE approvals_v3 RENAME TO approvals;
+  CREATE INDEX approvals_by_user ON approvals (user_id, state);
+  CREATE TABLE app_keys_v3 (
+    hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    kind TEXT NOT NULL CHECK (kind IN ('approval', 'ask', 'friend', 'chat')),
+    ref TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER,
+    outcome TEXT
+  );
+  INSERT INTO app_keys_v3 SELECT hash, user_id, kind, ref, expires_at, used_at, outcome FROM app_keys;
+  DROP TABLE app_keys;
+  ALTER TABLE app_keys_v3 RENAME TO app_keys;
+  CREATE INDEX app_keys_by_user ON app_keys (user_id);
+  `,
+  // Devices someone turned off from another one ("Turn off everywhere"): the browser there still holds its
+  // subscription, so when that page next re-sends it, the relay answers "off" instead of taking it back.
+  `
+  CREATE TABLE push_off (
+    endpoint TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX push_off_by_user ON push_off (user_id);
+  `,
 ];

@@ -45,7 +45,7 @@ describe("quote hand-off: Alice sends Bob's sip to her own agent", () => {
   it("Alice's session listens; no tool lets her agent ask for Bob's text", async () => {
     taskId = (await call('tools/call', { name: 'watch', arguments: {} })).result.taskId;
     const tools = (await call('tools/list')).result.tools.map((t: { name: string }) => t.name).sort();
-    assert.deepEqual(tools, ['add_friend', 'answer_ask', 'ask_person', 'find_matches', 'friends', 'inbox', 'klatsch_card', 'klatsch_card_state', 'pending', 'request_intro', 'respond_intro', 'show_question', 'thank_note', 'update_card', 'watch']);
+    assert.deepEqual(tools, ['add_friend', 'answer_ask', 'ask_person', 'conversation', 'find_matches', 'friends', 'inbox', 'klatsch_card', 'klatsch_card_state', 'pending', 'request_intro', 'respond_intro', 'send_message', 'show_question', 'thank_note', 'update_card', 'watch']);
     const found = await aliceAgent.call('find_matches', { tags: ['nodejs'] });
     assert.ok(!found.raw.includes(BOB_TEXT));
   });

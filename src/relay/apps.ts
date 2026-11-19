@@ -34,7 +34,7 @@ export interface CardLine {
   text: string;
 }
 export interface CardAction {
-  decision: 'approved' | 'always' | 'declined' | 'answer' | 'draft' | 'friend_link';
+  decision: 'approved' | 'always' | 'declined' | 'answer' | 'draft' | 'friend_link' | 'reply';
   label: string;
   primary?: boolean;
 }
@@ -56,9 +56,22 @@ export interface Card {
   files?: { name: string; size: number; url: string }[];
   /** Where the person turns on notifications, offered once the card is done: chat apps cannot tell them when an answer comes. */
   notify?: string;
+  /** A conversation with one friend: the card shows it, keeps it fresh, and sends the person's replies. */
+  chat?: ChatPayload;
 }
 
-export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval' | 'ask' | 'friend', ref: string, expiresAt = Date.now() + KEY_TTL_MS): string {
+export interface ChatPayload {
+  with: { name: string; handle: string };
+  messages: { mine: boolean; text: string; at: number; files: { name: string; url: string }[] }[];
+  /** The Klatsch page with this conversation. */
+  page: string;
+  max: number;
+}
+
+/** A conversation card's key lasts a day and works for every reply in it: each send is the person's own click. */
+export const CHAT_KEY_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval' | 'ask' | 'friend' | 'chat', ref: string, expiresAt = Date.now() + KEY_TTL_MS): string {
   const key = randomToken(32);
   // Old keys go; a question shown again keeps only its newest card working.
   db.prepare('DELETE FROM app_keys WHERE expires_at < ?').run(Date.now() - 24 * 60 * 60 * 1000);
@@ -71,9 +84,9 @@ export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval
  * What a card shown again should say: still `open`, `done` with what came of it, or `gone` (decided on the page,
  * withdrawn or expired). Looked up by its own key, for its own person; nothing else is told.
  */
-export function keyState(db: Db, secret: Buffer, userId: string, key: string): { state: 'open' | 'done' | 'gone'; outcome?: string; kind?: 'approval' | 'ask' | 'friend'; ref?: string } {
+export function keyState(db: Db, secret: Buffer, userId: string, key: string): { state: 'open' | 'done' | 'gone'; outcome?: string; kind?: 'approval' | 'ask' | 'friend' | 'chat'; ref?: string } {
   const row = db.prepare('SELECT user_id, kind, ref, expires_at, used_at, outcome FROM app_keys WHERE hash = ?').get(keyedHash(secret, `app-key ${key}`)) as
-    | { user_id: string; kind: 'approval' | 'ask' | 'friend'; ref: string; expires_at: number; used_at: number | null; outcome: string | null }
+    | { user_id: string; kind: 'approval' | 'ask' | 'friend' | 'chat'; ref: string; expires_at: number; used_at: number | null; outcome: string | null }
     | undefined;
   if (!row || row.user_id !== userId) return { state: 'gone' };
   if (row.used_at !== null) return { state: 'done', ...(row.outcome ? { outcome: row.outcome } : {}) };
@@ -87,10 +100,10 @@ export function keepOutcome(db: Db, secret: Buffer, key: string, outcome: string
 }
 
 /** Uses the key once, for its own person; anything else is simply not found. */
-export function useKey(db: Db, secret: Buffer, userId: string, key: string): { kind: 'approval' | 'ask' | 'friend'; ref: string } | undefined {
+export function useKey(db: Db, secret: Buffer, userId: string, key: string): { kind: 'approval' | 'ask' | 'friend' | 'chat'; ref: string } | undefined {
   const hash = keyedHash(secret, `app-key ${key}`);
   const row = db.prepare('SELECT user_id, kind, ref, expires_at, used_at FROM app_keys WHERE hash = ?').get(hash) as
-    | { user_id: string; kind: 'approval' | 'ask' | 'friend'; ref: string; expires_at: number; used_at: number | null }
+    | { user_id: string; kind: 'approval' | 'ask' | 'friend' | 'chat'; ref: string; expires_at: number; used_at: number | null }
     | undefined;
   if (!row || row.user_id !== userId || row.used_at !== null || row.expires_at <= Date.now()) return undefined;
   const claimed = db.prepare('UPDATE app_keys SET used_at = ? WHERE hash = ? AND used_at IS NULL').run(Date.now(), hash);
@@ -125,6 +138,20 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
         lines: [{ label: 'Their question', text: view.question }],
         edit: { label: 'Your answer', value: view.answer, max: 500 },
         note: `Only ${view.from.name} reads it, and it goes to the AI they asked with.`,
+        actions: [
+          { decision: 'declined', label: 'Not now' },
+          { decision: 'approved', label: 'Send', primary: true },
+        ],
+        ...flagList(view.flags),
+      };
+    case 'send_message':
+      return {
+        key,
+        title: `Send to ${view.to.name} (@${view.to.handle})?`,
+        pick: true,
+        lines: [],
+        edit: { label: 'Message', value: view.text, max: 2000 },
+        note: `Only ${view.to.name} reads this, with your name.`,
         actions: [
           { decision: 'declined', label: 'Not now' },
           { decision: 'approved', label: 'Send', primary: true },
@@ -176,6 +203,18 @@ export function questionCard(key: string, from: { name: string; handle: string }
       { decision: 'draft', label: 'Draft with my AI' },
       { decision: 'answer', label: 'Send answer', primary: true },
     ],
+  };
+}
+
+/** A conversation with one friend in the chat: its words go to the card only, never the model. */
+export function chatCard(key: string, chat: ChatPayload): Card {
+  return {
+    key,
+    title: `${chat.with.name} (@${chat.with.handle})`,
+    lines: [],
+    note: `Only you and ${chat.with.name} read this. Your AI here reads it only if you choose "Draft with my AI".`,
+    actions: [],
+    chat,
   };
 }
 
@@ -234,6 +273,12 @@ button.primary { background: var(--accent); color: var(--ink); }
 button:disabled { opacity: 0.5; cursor: default; }
 button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .done { font-weight: 600; }
+.thread { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 340px; overflow-y: auto; }
+.msg { max-width: 85%; background: var(--chip); border-radius: 12px 12px 12px 4px; padding: 7px 11px; justify-self: start; display: grid; gap: 2px; }
+.msg.mine { justify-self: end; background: var(--accent); color: var(--ink); border-radius: 12px 12px 4px 12px; }
+.msg .who { font-size: 11px; opacity: 0.75; }
+.msg .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg button { font-size: 12px; padding: 2px 8px; justify-self: start; }
 </style></head>
 <body><main id="card" aria-live="polite"><p class="note">Klatsch</p></main>
 <script>${script}</script>
@@ -284,7 +329,84 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', message), field, row, said, ...notifyOffer());
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };
+  /** A conversation: the messages, a box to write back, and a quiet refresh while the card is on screen. */
+  let poll = null;
+  const renderChat = (card) => {
+    current = card;
+    const chat = card.chat;
+    const list = el('ol', undefined, 'thread');
+    list.setAttribute('aria-label', 'Messages');
+    const fill = (messages) => {
+      const items = messages.map((m) => {
+        const li = el('li', undefined, 'msg' + (m.mine ? ' mine' : ''));
+        li.append(el('span', (m.mine ? 'You' : chat.with.name) + ' · ' + new Date(m.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'who'));
+        if (m.text) li.append(el('span', m.text, 'text'));
+        for (const f of m.files || []) {
+          const b = el('button', '📎 ' + f.name); b.type = 'button';
+          b.addEventListener('click', () => app.openLink({ url: f.url }).catch(() => {}));
+          li.append(b);
+        }
+        return li;
+      });
+      if (!items.length) items.push(el('li', 'No messages yet. Write the first one below.', 'note'));
+      list.replaceChildren(...items);
+      list.scrollTop = list.scrollHeight;
+    };
+    fill(chat.messages);
+    const label = el('label', 'Write to ' + chat.with.name); label.htmlFor = 'reply';
+    const box = el('textarea'); box.id = 'reply'; box.maxLength = chat.max; box.placeholder = 'Your message';
+    const flabel = el('label', 'Add a photo, PDF or voice note (up to 3, 5 MB each)'); flabel.htmlFor = 'files';
+    const picker = el('input'); picker.type = 'file'; picker.id = 'files'; picker.multiple = true;
+    picker.accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm';
+    const said = el('p', '', 'note');
+    const send = el('button', 'Send', 'primary'); send.type = 'button';
+    const draft = el('button', 'Draft with my AI'); draft.type = 'button';
+    const page = el('button', 'Open in Klatsch'); page.type = 'button';
+    page.addEventListener('click', () => app.openLink({ url: chat.page }).catch(() => {}));
+    const fail = (result) => { let why = 'That did not work.'; try { why = JSON.parse(result.content[0].text).message || why; } catch {} said.textContent = why; };
+    send.addEventListener('click', async () => {
+      const text = box.value.trim();
+      if (!text) { box.focus(); return; }
+      const chosen = [...picker.files].slice(0, 3);
+      if (chosen.some((f) => f.size > 5 * 1024 * 1024)) { said.textContent = 'A file is at most 5 MB.'; return; }
+      send.disabled = true; said.textContent = 'Sending…';
+      try {
+        const read = (f) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1] || ''); r.onerror = reject; r.readAsDataURL(f); });
+        const files = await Promise.all(chosen.map(async (f) => ({ name: f.name, data: await read(f) })));
+        const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: 'reply', text, ...(files.length ? { files } : {}) } });
+        if (result.isError) { fail(result); return; }
+        const sc = result.structuredContent || {};
+        box.value = ''; picker.value = ''; said.textContent = sc.message || 'Sent.';
+        if (sc.chat) { chat.messages = sc.chat.messages; fill(chat.messages); }
+        app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human sent a message to ' + '@' + chat.with.handle + ' from the card.' }] }).catch(() => {});
+      } catch { said.textContent = 'That did not work. Try again, or write on your Klatsch page.'; }
+      finally { send.disabled = false; }
+    });
+    draft.addEventListener('click', async () => {
+      draft.disabled = true;
+      try {
+        const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: 'draft' } });
+        if (result.isError) { fail(result); draft.disabled = false; return; }
+        said.textContent = (result.structuredContent || {}).message || 'Sent to your AI.';
+        app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read my conversation with @' + chat.with.handle + ' from my Klatsch inbox and draft a reply for me to send.' }] }).catch(() => {});
+      } catch { draft.disabled = false; said.textContent = 'That did not work.'; }
+    });
+    const row = el('div', undefined, 'row'); row.append(page, draft, send);
+    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), list, label, box, flabel, picker, row, said, el('p', card.note, 'note'), ...notifyOffer());
+    // New messages show up while the card is on screen; reading them here marks them read.
+    if (poll) clearInterval(poll);
+    poll = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key: card.key, seen: true } });
+        const sc = (result && result.structuredContent) || {};
+        if (sc.state !== 'open') { clearInterval(poll); said.textContent = sc.message || 'Ask your AI to open the conversation again.'; send.disabled = true; return; }
+        if (sc.chat && JSON.stringify(sc.chat.messages) !== JSON.stringify(chat.messages)) { chat.messages = sc.chat.messages; fill(chat.messages); }
+      } catch {}
+    }, 8000);
+  };
   const render = (card) => {
+    if (card.chat) { renderChat(card); return; }
     current = card;
     const parts = [el('p', 'Klatsch', 'brand'), el('h1', card.title)];
     const dl = el('dl');
@@ -369,8 +491,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
   const show = async (card) => {
     current = card;
     try {
-      const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key: card.key } });
+      const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key: card.key, seen: true } });
       const sc = (result && result.structuredContent) || {};
+      if (card.chat && sc.state === 'open') { if (sc.chat) card.chat.messages = sc.chat.messages; renderChat(card); return; }
       if (sc.state === 'done') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'Done.', 'done')); return; }
       if (sc.state === 'gone') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'This card is no longer open.', 'note')); return; }
     } catch {}

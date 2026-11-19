@@ -113,6 +113,15 @@ main.page { width: 100%; max-width: 980px; margin: 0 auto; padding: 40px 24px 64
 .offer form { display: contents; }
 .hint { font-size: 13px; color: var(--muted); margin-top: 10px; max-width: 72ch; }
 .split { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 0 32px; }
+.thread { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 10px; }
+.msg { max-width: min(80%, 560px); background: var(--sunk); border-radius: 14px 14px 14px 4px; padding: 10px 14px; display: grid; gap: 4px; overflow-wrap: anywhere; justify-self: start; }
+.msg.mine { justify-self: end; background: var(--chip); border-radius: 14px 14px 4px 14px; }
+.msg p { white-space: pre-wrap; }
+.msg .files a { font-size: 14px; }
+.reply { display: grid; gap: 8px; margin-top: 8px; }
+.reply textarea { min-height: 80px; width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; resize: vertical; }
+.reply input[type=file] { font: inherit; font-size: 13px; }
+.reply .acts { display: flex; justify-content: flex-end; }
 .conn { background: var(--sunk); border-radius: 14px; padding: 16px; display: grid; gap: 10px; overflow-wrap: anywhere; }
 .conn + .conn { margin-top: 12px; }
 .conn .who { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
