@@ -115,8 +115,10 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
   // Public, like the landing page, and only where the operator has said who they are.
   app.use('/privacy', pageHeaders);
   app.use('/terms', pageHeaders);
+  app.use('/support', pageHeaders);
   app.get('/privacy', (c: Context) => (config.operator ? c.html(legalPage('privacy', config.operator)) : c.notFound()));
   app.get('/terms', (c: Context) => (config.operator ? c.html(legalPage('terms', config.operator)) : c.notFound()));
+  app.get('/support', (c: Context) => (config.operator ? c.html(legalPage('support', config.operator)) : c.notFound()));
   // "Sign in with GitHub" only where GitHub is the one way in: configured, on the public origin GitHub returns to,
   // and no email sign-in beside it (then the buttons just say "Sign in").
   const github = (c: Context) => Boolean(config.github) && !config.google && !klatsch.mailer && baseFor(config, c.req.header('host')) === config.publicUrl;

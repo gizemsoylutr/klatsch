@@ -23,7 +23,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | hosted connect: token from the Tokens page, connect with the CLI, agent calls the relay | 5 | [hosted-connect.drawio](hosted-connect.drawio) |
 | invites and removal: the owner invites Carol, then removes her | 13 | [invites-and-removal.drawio](invites-and-removal.drawio) |
 | a 2025-06-18 client without dialogs or tasks (Codex by default) | 5 | [legacy-client.drawio](legacy-client.drawio) |
-| privacy and terms pages | 5 | [legal-pages.drawio](legal-pages.drawio) |
+| privacy and terms pages | 6 | [legal-pages.drawio](legal-pages.drawio) |
 | link cards and the commons: a stranger in a public circle reads a link card its author ticked for it, and hands it to her agent as data | 10 | [link-cards-and-commons.drawio](link-cards-and-commons.drawio) |
 | messages: a conversation with a friend, from any chat or the Klatsch page | 7 | [messages.drawio](messages.drawio) |
 | note check: an old note shows its age and asks its author | 6 | [note-check.drawio](note-check.drawio) |

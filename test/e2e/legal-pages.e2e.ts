@@ -45,9 +45,22 @@ describe('privacy and terms pages', () => {
     assert.match(html, /Read what you approve/);
   });
 
+  it('the support page says how to reach the operator, what to check for notifications, and how to remove things', async () => {
+    const { status, html, csp } = await page(relay, '/support');
+    assert.equal(status, 200);
+    assert.ok(html.includes('mailto:ada@example.org'));
+    assert.match(html, /github\.com\/gizemsoylutr\/klatsch\/issues/);
+    assert.match(html, /Send a test notification/);
+    assert.match(html, /Add to Home Screen/);
+    assert.match(html, /never send a password or a sign-in code/);
+    assert.match(csp, /default-src 'none'/);
+    assert.ok((await page(relay, '/')).html.includes('href="/support"'));
+  });
+
   it('a relay that has not named its operator has no such pages and no such links', async () => {
     assert.equal((await page(bare, '/privacy')).status, 404);
     assert.equal((await page(bare, '/terms')).status, 404);
+    assert.equal((await page(bare, '/support')).status, 404);
     assert.ok(!(await page(bare, '/')).html.includes('href="/privacy"'));
   });
 

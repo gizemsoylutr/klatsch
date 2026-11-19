@@ -15,7 +15,8 @@ export interface Operator {
 export const legal = {
   footerPrivacy: 'Privacy',
   footerTerms: 'Terms',
-  updated: 'Last updated: 9 November 2026',
+  footerSupport: 'Support',
+  updated: 'Last updated: 19 November 2026',
 
   privacyTitle: 'Privacy',
   privacy: (o: Operator) => html`
@@ -24,6 +25,7 @@ export const legal = {
     <h2>What is kept</h2>
     <ul>
       <li><strong>Your account:</strong> your handle, your name, your email address if you give one, your GitHub user id and login or your Google account id and address if you sign in that way, and the public key of any passkey.</li>
+      <li><strong>Messages:</strong> what you and your friends write to each other, with any photos, PDFs or voice notes, and when each was read.</li>
       <li><strong>What you share:</strong> the sips you approve, with their tags and link cards, questions you ask one person and their answers, with any photos, PDFs or voice notes you send with them, drafts and requests waiting for you, and notes on their way to your agent. Your agent sends a draft here before you decide on it.</li>
       <li><strong>Who is connected:</strong> your circles and invites, matches, intros and your choices about them, and thanks.</li>
       <li><strong>Security records:</strong> a log of actions (who, what, when, never the text you wrote), and sign-in sessions and agent tokens, kept only as keyed hashes. Network addresses are used only to limit abuse, and are kept for a day at most.</li>
@@ -54,6 +56,34 @@ export const legal = {
     <h2>Your rights</h2>
     <p>You can ask to see, correct, export or delete your data, or object to how it is used. Settings has Delete account, which removes your account and everything you shared at once. For anything else, write to the address above; it is done within a month. You can also complain to your data protection authority.</p>
     <p>Klatsch is not meant for anyone under 16.</p>`,
+
+  supportTitle: 'Support',
+  support: (o: Operator, issues: string) => html`
+    <p>Write to ${o.name} at <a href="mailto:${o.email}">${o.email}</a> for help with your account, your data, or someone misusing Klatsch. Say your handle, and never send a password or a sign-in code.</p>
+    <p>Found a bug, or want something changed? Open an issue on <a href="${issues}">GitHub</a>. Security problems go privately, as SECURITY.md describes, never in a public issue.</p>
+
+    <h2>Notifications do not show up</h2>
+    <p>Open Klatsch, then Settings › Notifications on this device › <strong>Send a test notification</strong>. If it says it was sent but nothing shows, the device is holding it back:</p>
+    <ul>
+      <li>Mac: System Settings › Notifications › your browser: allow notifications, as Banners or Alerts. Focus and Do Not Disturb must be off, or let the browser through.</li>
+      <li>Chrome has to be running. In its settings, Privacy › Site settings › Notifications must allow klatsch.dev.</li>
+      <li>iPhone and iPad: notifications work only from the Home Screen. In Safari, Share › Add to Home Screen, open Klatsch from there, and turn notifications on again in Settings.</li>
+      <li>Android: Settings › Apps › Chrome › Notifications is on.</li>
+    </ul>
+    <p>Email notifications are in Settings too, if you would rather have those.</p>
+
+    <h2>I cannot message someone</h2>
+    <p>You can write only to friends. Make a friend link (in your chat, say “add a friend”, or open Circle on klatsch.dev) and send it to them. Once they open it and accept, you are friends.</p>
+
+    <h2>Using Klatsch in ChatGPT or Claude</h2>
+    <p>Say “write to &lt;friend&gt;: …” and check the card that appears: nothing goes until you click Send there. Say “what did &lt;friend&gt; write?” to open the conversation in the chat. Your AI reads your friend’s words only when you click “Draft with my AI”.</p>
+    <p>To disconnect a chat app or an agent, open Tokens on klatsch.dev and revoke it.</p>
+
+    <h2>Removing things</h2>
+    <ul>
+      <li>Removing a friend deletes your conversation with them, for both of you, at once.</li>
+      <li>Settings › Delete account removes your account and everything you shared, at once.</li>
+    </ul>`,
 
   termsTitle: 'Terms',
   terms: (o: Operator) => html`

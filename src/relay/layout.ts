@@ -468,15 +468,16 @@ export function signInScreen(title: string, body: unknown) {
 const GOOGLE_MARK = html`<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.7 1.2 9.2 3.6l6.9-6.9C35.9 2.4 30.5 0 24 0 14.6 0 6.5 5.4 2.6 13.2l8 6.2C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 2.9-2.2 5.4-4.7 7l7.3 5.7c4.3-4 7.2-9.9 7.2-17.2z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-8-6.2C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l8-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8L32.6 36.500c-2.100 1.400-4.800 2.300-8 2.300-6.200 0-11.500-4.100-13.400-9.800l-8 6.200C6.500 42.600 14.600 48 24 48z"/></svg>`;
 
 /** The privacy notice or the terms, on the landing page's look, so they read the same signed out. */
-export function legalPage(page: 'privacy' | 'terms', operator: Operator) {
+export function legalPage(page: 'privacy' | 'terms' | 'support', operator: Operator) {
   const t = copy.landing;
-  const title = page === 'privacy' ? legal.privacyTitle : legal.termsTitle;
+  const title = page === 'privacy' ? legal.privacyTitle : page === 'terms' ? legal.termsTitle : legal.supportTitle;
+  const body = page === 'privacy' ? legal.privacy(operator) : page === 'terms' ? legal.terms(operator) : legal.support(operator, `${t.links.github}/issues`);
   return document(
     title,
     LANDING_STYLE,
     html`<header class="nav"><div class="wrap">${brand('/')}<a class="btn primary" href="/ui">${t.signIn}</a></div></header>`,
-    html`<main class="wrap legal"><h1>${title}</h1><p class="updated">${legal.updated}</p>${page === 'privacy' ? legal.privacy(operator) : legal.terms(operator)}</main>`,
-    html`<footer><div class="wrap"><span>${t.footer.line}</span><a class="sp" href="/privacy">${legal.footerPrivacy}</a><a href="/terms">${legal.footerTerms}</a></div></footer>`,
+    html`<main class="wrap legal"><h1>${title}</h1>${page === 'support' ? '' : html`<p class="updated">${legal.updated}</p>`}${body}</main>`,
+    html`<footer><div class="wrap"><span>${t.footer.line}</span><a class="sp" href="/privacy">${legal.footerPrivacy}</a><a href="/terms">${legal.footerTerms}</a><a href="/support">${legal.footerSupport}</a></div></footer>`,
   );
 }
 
@@ -572,6 +573,6 @@ export function landing(github: boolean, hasLegal = false, mcpUrl = '') {
         <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a><a class="btn quiet lg" href="${t.links.selfHosting}">${t.selfHost.guide}</a></div>
       </section>
     </main>`,
-    html`<footer><div class="wrap"><span>${t.footer.line}</span><a class="sp" href="${t.links.github}">${t.footer.github}</a><a href="${t.links.security}">${t.footer.security}</a><a href="${t.links.docs}">${t.footer.docs}</a>${hasLegal ? html`<a href="/privacy">${legal.footerPrivacy}</a><a href="/terms">${legal.footerTerms}</a>` : ''}</div></footer>`,
+    html`<footer><div class="wrap"><span>${t.footer.line}</span><a class="sp" href="${t.links.github}">${t.footer.github}</a><a href="${t.links.security}">${t.footer.security}</a><a href="${t.links.docs}">${t.footer.docs}</a>${hasLegal ? html`<a href="/privacy">${legal.footerPrivacy}</a><a href="/terms">${legal.footerTerms}</a><a href="/support">${legal.footerSupport}</a>` : ''}</div></footer>`,
   );
 }

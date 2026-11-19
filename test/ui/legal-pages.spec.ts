@@ -23,6 +23,9 @@ test.describe.serial('privacy and terms pages', () => {
     await visitor.shot('legal-privacy.png');
     await visitor.click(visitor.page.getByRole('link', { name: 'Terms' }));
     await expect(visitor.page.getByRole('heading', { level: 1, name: 'Terms' })).toBeVisible();
+    await visitor.click(visitor.page.getByRole('link', { name: 'Support' }));
+    await expect(visitor.page.getByRole('heading', { level: 1, name: 'Support' })).toBeVisible();
+    await visitor.shot('legal-support.png');
     const [scroll, client] = await visitor.page.evaluate<[number, number]>('[document.documentElement.scrollWidth, document.documentElement.clientWidth]');
     expect(scroll).toBeLessThanOrEqual(client);
   });
