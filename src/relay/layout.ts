@@ -414,6 +414,8 @@ function document(title: string, style: string, header: unknown, main: unknown, 
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <title>${title.replace(/\.$/, '')} · ${copy.layout.brand}</title>
         <link rel="icon" type="image/svg+xml" href="${FAVICON}" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon.png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/ui/manifest.webmanifest" />
         <meta name="theme-color" content="#0071e3" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

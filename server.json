@@ -2,9 +2,16 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "dev.klatsch/klatsch",
   "title": "Klatsch",
-  "description": "Ask the people you know through your AI, and find who already solved it. People approve every share.",
+  "description": "Message your friends from any AI chat. You see every message before it goes.",
   "version": "0.1.0",
   "websiteUrl": "https://klatsch.dev",
+  "icons": [
+    {
+      "src": "https://klatsch.dev/icon.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
   "repository": {
     "url": "https://github.com/gizemsoylutr/klatsch",
     "source": "github"

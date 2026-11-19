@@ -274,7 +274,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     {
       title: 'Draft a note for your card',
       description: `Ask your human to share a sip (one line) on their Klatsch card: a status, 1–5 tags from the Klatsch vocabulary and a summary of at most 200 characters. When a public post, doc or issue fixed the problem, draft a solved sip with it as \`source\` (an https link, a short title, the author if known): a link card. Klatsch never opens the link. When an approach did not work, draft a tried sip that says what you tried and why it failed, so others can skip it. ${ASKS_ONLY} ${DATA_NOTE}`,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      annotations: { title: 'Draft a note for your card', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       inputSchema: updateCardInput,
       outputSchema: updateCardOutput,
       scopeChallenge: requireScopes('card:write'),
@@ -342,7 +342,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Find who solved it',
       description: `Find people in your human's circle who solved a problem with these tags, or tried something that did not work (outcome: did-not-work, a warning, not a fix), plus your human's own earlier sips on them. Once your human shared a looking sip on it, a note its author opened to them comes with the author's handle and is on your human's Klatsch page (or in your inbox, if your human chose to always get that person's notes); a search alone never reveals who or what they wrote: share a looking sip, or ask for an intro. At most ${SEARCHES_PER_HOUR} searches per hour. Shares nothing. ${DATA_NOTE}`,
       // Not read-only: a search records matches and an audit entry, though it shares nothing.
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Find who solved it', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: findMatchesInput,
       outputSchema: findMatchesOutput,
       scopeChallenge: requireScopes('matches:read'),
@@ -365,7 +365,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Ask for an intro',
       ...cardTool(),
       description: `Ask your human whether to request an intro to the person behind a match. ${ASKS_ONLY} If your human asks, the other person decides next. ${DATA_NOTE}`,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Ask for an intro', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: requestIntroInput,
       outputSchema: requestIntroOutput,
       scopeChallenge: requireScopes('intro:request'),
@@ -406,7 +406,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Answer an intro request',
       ...cardTool(),
       description: `Let your human answer an intro request someone sent them (intro_id from inbox). ${ASKS_ONLY} You learn the outcome; once both accepted, also the other person's handle. ${DATA_NOTE}`,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Answer an intro request', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: introIdInput,
       outputSchema: respondIntroOutput,
       scopeChallenge: requireScopes('intro:respond'),
@@ -445,7 +445,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Ask one person',
       ...cardTool(),
       description: `Ask one person your human names (their handle) directly, about anything, when your human says "ask my friend …" or wants their help: only that person reads it, with your human's name, and only if the two are friends or share a private circle (the friends tool lists who). ${ASKS_ONLY} When they answer, the answer comes to you in inbox. ${DATA_NOTE}`,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Ask one person', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: askPersonInput,
       outputSchema: askPersonOutput,
       scopeChallenge: requireScopes('intro:request'),
@@ -489,7 +489,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Answer a question',
       ...cardTool(),
       description: `Draft your human's answer to a question someone asked them directly (ask_id from inbox). ${ASKS_ONLY} Only the person who asked reads it. ${DATA_NOTE}`,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Answer a question', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: answerAskInput,
       outputSchema: answerAskOutput,
       scopeChallenge: requireScopes('intro:respond'),
@@ -531,7 +531,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Message a friend',
       ...cardTool(),
       description: `Send a message to one of your human's friends (their handle; the friends tool lists them), when your human wants to write to, tell, ask or reply to a friend. Draft it in your human's voice and call this right away: in a chat app your human reads and edits it in the Klatsch card and sends it with one click. Only that friend reads it, with your human's name; their reply shows in the conversation (call conversation). ${ASKS_ONLY} ${DATA_NOTE}`,
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Message a friend', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: sendMessageInput,
       outputSchema: sendMessageOutput,
       scopeChallenge: requireScopes('intro:request'),
@@ -574,7 +574,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       ...cardTool(),
       description:
         "Show your human their conversation with one friend (handle), in a Klatsch card in this chat where they read it and write back. Call it when your human wants to see what a friend wrote, or when pending or inbox says a friend sent a message. You do not see the messages: your human reads them in the card, or sends them to you with \"Draft with my AI\". Where cards are not shown, it gives the Klatsch page. Shares nothing.",
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Open a conversation', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: conversationInput,
       outputSchema: conversationOutput,
       scopeChallenge: requireScopes('inbox:read'),
@@ -611,7 +611,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       {
         title: 'Decide in the Klatsch card',
         description: 'Used by the Klatsch card in the chat when the person clicks a button. Not for the model.',
-        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+        annotations: { title: 'Decide in the Klatsch card', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
         inputSchema: z.object({
           key: z.string().min(20).max(100),
           decision: z.enum(['approved', 'always', 'declined', 'answer', 'draft', 'friend_link', 'reply']),
@@ -709,7 +709,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     {
       title: 'State of a Klatsch card',
       description: 'Used by the Klatsch card in the chat when it is shown again. Not for the model.',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'State of a Klatsch card', readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({ key: z.string().min(20).max(100), seen: z.boolean().optional() }),
       _meta: { ui: { resourceUri: CARD_URI, visibility: ['app'] } },
       scopeChallenge: requireScopes('inbox:read'),
@@ -752,7 +752,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       ...cardTool(),
       description:
         'When your human wants to add a friend on Klatsch: shows a Klatsch card in this chat where they make a one-time link and copy it to send by any messenger. You never see the link. Where cards are not shown, it gives the Klatsch page where they make it. Shares nothing.',
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Add a friend', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({}),
       scopeChallenge: requireScopes('inbox:read'),
     },
@@ -774,7 +774,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       ...cardTool(),
       description:
         'Show your human a question someone asked them directly (ask_id from an ask.received event in inbox), in a Klatsch card in this chat. You do not see the question or who asked: your human reads it in the card and answers there, or sends it to you to draft. Shares nothing.',
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Show a question to your human', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({ ask_id: z.string().regex(/^k_[A-Za-z0-9_-]{16}$/) }),
       scopeChallenge: requireScopes('inbox:read'),
     },
@@ -798,7 +798,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'List friends',
       description:
         'Your human\'s friends on Klatsch, by handle only, with how many of their messages wait unread: people your human writes to with send_message, and whose conversation conversation shows. Read-only. To add a friend, call add_friend.',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'List friends', readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({}),
       outputSchema: friendsOutput,
       scopeChallenge: requireScopes('inbox:read'),
@@ -823,7 +823,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     {
       title: 'What is waiting',
       description: 'One-line reminder of what waits in Klatsch (counts, handles of people an accepted intro connected your human with, and how many people your human\'s open notes helped). Read-only; the text is empty when nothing waits.',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'What is waiting', readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({}),
       outputSchema: pendingOutput,
       scopeChallenge: requireScopes('inbox:read'),
@@ -845,7 +845,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Read your Klatsch inbox',
       description: `New matches, intro updates, approval outcomes, and quotes: another person's words your human sent you from their Klatsch page, or that arrived because your human chose to always get that person's notes (in a \`quote\` field, labelled, delivered once), since the last call. Reading marks them read; it shares nothing. ${DATA_NOTE}`,
       // Not read-only: reading marks the events read.
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Read your Klatsch inbox', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: inboxInput,
       outputSchema: inboxOutput,
       scopeChallenge: requireScopes('inbox:read'),
@@ -867,7 +867,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     {
       title: 'Say thanks for a note',
       description: THANKS.description,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      annotations: { title: 'Say thanks for a note', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: thankNoteInput,
       outputSchema: thankNoteOutput,
       // Its own scope (tokens from before it got it with the migration, if they could read the inbox).
@@ -893,7 +893,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Watch for news',
       description: `${WATCH.description} ${DATA_NOTE}`,
       // Not read-only: it keeps this token's watch row and mark. It shares and decides nothing.
-      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      annotations: { title: 'Watch for news', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: z.object({}),
       scopeChallenge: requireScopes('inbox:read'),
     },
