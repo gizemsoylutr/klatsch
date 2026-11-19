@@ -40,6 +40,24 @@ test.describe.serial('notifications on this device', () => {
     // The script ran: either the button shows, or it says why this browser cannot get notifications.
     await expect(alice.page.getByRole('button', { name: 'Turn on here' }).or(alice.page.getByText('cannot get notifications from a web page'))).toBeVisible();
     await alice.shot('push-settings.png');
+    // The test button: every device gets one, and the page says what to check when nothing shows.
+    relay.klatsch.pushTest = async (subs) => subs.map(() => 'sent' as const);
+    await alice.click(alice.page.getByRole('button', { name: 'Send a test notification' }));
+    await expect(alice.page.getByText(/Sent to 1 device/)).toBeVisible();
+    await expect(alice.page.getByText(/Focus or Do Not Disturb/)).toBeVisible();
+    await alice.shot('push-test.png');
+    // Home re-sends this device's subscription on each visit, from the page (here by hand: no push service in tests).
+    await alice.open(`${relay.base}/ui`);
+    const sync = alice.page.locator('[data-push-sync]');
+    await expect(sync).toHaveCount(1);
+    const csrf = await sync.getAttribute('data-csrf');
+    const answer = await alice.page.evaluate(
+      async ([csrf, p256dh, auth]) =>
+        (await fetch('/ui/push/sync', { method: 'POST', body: new URLSearchParams({ csrf: csrf!, endpoint: 'https://fcm.googleapis.com/fcm/send/test', p256dh: p256dh!, auth: auth! }), credentials: 'same-origin' })).text(),
+      [csrf, ua.getPublicKey().toString('base64url'), Buffer.alloc(16, 2).toString('base64url')],
+    );
+    expect(answer).toBe('on');
+    await alice.open(`${relay.base}/ui/settings`);
     await alice.click(alice.page.getByRole('button', { name: 'Turn off everywhere' }));
     await alice.open(`${relay.base}/ui/settings`);
     await expect(alice.page.getByText('Off on every device.')).toBeVisible();
