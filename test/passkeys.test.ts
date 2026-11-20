@@ -5,8 +5,8 @@ import { BASE, setup } from './helpers.ts';
 import { SoftPasskey } from './webauthn.ts';
 
 const LOCAL = 'http://localhost:7417';
-const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
-const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 type T = ReturnType<typeof setup>;
 

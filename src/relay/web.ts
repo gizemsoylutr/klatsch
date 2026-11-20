@@ -194,9 +194,9 @@ const routePattern = (path: string) =>
 
 type Env = { Variables: { userId: string; csrf: string; session: string } };
 
-const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 /** The pages with a passkey button: the same, plus the one same-origin script and its posts back to the relay. */
-const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 
 /**
  * The OAuth consent page: its form is answered with a redirect back to the client, and browsers check that
@@ -207,7 +207,7 @@ const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; co
  */
 /** A file someone sent, opened in the browser: sandboxed, nothing runs, nothing loads from elsewhere. */
 const FILE_CSP = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
-const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self' ";
+const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self' ";
 const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin} https:; frame-ancestors 'none'; base-uri 'none'`;
 
 /** The headers of every page the relay serves to a browser: the web UI and the landing page at `/`. */
