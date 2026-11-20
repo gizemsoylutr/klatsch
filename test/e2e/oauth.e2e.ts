@@ -116,6 +116,10 @@ describe('OAuth: an app connects as the person’s agent after they approve it, 
     const fields = { client_id: clientId, redirect_uri: callback, code_challenge: challengeOf(v), code_challenge_method: 'S256', response_type: 'code', state: 'abc', resource: `${relay.base}/mcp` };
     const page = await visitor.go(authorizeUrl(fields));
     assert.match(page.html, /Connect Test App\?/);
+    // Connect may go back to the app and on from there to another of its sites (chatgpt.com → platform.openai.com):
+    // Chrome checks each of those redirects against form-action, so any https origin may follow the app's own.
+    const policy = (await visitor.request(`${relay.base}${authorizeUrl(fields)}`)).headers.get('content-security-policy') ?? '';
+    assert.match(policy, new RegExp(`form-action 'self' ${new URL(callback).origin} https:;`));
     const allowed = await visitor.post('/ui/oauth/authorize', { ...fields, decision: 'allow' });
     const back = codeFrom(allowed.hops);
     assert.equal(back.get('state'), 'abc');

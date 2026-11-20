@@ -201,11 +201,14 @@ const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; co
 /**
  * The OAuth consent page: its form is answered with a redirect back to the client, and browsers check that
  * redirect against form-action too, so that one origin (a registered, validated redirect URI's) is added.
+ * Chrome checks every later redirect of the same navigation as well, and some clients' callbacks redirect
+ * on to another of their own sites (ChatGPT's developer platform goes chatgpt.com → platform.openai.com),
+ * so any https origin may follow. The form itself still only posts here: the page runs no script.
  */
 /** A file someone sent, opened in the browser: sandboxed, nothing runs, nothing loads from elsewhere. */
 const FILE_CSP = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox";
 const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; manifest-src 'self'; form-action 'self' ";
-const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin}; frame-ancestors 'none'; base-uri 'none'`;
+const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin} https:; frame-ancestors 'none'; base-uri 'none'`;
 
 /** The headers of every page the relay serves to a browser: the web UI and the landing page at `/`. */
 export const pageHeaders: MiddlewareHandler = async (c, next) => {
