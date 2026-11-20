@@ -79,6 +79,8 @@ export async function startRelay(
     options.mail ? confirmationMailer(transport, 'klatsch@relay.test') : undefined,
     options.mail ? signInMailer(transport, 'klatsch@relay.test') : undefined,
   );
+  // The demo friend writes back at once here; review.e2e.ts tests its delay on its own.
+  klatsch.demoDelayMs = 0;
   if (options.mail) mailNotify = emailNotifier(db, transport, 'klatsch@relay.test', () => base);
   relay = createRelay(klatsch, secret);
 

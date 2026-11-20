@@ -22,7 +22,7 @@ import { seedVocabulary } from './match/vocabulary.ts';
 import { emailFromEnv } from './notify/email.ts';
 import { sendPush, vapidFromSecret, type PushSubscriptionRow } from './notify/push.ts';
 import { createRelay } from './relay/app.ts';
-import { Klatsch, type Notifier } from './service.ts';
+import { Klatsch, normalHandle, type Notifier } from './service.ts';
 import { openDb } from './store/db.ts';
 import { VERSION } from './version.ts';
 
@@ -61,6 +61,7 @@ const USAGE = `Usage:
   klatsch revoke --user <handle> [--demo] [--data ...]     revoke all of a user's agent tokens
   klatsch login --user <handle> [--demo] [--data ...]      print a new web login link (valid 10 minutes)
   klatsch review-account --user <handle> [--name <name>]  a directory reviewer's account: a new password (shown once) and a demo friend
+  klatsch review-reset --user <handle>                   a review account as new: the demo conversation and question again; password kept
   klatsch delete --user <handle> --yes [--data ...]        delete that person's account and everything they
                                                            shared, at once, as the privacy page promises when
                                                            they ask by email (the same as Settings, Delete account)
@@ -645,6 +646,14 @@ function main(): void {
       const password = klatsch.setReviewAccount(values.user, values.name ?? 'Klatsch Review', { existing: values.yes });
       console.log(`Review account @${values.user}, with the demo friend @klatsch-demo. Sign in at ${base.publicUrl}/ui/review-login`);
       console.log(`Password (shown once): ${password}`);
+      return;
+    }
+    case 'review-reset': {
+      if (!values.user) throw new Error(USAGE);
+      const { klatsch, secret } = open(base);
+      klatsch.useSecret(secret);
+      klatsch.resetReviewDemo(values.user);
+      console.log(`@${normalHandle(values.user)} starts again: the demo conversation and its question are back. The password is unchanged.`);
       return;
     }
     case 'delete': {

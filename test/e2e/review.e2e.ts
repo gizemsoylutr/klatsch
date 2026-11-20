@@ -1,5 +1,6 @@
 // A directory reviewer's account: a handle and a password (only for the account the operator names), a demo friend
-// that answers at once, and a question from the demo friend always waiting. Nobody else can sign in by password.
+// that writes back like a friend would, a conversation to start from, and a question from the demo friend always
+// waiting. Nobody else can sign in by password.
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createInvite, findInvite } from '../../src/auth/invites.ts';
@@ -30,6 +31,12 @@ describe('review account: a password for one account, and a demo friend for the 
     assert.deepEqual(relay.klatsch.askablePeople(reviewer), [{ handle: '@klatsch-demo', friend: true }]);
     const waiting = relay.klatsch.asksOf(reviewer).filter((k) => k.role === 'helper' && k.state === 'open');
     assert.equal(waiting.length, 1);
+    assert.match(waiting[0]!.question, /hike on Sunday/);
+    // A conversation to start from, its last line (the demo friend's) unread.
+    const thread = relay.klatsch.conversation(reviewer, '@klatsch-demo').messages;
+    assert.equal(thread.length, 3);
+    assert.match(thread.at(-1)!.text, /Friday works best/);
+    assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').unread, 1);
     assert.equal(await relay.klatsch.passwordSignIn('alice', password), undefined, 'only the review account has a password');
     assert.equal(await relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
     // Outsiders hold its password: it reaches no real people by itself.
@@ -65,12 +72,45 @@ describe('review account: a password for one account, and a demo friend for the 
     const asked = await chat.call('ask_person', { handle: '@klatsch-demo', question: 'Does this work?' });
     await chat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
     const quote = ((await chat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
-    assert.match(quote.quote!, /You asked: “Does this work\?”/);
+    assert.match(quote.quote!, /go for it/, 'an answer as a friend gives one, not an echo');
     // Answering the demo friend's question leaves a new one for the next reviewer.
     const open = relay.klatsch.asksOf(reviewer).find((k) => k.role === 'helper' && k.state === 'open')!;
     await reviewerBrowser.post(`/ui/asks/${open.id}/answer`, { answer: 'Hello demo friend.' });
     assert.equal(relay.klatsch.asksOf(reviewer).filter((k) => k.role === 'helper' && k.state === 'open').length, 1);
     await chat.close();
+  });
+
+  it('the demo friend writes back about what it was sent: a booking, a hike, a question', () => {
+    const last = () => relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.at(-1)!.text;
+    relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'I booked Trattoria Lucia for Friday at 19:30, does that work?');
+    assert.match(last(), /half an hour later/);
+    relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'Yes for the hike! Can you drive?');
+    assert.match(last(), /pick you up at 9:00/);
+    relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'Which flat should I take, the one in Neukölln or the one in Mitte?');
+    assert.match(last(), /U-Bahn/);
+    assert.doesNotMatch(last(), /You wrote/);
+  });
+
+  it('with its delay, the reply arrives later as a new, unread message', async () => {
+    relay.klatsch.demoDelayMs = 50;
+    try {
+      const before = relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.length;
+      relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'Dinner on Friday?');
+      assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.length, before + 1, 'not at once');
+      await new Promise((r) => setTimeout(r, 150));
+      assert.ok(relay.klatsch.conversation(reviewer, '@klatsch-demo').unread >= 1, 'it waits unread');
+      assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.length, before + 2);
+    } finally {
+      relay.klatsch.demoDelayMs = 0;
+    }
+  });
+
+  it('review-reset puts the demo back as new and keeps the password', async () => {
+    relay.klatsch.resetReviewDemo('@reviewer');
+    assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.length, 3);
+    assert.equal(relay.klatsch.asksOf(reviewer).filter((k) => k.state === 'open').length, 1);
+    assert.ok(await relay.klatsch.passwordSignIn('reviewer', password));
+    assert.throws(() => relay.klatsch.resetReviewDemo('alice'), /not a review account/);
   });
 
   it('serves OpenAI’s domain challenge when the operator set it', async () => {

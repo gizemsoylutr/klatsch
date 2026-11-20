@@ -347,12 +347,41 @@ const THREAD_FOR_AGENT = 10;
 const DEMO_HANDLE = 'klatsch-demo';
 /** Handles nobody can pick: the demo friend's, and names that would look like Klatsch speaking. */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set([DEMO_HANDLE, 'klatsch', 'admin', 'support', 'review']);
+/**
+ * What the demo friend says. It plays a friend, not Klatsch: it writes back about what was written to it, so a
+ * reviewer sees what Klatsch is for (a plan made in a chat reaching a friend, a friend's opinion coming back).
+ * Fixed lines picked by a few words, no model, so every review sees the same thing.
+ */
 const DEMO = {
-  question: 'Hi! I am the Klatsch demo friend. What would you like to ask a friend through your AI? Answer me here.',
-  reply: (text: string) => `Hi, this is the Klatsch demo friend. You wrote: “${text.slice(0, 300)}” A real friend reads it in their own chat, or on their phone, and writes back here.`,
-  answer: (question: string) => `Hi, this is the Klatsch demo friend. You asked: “${question.slice(0, 300)}” A real friend reads it in their own chat and answers there; this answer came back to the chat you asked from.`,
-};
-/** A handle as people type it: no @, no spaces, lower case. */
+  /** Its question waiting for the reviewer: a real one between friends. */
+  question: 'Are we still on for the hike on Sunday? I can drive if you want, just tell me when to pick you up.',
+  /** The conversation a review account starts with, oldest first; the last line, the demo friend's, is unread. */
+  history: [
+    { demo: true, text: 'Thanks again for the book tip! I finished it on the train this morning.', hoursAgo: 50 },
+    { demo: false, text: 'So glad you liked it! Dinner this week? It has been too long.', hoursAgo: 49 },
+    { demo: true, text: 'Yes please! Friday works best for me. You pick the place? Somewhere cozy, not too loud.', hoursAgo: 26 },
+  ],
+  reply(text: string): string {
+    const t = text.toLowerCase();
+    if (/\b(book|booked|reserv|table|dinner|lunch|brunch|restaurant|trattoria|bistro|caf[eé])/.test(t)) {
+      return 'Perfect, count me in! Could we make it half an hour later? I finish work late that day. I will be there, can’t wait.';
+    }
+    if (/\b(hike|hiking|sunday|pick you up|drive)\b/.test(t)) return 'Great! I will pick you up at 9:00. Bring a jacket, it gets windy at the top.';
+    if (/\b(thank|thanks|thx)\b/.test(t)) return 'Anytime! 😊';
+    if (/\b(which|should i|what do you think|would you|or)\b.*\?|\b(recommend|opinion|advice)\b/.test(t)) return DEMO.opinion(t);
+    if (/\b(birthday|gift|present)\b/.test(t)) return 'Oh nice! She loves anything handmade, and she has been talking about that pottery class for months.';
+    return 'Got it, thanks for letting me know! I will get back to you tonight.';
+  },
+  /** Its answer to a question, or to a message asking what it thinks. */
+  opinion(question: string): string {
+    const q = question.toLowerCase();
+    if (/\b(restaurant|dinner|eat|food|place)\b/.test(q)) return 'Go for the small one by the canal. The pasta is the best I had this year, and it is quiet enough to talk. Book ahead on Fridays.';
+    if (/\b(flat|apartment|neighbou?rhood|move|rent)\b/.test(q)) return 'I would take the first one. I lived around there for two years: the U-Bahn is two minutes away and the street is quiet at night. The other is nicer inside, but you will hate the commute.';
+    if (/\b(laptop|phone|camera|buy|model)\b/.test(q)) return 'Take the lighter one. I had the heavier model and stopped carrying it after a month. The battery matters more than the extra speed.';
+    if (/\b(or|which|between|pick|choose|vs)\b/.test(q)) return 'Honestly, the first one. It fits how you live now, not how you think you should live. You can always switch later.';
+    return 'I think you should go for it. You have been thinking about it for weeks, and I think you would regret not trying.';
+  },
+};/** A handle as people type it: no @, no spaces, lower case. */
 export const normalHandle = (handle: string) => handle.trim().replace(/^@/, '').toLowerCase();
 /** A stored hash nobody's password matches, compared when a handle has none, so both cases take as long. */
 const DUMMY_HASH = hashPassword(randomBytes(16).toString('hex'));
@@ -395,6 +424,24 @@ export class Klatsch {
   private secret: Buffer | undefined;
   /** Searches per token in the last hour (one relay instance), so an agent cannot map a circle's topics quickly. */
   private readonly searches = new Map<string, number[]>();
+
+  /**
+   * How long the demo friend takes to write back or answer: long enough that its words arrive as new (unread,
+   * with a notification), as a real friend's would. Tests set 0 to have them at once.
+   */
+  demoDelayMs = 20_000;
+
+  /** Runs what the demo friend does, after its delay; a failure there (the reviewer deleted meanwhile) is dropped. */
+  private asDemo(work: () => void): void {
+    if (this.demoDelayMs <= 0) return work();
+    setTimeout(() => {
+      try {
+        work();
+      } catch {
+        // Nothing to tell anyone: the demo friend simply does not answer.
+      }
+    }, this.demoDelayMs).unref();
+  }
 
   constructor(db: Db, config: Config, notify: Notifier, mailer?: ConfirmationMailer, signInMailer?: SignInMailer) {
     this.db = db;
@@ -1408,8 +1455,8 @@ export class Klatsch {
     if (always) this.event(helper.id, 'ask.question', id);
     this.audit(askerId, 'web', 'ask.create', id);
     this.notifyUser(helper.id, notifications.other);
-    // The demo friend answers at once, so a reviewer sees the whole round trip alone.
-    if (this.isDemo(helper.id)) this.answerAsk(helper.id, id, DEMO.answer(question), false, 'cli');
+    // The demo friend answers after a moment, so a reviewer sees the whole round trip alone.
+    if (this.isDemo(helper.id)) this.asDemo(() => this.answerAsk(helper.id, id, DEMO.opinion(question), false, 'cli'));
     return id;
   }
 
@@ -1479,6 +1526,7 @@ export class Klatsch {
         const circle = this.friendCircle(demo);
         this.addMember(circle, reviewer, demo);
       }
+      this.seedDemoConversation(demo, reviewer, this.friendshipOf(reviewer, demo)!);
       this.seedDemoQuestion(demo, reviewer);
       this.audit(reviewer, 'cli', 'review.account');
     });
@@ -1503,6 +1551,43 @@ export class Klatsch {
 
   private isDemo(userId: string): boolean {
     return Boolean((this.db.prepare('SELECT demo FROM users WHERE id = ?').get(userId) as { demo: number } | undefined)?.demo);
+  }
+
+  /** The conversation a review account starts with, unless the two already wrote to each other. */
+  private seedDemoConversation(demo: string, reviewer: string, circleId: string): void {
+    if (this.db.prepare('SELECT 1 FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)').get(demo, reviewer, reviewer, demo)) return;
+    const now = Date.now();
+    const insert = this.db.prepare('INSERT INTO messages (id, circle_id, sender_id, recipient_id, body, created_at, read_at, for_agent) VALUES (?, ?, ?, ?, ?, ?, ?, 0)');
+    DEMO.history.forEach((line, i) => {
+      const at = now - line.hoursAgo * 60 * 60 * 1000;
+      const last = i === DEMO.history.length - 1;
+      const id = newId('m');
+      insert.run(id, circleId, line.demo ? demo : reviewer, line.demo ? reviewer : demo, sealText(this.db, line.text), at, last ? null : at);
+      if (last) this.event(reviewer, 'message.received', id);
+    });
+  }
+
+  /**
+   * Puts a review account back as a new reviewer finds it: the demo conversation and question as seeded, nothing
+   * else between the two. Its password and connections stay, so the directory's copy of them still works.
+   */
+  resetReviewDemo(handle: string): void {
+    transaction(this.db, () => {
+      const reviewer = this.db.prepare('SELECT id FROM users WHERE handle = ? AND password_hash IS NOT NULL').get(normalHandle(handle)) as { id: string } | undefined;
+      const demo = this.db.prepare('SELECT id FROM users WHERE handle = ? AND demo = 1').get(DEMO_HANDLE) as { id: string } | undefined;
+      if (!reviewer || !demo) throw new KlatschError('not-found', `@${normalHandle(handle)} is not a review account with the demo friend.`);
+      const between = '(sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)';
+      const ids = (this.db.prepare(`SELECT id FROM messages WHERE ${between}`).all(demo.id, reviewer.id, reviewer.id, demo.id) as { id: string }[]).map((r) => r.id);
+      for (const id of ids) {
+        this.db.prepare('DELETE FROM message_files WHERE message_id = ?').run(id);
+        this.db.prepare('DELETE FROM events WHERE ref = ?').run(id);
+      }
+      this.db.prepare(`DELETE FROM messages WHERE ${between}`).run(demo.id, reviewer.id, reviewer.id, demo.id);
+      this.db.prepare(`UPDATE asks SET state = 'withdrawn' WHERE state = 'open' AND ((asker_id = ? AND helper_id = ?) OR (asker_id = ? AND helper_id = ?))`).run(demo.id, reviewer.id, reviewer.id, demo.id);
+      this.seedDemoConversation(demo.id, reviewer.id, this.friendshipOf(reviewer.id, demo.id)!);
+      this.seedDemoQuestion(demo.id, reviewer.id);
+      this.audit(reviewer.id, 'cli', 'review.reset');
+    });
   }
 
   /** The demo friend's question to the reviewer, unless one is still waiting. */
@@ -1642,10 +1727,13 @@ export class Klatsch {
     this.event(other.id, always ? 'message.thread' : 'message.received', id);
     this.audit(senderId, via, 'message.send', id);
     this.notifyUser(other.id, notifications.message);
-    // The demo friend writes back at once, so a reviewer sees a conversation alone.
+    // The demo friend writes back after a moment, so a reviewer sees a conversation alone.
     if (this.isDemo(other.id)) {
-      this.db.prepare('UPDATE messages SET read_at = ? WHERE id = ?').run(Date.now(), id);
-      this.sendMessage(other.id, this.user(senderId).handle, DEMO.reply(text.trim()), 'cli');
+      const reply = DEMO.reply(text.trim());
+      this.asDemo(() => {
+        this.db.prepare('UPDATE messages SET read_at = ? WHERE id = ? AND read_at IS NULL').run(Date.now(), id);
+        this.sendMessage(other.id, this.user(senderId).handle, reply, 'cli');
+      });
     }
     return id;
   }
