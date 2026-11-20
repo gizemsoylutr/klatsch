@@ -29,7 +29,10 @@ export const PUSH_SCRIPT = `'use strict';
     const json = subscription.toJSON();
     const response = await fetch('/ui/push/sync', { method: 'POST', body: new URLSearchParams({ csrf, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth }), credentials: 'same-origin', redirect: 'error' });
     // Turned off from another device: drop it here too, so the page no longer says it is on.
-    if (response.ok && (await response.text()) === 'off') await subscription.unsubscribe();
+    const state = response.ok ? await response.text() : '';
+    if (state === 'off') await subscription.unsubscribe();
+    // 'other': this browser's notifications are another account's; the caller leaves them alone.
+    return state;
   };
   const sync = document.querySelector('[data-push-sync]');
   if (sync) window.klatschPushSync(sync.dataset.key, sync.dataset.csrf).catch(() => {});
@@ -52,7 +55,9 @@ export const PUSH_SCRIPT = `'use strict';
   };
   (async () => {
     try {
-      await window.klatschPushSync(button.dataset.key, button.dataset.csrf).catch(() => {});
+      const state = await window.klatschPushSync(button.dataset.key, button.dataset.csrf).catch(() => '');
+      // Another account's notifications on this browser: no Turn off here (it would end theirs), no Turn on.
+      if (state === 'other') { say(button.dataset.other); return; }
       const registration = await navigator.serviceWorker.getRegistration('/ui/');
       const existing = registration && Notification.permission === 'granted' ? await registration.pushManager.getSubscription() : null;
       if (existing) showOn();

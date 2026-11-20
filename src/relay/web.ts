@@ -2435,7 +2435,7 @@ function pushSettings(push: { devices: number; key: string }, csrf: string) {
       <div class="group">
         <div class="row">
           <div class="main"><span>${t.line}</span><span class="m">${t.devices(push.devices)}</span></div>
-          <button type="button" class="primary" data-push data-key="${push.key}" data-csrf="${csrf}" data-here="${t.here}" data-failed="${t.failed}" data-denied="${t.denied}" data-unsupported="${t.unsupported}" hidden>${t.turnOn}</button>
+          <button type="button" class="primary" data-push data-key="${push.key}" data-csrf="${csrf}" data-here="${t.here}" data-other="${t.other}" data-failed="${t.failed}" data-denied="${t.denied}" data-unsupported="${t.unsupported}" hidden>${t.turnOn}</button>
           <button type="button" data-push-off hidden>${t.turnOffHere}</button>
           ${push.devices ? button('/ui/push/off', t.turnOff, csrf, 'link') : ''}
         </div>
@@ -2627,7 +2627,7 @@ function pushOfferBox(key: string, csrf: string) {
   return html`<section class="offer" aria-labelledby="push-offer-title">
       <div class="main"><h2 id="push-offer-title">${t.offerTitle}</h2><p>${t.offerLine}</p><p id="push-status" class="m" role="status" hidden></p></div>
       <div class="acts">
-        <button type="button" class="primary" data-push data-key="${key}" data-csrf="${csrf}" data-here="${t.here}" data-failed="${t.failed}" data-denied="${t.denied}" data-unsupported="${t.unsupported}" hidden>${t.turnOn}</button>
+        <button type="button" class="primary" data-push data-key="${key}" data-csrf="${csrf}" data-here="${t.here}" data-other="${t.other}" data-failed="${t.failed}" data-denied="${t.denied}" data-unsupported="${t.unsupported}" hidden>${t.turnOn}</button>
         ${button('/ui/push/offer/dismiss', t.offerLater, csrf, 'link')}
       </div>
     </section>

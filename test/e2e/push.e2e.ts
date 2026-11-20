@@ -139,6 +139,21 @@ describe('push notifications: offered in Settings, one subscription per device, 
     assert.equal((await aliceBrowser.post('/ui/push/sync', mine)).html, 'on');
   });
 
+  it('signed in as someone else on a browser with Alice’s notifications: the visit says "other", and hers stay', async () => {
+    const hers = subscription();
+    await aliceBrowser.post('/ui/push/subscribe', hers);
+    const carol = relay.klatsch.ensureUser('carol', 'Carol');
+    const carolBrowser = await browser(relay, relay.loginLink(carol));
+    assert.equal((await carolBrowser.post('/ui/push/sync', hers)).html, 'other');
+    assert.equal(relay.klatsch.pushSubscriptionsOf(carol).length, 0, 'never taken over');
+    assert.ok(relay.klatsch.pushSubscriptionsOf(alice).some((s) => s.endpoint === hers.endpoint), 'still Alice’s');
+    assert.equal((await carolBrowser.post('/ui/push/subscribe', hers)).status, 400, 'turning on here for Carol is refused');
+    const settings = (await carolBrowser.get('/ui/settings')).html;
+    assert.match(settings, /data-other="This browser gets notifications for another Klatsch account/);
+    const script = await (await fetch(`${relay.base}/ui/push.js`)).text();
+    assert.match(script, /if \(state === 'other'\) \{ say\(button\.dataset\.other\); return; \}/);
+  });
+
   it('the service worker takes over at once and a tap brings an open Klatsch tab to the front', async () => {
     const sw = await (await fetch(`${relay.base}/ui/sw.js`)).text();
     assert.match(sw, /skipWaiting\(\)/);

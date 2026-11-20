@@ -621,6 +621,7 @@ export const copy = {
     turnOff: 'Turn off everywhere',
     here: 'On for this device: it gets Klatsch notifications.',
     turnOffHere: 'Turn off here',
+    other: 'This browser gets notifications for another Klatsch account. To change that, sign in here as that account.',
     failed: 'That did not work. Try again, or use email notifications.',
     denied: 'Notifications are blocked for Klatsch in this browser. Allow them in its settings, then try again.',
     unsupported: 'This browser cannot get notifications from a web page. On an iPhone, add Klatsch to the Home Screen first.',

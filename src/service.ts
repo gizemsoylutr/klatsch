@@ -795,7 +795,7 @@ export class Klatsch {
    * A browser asked for notifications on this device: its push subscription, checked (a known push service, keys
    * of the right size). At most ten devices per person; the oldest goes. Saving the same endpoint again moves it.
    */
-  savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }, resync = false): 'on' | 'off' {
+  savePushSubscription(userId: string, sub: { endpoint: string; p256dh: string; auth: string }, resync = false): 'on' | 'off' | 'other' {
     const endpoint = pushEndpoint(sub.endpoint);
     if (!endpoint || !pushKeyValid(sub.p256dh) || Buffer.from(sub.auth, 'base64url').length !== 16) {
       throw new KlatschError('invalid', 'This browser sent a subscription Klatsch cannot use.');
@@ -808,7 +808,11 @@ export class Klatsch {
       } else this.db.prepare('DELETE FROM push_off WHERE endpoint = ?').run(endpoint);
       // Someone else's device: never taken over. Signing in as another person here starts with notifications off.
       const holder = this.db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?').get(endpoint) as { user_id: string } | undefined;
-      if (holder && holder.user_id !== userId) throw new KlatschError('invalid', 'This browser gets notifications for someone else. Turn them off there first.');
+      if (holder && holder.user_id !== userId) {
+        // On a visit the page only asks whose this browser's notifications are; it must not offer to turn them off.
+        if (resync) return 'other' as const;
+        throw new KlatschError('invalid', 'This browser gets notifications for someone else. Turn them off there first.');
+      }
       this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, userId);
       this.db.prepare('INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(newId('push'), userId, endpoint, sub.p256dh, sub.auth, Date.now());
       this.db
