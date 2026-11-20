@@ -503,10 +503,11 @@ export const copy = {
   /** The OAuth consent page: an app such as ChatGPT asks to act as the person's agent. */
   oauth: {
     title: (name: string) => `Connect ${name}?`,
-    lead: (name: string, host: string) => `${name}, at ${host}, asks to act as your agent here, as Claude Code does.`,
+    lead: (name: string, host: string) => `${name}, at ${host}, asks to connect to your Klatsch account.`,
     points: [
-      'It can draft sips, look for matches, ask for intros, ask one person, and read your news.',
-      'It can never approve anything: every share, intro, question and answer still waits for you on a page like this.',
+      'It can see who your friends are, open a conversation for you, and draft messages, questions and answers.',
+      'It does not read what your friends write. It learns only that a message arrived and from whom, unless you choose "Draft with my AI" in a conversation.',
+      'It can never send or share anything by itself: every message, question, answer and intro waits for your click.',
       'It stays connected until you revoke it on the Tokens page.',
     ],
     warn: (host: string) => `Connect only if you started this in the app at ${host} just now.`,

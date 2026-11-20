@@ -104,7 +104,7 @@ describe('OAuth: an app connects as the person’s agent after they approve it, 
     assert.equal((await fresh.go(url, { headers: { 'Sec-Fetch-Site': 'cross-site' } })).status, 401);
     const landed = await fresh.go(relay.loginLink(alice));
     assert.match(landed.html, /Connect Test App\?/);
-    assert.match(landed.html, /It can never approve anything/);
+    assert.match(landed.html, /It can never send or share anything by itself/);
     const denied = await fresh.post('/ui/oauth/authorize', { client_id: clientId, redirect_uri: callback, code_challenge: challengeOf(v), code_challenge_method: 'S256', response_type: 'code', state: 'xyz', decision: 'deny' });
     const back = codeFrom(denied.hops);
     assert.equal(back.get('error'), 'access_denied');

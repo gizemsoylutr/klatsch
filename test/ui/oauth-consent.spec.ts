@@ -39,7 +39,7 @@ for (const viewport of [
       const query = new URLSearchParams({ response_type: 'code', client_id, redirect_uri: callback, code_challenge: challenge, code_challenge_method: 'S256', state: 'st' });
       await alice.open(`${relay.base}/ui/oauth/authorize?${query}`);
       await expect(alice.page.getByRole('heading', { level: 1, name: 'Connect Test App?' })).toBeVisible();
-      await expect(alice.page.getByText(/It can never approve anything/)).toBeVisible();
+      await expect(alice.page.getByText(/It can never send or share anything by itself/)).toBeVisible();
       await alice.shot(`oauth-consent-${viewport.width}.png`);
       const [scroll, client] = await alice.page.evaluate<[number, number]>('[document.documentElement.scrollWidth, document.documentElement.clientWidth]');
       expect(scroll).toBeLessThanOrEqual(client);
