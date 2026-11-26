@@ -707,7 +707,8 @@ export class Klatsch {
    * suffix nobody sees; pages show the other person instead. At most 20 waiting ones per person.
    */
   friendCircle(userId: string): string {
-    if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account has the demo friend only.');
+    // A review account may make a link, so a reviewer sees how adding a friend works; nobody can use it to join
+    // (acceptInvite), so the account still reaches no real person.
     // Links still waiting (unused, unexpired, friendship not ended), and how many were made in a day.
     const now = Date.now();
     const waiting = this.db
@@ -1057,6 +1058,7 @@ export class Klatsch {
   acceptInvite(userId: string, invite: Invite): 'joined' | 'already-member' | 'already-friends' {
     // Outsiders hold a review account's password: it reaches no real people, by invite or friend link.
     if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account has the demo friend only.');
+    if (this.isReviewAccount(invite.createdBy)) throw new KlatschError('forbidden', 'This link comes from a Klatsch demo account. It adds nobody.');
     return transaction(this.db, () => {
       if (this.memberRole(userId, invite.circleId)) return 'already-member';
       // A second friend link between the same two people: they are friends already, so the new one is closed unused.
@@ -1940,8 +1942,6 @@ export class Klatsch {
     this.event(row.asker_id, 'ask.answered', askId);
     this.event(row.asker_id, 'ask.answer', askId);
     this.audit(helperId, via, 'ask.answer', askId);
-    // A reviewer answered the demo friend: the next reviewer finds a new question waiting.
-    if (this.isDemo(row.asker_id)) this.seedDemoQuestion(row.asker_id, helperId);
     this.notifyUser(row.asker_id, notifications.other);
   }
 
@@ -1968,7 +1968,6 @@ export class Klatsch {
     this.db.prepare(`UPDATE asks SET state = 'declined', question_for_agent = 0 WHERE id = ?`).run(askId);
     this.event(row.asker_id, 'ask.declined', askId);
     this.audit(helperId, 'web', 'ask.decline', askId);
-    if (this.isDemo(row.asker_id)) this.seedDemoQuestion(row.asker_id, helperId);
   }
 
   /** The asker takes the question back: it leaves the other person's page and their agent's inbox. */

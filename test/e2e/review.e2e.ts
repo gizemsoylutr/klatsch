@@ -1,6 +1,6 @@
 // A directory reviewer's account: a handle and a password (only for the account the operator names), a demo friend
-// that writes back like a friend would, a conversation to start from, and a question from the demo friend always
-// waiting. Nobody else can sign in by password.
+// that writes back like a friend would, a conversation to start from, and a question from the demo friend
+// waiting until it is answered (review-reset brings it back). Nobody else can sign in by password.
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { createInvite, findInvite } from '../../src/auth/invites.ts';
@@ -39,10 +39,12 @@ describe('review account: a password for one account, and a demo friend for the 
     assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').unread, 1);
     assert.equal(await relay.klatsch.passwordSignIn('alice', password), undefined, 'only the review account has a password');
     assert.equal(await relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
-    // Outsiders hold its password: it reaches no real people by itself.
-    assert.throws(() => relay.klatsch.friendCircle(reviewer), /demo friend only/);
-    // Nor by someone else's link: a review account accepts no invites.
+    // Outsiders hold its password: it reaches no real people by itself. It can make a friend link, to see how
+    // that works, but nobody can join by it.
     const aliceId = relay.klatsch.ensureUser('alice', 'Alice');
+    const own = createInvite(relay.db, relay.secret, relay.klatsch.friendCircle(reviewer), reviewer, relay.base);
+    assert.throws(() => relay.klatsch.acceptInvite(aliceId, findInvite(relay.db, relay.secret, new URL(own.link).pathname.split('/').at(-1)!)!), /demo account\. It adds nobody/);
+    // Nor by someone else's link: a review account accepts no invites.
     const link = createInvite(relay.db, relay.secret, relay.klatsch.friendCircle(aliceId), aliceId, relay.base);
     assert.throws(() => relay.klatsch.acceptInvite(reviewer, findInvite(relay.db, relay.secret, new URL(link.link).pathname.split('/').at(-1)!)!), /demo friend only/);
     // Six reviewers in a row still each get a demo question (the demo friend's seeds have no daily limit).
@@ -73,10 +75,10 @@ describe('review account: a password for one account, and a demo friend for the 
     await chat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
     const quote = ((await chat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
     assert.match(quote.quote!, /go for it/, 'an answer as a friend gives one, not an echo');
-    // Answering the demo friend's question leaves a new one for the next reviewer.
+    // Answered, the demo friend's question is done: no new one appears (review-reset brings it back).
     const open = relay.klatsch.asksOf(reviewer).find((k) => k.role === 'helper' && k.state === 'open')!;
     await reviewerBrowser.post(`/ui/asks/${open.id}/answer`, { answer: 'Hello demo friend.' });
-    assert.equal(relay.klatsch.asksOf(reviewer).filter((k) => k.role === 'helper' && k.state === 'open').length, 1);
+    assert.equal(relay.klatsch.asksOf(reviewer).filter((k) => k.role === 'helper' && k.state === 'open').length, 0);
     await chat.close();
   });
 
