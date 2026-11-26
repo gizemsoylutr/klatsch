@@ -211,4 +211,16 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     expect(await page.evaluate<string>('JSON.stringify(window.modelContext)')).toMatch(/The card now shows the conversation/);
     expect(errors).toEqual([]);
   });
+
+  test('a question asked from its card waits there and shows the answer when it comes', async ({ page }) => {
+    const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Which flat would you take?' });
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(asked.raw));
+    await card.getByRole('button', { name: 'Ask', exact: true }).click();
+    await expect(card.getByText('Waiting for their answer…')).toBeVisible();
+    const ask = relay.klatsch.asksOf(eveId).find((k) => k.question === 'Which flat would you take?')!;
+    relay.klatsch.answerByHand(eveId, ask.id, 'The one near the U-Bahn.');
+    await expect(card.getByText('The one near the U-Bahn.')).toBeVisible({ timeout: 15_000 });
+    await expect(card.getByText('Eve answered:')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A question asked from its card in a chat waits there ("Waiting for their answer…") and shows the answer when it comes, also when the chat shows the card again; nobody has to ask the AI what they said.
 - A review account can make a friend link, so a reviewer sees how adding a friend works; nobody can join by it ("This link comes from a Klatsch demo account. It adds nobody."). The demo friend no longer asks its question again once it is answered or declined: `review-reset` brings it back.
 - A message sent from its card in a chat turns the card into the conversation with that friend: it refreshes while on screen, so their reply shows up there without asking the AI again. Every card of a conversation stays live until it expires, so opening it again no longer closes an earlier one.
 - The demo friend of a review account behaves like a friend: it writes back about 20 seconds later (so its reply arrives unread, with a notification) about what it was sent (a booking, a hike, a question of which to pick), answers questions with an opinion instead of echoing them, and a review account starts with a short conversation, ending in the demo friend's invitation to go out on Saturday, and a real question waiting. `klatsch review-reset --user <handle>` puts that back as new (every earlier question between the two goes, so none opens in a chat as if it could still be answered) and keeps the password.

@@ -736,6 +736,16 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
             return { content: [{ type: 'text', text: 'gone' }], structuredContent: { state: 'gone', message: CARD_NOTES.closed } };
           }
         }
+        // A question the person asked from the card: the card waits for the answer and shows it when it comes.
+        if (found.state === 'done' && found.kind === 'approval') {
+          const approval = getApproval(klatsch.db, id, found.ref!);
+          const askId = approval?.action === 'ask_person' && approval.state === 'approved' ? String(approval.result?.ask_id ?? '') : '';
+          const ask = askId ? klatsch.asksOf(id).find((k) => k.id === askId && k.role === 'asker') : undefined;
+          if (ask) {
+            const reply = ask.state === 'answered' ? { from: ask.other.name, text: ask.answer ?? '' } : ask.state === 'declined' ? { from: ask.other.name, text: '', declined: true } : undefined;
+            return { content: [{ type: 'text', text: 'done' }], structuredContent: { state: 'done', message: found.outcome ?? CARD_NOTES.done, ask: reply ?? { waiting: true } } };
+          }
+        }
         let state = found.state;
         // Still open by its key, but decided on the Klatsch page, withdrawn or answered there: gone from the card.
         if (state === 'open' && found.kind === 'approval' && getApproval(klatsch.db, id, found.ref!)?.state !== 'pending') state = 'gone';

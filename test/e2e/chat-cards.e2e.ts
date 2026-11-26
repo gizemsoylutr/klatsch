@@ -16,6 +16,7 @@ describe('cards in the chat: decide and answer without leaving the conversation'
   let alice = '', eve = '';
   let aliceChat: Awaited<ReturnType<typeof agent>>, eveChat: Awaited<ReturnType<typeof agent>>, plain: Awaited<ReturnType<typeof agent>>;
   let askId = '';
+  let askCardKey = '';
 
   before(async () => {
     relay = await startRelay();
@@ -58,6 +59,9 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     assert.match(decided.data.message, /Asked/);
     assert.equal((await aliceChat.call('klatsch_card', { key: card.key, decision: 'approved' })).isError, true, 'once');
     askId = relay.klatsch.asksOf(eve)[0]!.id;
+    askCardKey = card.key;
+    // The card waits for the answer: asked, it says so.
+    assert.deepEqual((await aliceChat.call('klatsch_card_state', { key: card.key })).data.ask, { waiting: true });
   });
 
   it('Eve’s chat shows her the question in a card; her model gets neither the words nor who asked', async () => {
@@ -70,6 +74,8 @@ describe('cards in the chat: decide and answer without leaving the conversation'
     // Alice cannot use Eve's card.
     assert.equal((await aliceChat.call('klatsch_card', { key: card.key, decision: 'answer', answer: 'mine' })).isError, true);
     const sent = await eveChat.call('klatsch_card', { key: card.key, decision: 'answer', answer: ANSWER });
+    // Alice's card shows the answer when it comes, without asking her AI.
+    assert.deepEqual((await aliceChat.call('klatsch_card_state', { key: askCardKey })).data.ask, { from: 'Eve', text: ANSWER });
     assert.match(sent.data.message, /Answer sent/);
     const quote = ((await aliceChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
     assert.equal(quote.quote, ANSWER);

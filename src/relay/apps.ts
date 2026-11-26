@@ -52,6 +52,8 @@ export interface Card {
   flags?: string[];
   /** A file picker: photos, PDFs and voice notes go with the decision. */
   pick?: boolean;
+  /** A question: once asked, the card waits for the answer and shows it. */
+  waitsForAnswer?: boolean;
   /** Files the other person sent, to open in the browser (Klatsch's page, signed in). */
   files?: { name: string; size: number; url: string }[];
   /** Where the person turns on notifications, offered once the card is done: chat apps cannot tell them when an answer comes. */
@@ -91,7 +93,7 @@ export function keyState(db: Db, secret: Buffer, userId: string, key: string): {
     | { user_id: string; kind: 'approval' | 'ask' | 'friend' | 'chat'; ref: string; expires_at: number; used_at: number | null; outcome: string | null }
     | undefined;
   if (!row || row.user_id !== userId) return { state: 'gone' };
-  if (row.used_at !== null) return { state: 'done', ...(row.outcome ? { outcome: row.outcome } : {}) };
+  if (row.used_at !== null) return { state: 'done', kind: row.kind, ref: row.ref, ...(row.outcome ? { outcome: row.outcome } : {}) };
   if (row.expires_at <= Date.now()) return { state: 'gone' };
   return { state: 'open', kind: row.kind, ref: row.ref };
 }
@@ -123,6 +125,7 @@ export function approvalCard(key: string, view: ApprovalView, approval: Approval
         key,
         title: `Ask ${view.to.name} (@${view.to.handle})?`,
         pick: true,
+        waitsForAnswer: true,
         lines: tags(view.tags),
         edit: { label: 'Question', value: view.question, max: 500 },
         note: `Only ${view.to.name} reads this, with your name.`,
@@ -331,6 +334,32 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', message), field, row, said, ...notifyOffer());
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };
+  /** A question asked from the card: it waits there for the answer and shows it when it comes. */
+  const showAnswer = (ask) => {
+    const old = root.querySelector('.answer');
+    if (old) old.remove();
+    const box = el('div', undefined, 'answer');
+    if (ask.waiting) box.append(el('p', 'Waiting for their answer…', 'note'));
+    else if (ask.declined) box.append(el('p', ask.from + ' declined to answer.', 'note'));
+    else box.append(el('p', ask.from + ' answered:', 'who'), el('p', ask.text, 'done'));
+    const brand = root.querySelector('.brand');
+    if (brand && brand.nextSibling) brand.nextSibling.after(box); else root.append(box);
+  };
+  const awaitAnswer = (key) => {
+    if (poll) clearInterval(poll);
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key } });
+        const ask = ((result && result.structuredContent) || {}).ask;
+        if (!ask) { clearInterval(poll); return; }
+        showAnswer(ask);
+        if (!ask.waiting) clearInterval(poll);
+      } catch {}
+    };
+    poll = setInterval(check, 8000);
+    check();
+  };
   /** A conversation: the messages, a box to write back, and a quiet refresh while the card is on screen. */
   let poll = null;
   const renderChat = (card, notice) => {
@@ -481,6 +510,8 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
             return;
           }
           finish(sc.message || 'Done.');
+          // A question just asked: the card waits for the answer.
+          if (action.decision === 'approved' && card.waitsForAnswer) awaitAnswer(card.key);
           // "Draft with my AI": the person's click asks the assistant to start, so it does not wait for a message.
           if (action.decision === 'draft') {
             app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read the question I just sent you from my Klatsch inbox and draft an answer for me to approve.' }] }).catch(() => {});
@@ -503,7 +534,11 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key: card.key, seen: true } });
       const sc = (result && result.structuredContent) || {};
       if (card.chat && sc.state === 'open') { if (sc.chat) card.chat.messages = sc.chat.messages; renderChat(card); return; }
-      if (sc.state === 'done') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'Done.', 'done')); return; }
+      if (sc.state === 'done') {
+        root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'Done.', 'done'));
+        if (sc.ask) { showAnswer(sc.ask); if (sc.ask.waiting) awaitAnswer(card.key); }
+        return;
+      }
       if (sc.state === 'gone') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'This card is no longer open.', 'note')); return; }
     } catch {}
     render(card);
