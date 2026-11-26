@@ -359,10 +359,13 @@ const DEMO = {
   history: [
     { demo: true, text: 'Thanks again for the book tip! I finished it on the train this morning.', hoursAgo: 50 },
     { demo: false, text: 'So glad you liked it! Tell me what you read next.', hoursAgo: 49 },
-    { demo: true, text: 'Hey! Dinner this week? It has been too long. Friday works best for me. You pick the place? Somewhere cozy, not too loud.', hoursAgo: 3 },
+    { demo: true, text: 'Hey! Free on Saturday? It has been too long. Maybe a museum? You pick, I am in for anything.', hoursAgo: 3 },
   ],
   reply(text: string): string {
     const t = text.toLowerCase();
+    if (/\b(museum|exhibition|gallery|ticket|tickets)\b/.test(t)) {
+      return 'Perfect, count me in! Could we meet half an hour later? I have brunch with my sister before. Can’t wait!';
+    }
     if (/\b(book|booked|reserv|table|dinner|lunch|brunch|restaurant|trattoria|bistro|caf[eé])/.test(t)) {
       return 'Perfect, count me in! Could we make it half an hour later? I finish work late that day. I will be there, can’t wait.';
     }

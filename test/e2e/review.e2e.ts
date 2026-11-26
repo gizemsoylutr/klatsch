@@ -35,7 +35,7 @@ describe('review account: a password for one account, and a demo friend for the 
     // A conversation to start from, its last line (the demo friend's) unread.
     const thread = relay.klatsch.conversation(reviewer, '@klatsch-demo').messages;
     assert.equal(thread.length, 3);
-    assert.match(thread.at(-1)!.text, /^Hey! Dinner this week\?.*Friday works best/);
+    assert.match(thread.at(-1)!.text, /^Hey! Free on Saturday\?.*museum/);
     assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').unread, 1);
     assert.equal(await relay.klatsch.passwordSignIn('alice', password), undefined, 'only the review account has a password');
     assert.equal(await relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
@@ -86,6 +86,8 @@ describe('review account: a password for one account, and a demo friend for the 
     const last = () => relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.at(-1)!.text;
     relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'I booked Trattoria Lucia for Friday at 19:30, does that work?');
     assert.match(last(), /half an hour later/);
+    relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'I booked two tickets for the dinosaur exhibition on Saturday at 14:00. Does that work?');
+    assert.match(last(), /meet half an hour later/);
     relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'Yes for the hike! Can you drive?');
     assert.match(last(), /pick you up at 9:00/);
     relay.klatsch.sendMessage(reviewer, '@klatsch-demo', 'Which flat should I take, the one in Neukölln or the one in Mitte?');
