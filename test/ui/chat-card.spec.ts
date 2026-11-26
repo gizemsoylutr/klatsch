@@ -196,4 +196,19 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     expect(ask.attachments.map((f) => f.name)).toEqual(['card.png']);
     expect(errors).toEqual([]);
   });
+
+  test('a message sent from its card turns the card into the conversation, where the reply shows up', async ({ page }) => {
+    const gus = relay.klatsch.ensureUser('gus', 'Gus');
+    relay.klatsch.addMember(relay.klatsch.friendCircle(aliceId), gus, aliceId);
+    const drafted = await aliceChat.call('send_message', { handle: '@gus', text: 'Table at 19:30 on Friday, ok?' });
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(drafted.raw));
+    await card.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(card.getByRole('heading', { name: 'Gus (@gus)' })).toBeVisible();
+    await expect(card.getByRole('list', { name: 'Messages' })).toContainText('Table at 19:30 on Friday, ok?');
+    await expect(card.getByText(/^Sent/)).toBeVisible();
+    relay.klatsch.sendMessage(gus, 'alice', 'Perfect, see you there!', 'dialog');
+    await expect(card.getByRole('list', { name: 'Messages' })).toContainText('Perfect, see you there!', { timeout: 15_000 });
+    expect(await page.evaluate<string>('JSON.stringify(window.modelContext)')).toMatch(/The card now shows the conversation/);
+    expect(errors).toEqual([]);
+  });
 });

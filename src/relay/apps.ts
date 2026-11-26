@@ -75,7 +75,9 @@ export function issueKey(db: Db, secret: Buffer, userId: string, kind: 'approval
   const key = randomToken(32);
   // Old keys go; a question shown again keeps only its newest card working.
   db.prepare('DELETE FROM app_keys WHERE expires_at < ?').run(Date.now() - 24 * 60 * 60 * 1000);
-  db.prepare('DELETE FROM app_keys WHERE user_id = ? AND kind = ? AND ref = ? AND used_at IS NULL').run(userId, kind, ref);
+  // A conversation is different: every card of it stays live until it expires, so the one a sent message turns
+  // into does not close the one opened before.
+  if (kind !== 'chat') db.prepare('DELETE FROM app_keys WHERE user_id = ? AND kind = ? AND ref = ? AND used_at IS NULL').run(userId, kind, ref);
   db.prepare('INSERT INTO app_keys (hash, user_id, kind, ref, expires_at) VALUES (?, ?, ?, ?, ?)').run(keyedHash(secret, `app-key ${key}`), userId, kind, ref, expiresAt);
   return key;
 }
@@ -331,7 +333,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
   };
   /** A conversation: the messages, a box to write back, and a quiet refresh while the card is on screen. */
   let poll = null;
-  const renderChat = (card) => {
+  const renderChat = (card, notice) => {
     current = card;
     const chat = card.chat;
     const list = el('ol', undefined, 'thread');
@@ -392,6 +394,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       } catch { draft.disabled = false; said.textContent = 'That did not work.'; }
     });
     const row = el('div', undefined, 'row'); row.append(page, draft, send);
+    if (notice) said.textContent = notice;
     root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), list, label, box, flabel, picker, row, said, el('p', card.note, 'note'), ...notifyOffer());
     // New messages show up while the card is on screen; reading them here marks them read.
     if (poll) clearInterval(poll);
@@ -471,6 +474,12 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
           }
           const sc = result.structuredContent || {};
           if (typeof sc.link === 'string') { showLink(sc.message || 'Your link', sc.link); return; }
+          // A message sent: the card becomes the conversation, so the friend's reply shows up here as it comes.
+          if (sc.card && sc.card.chat) {
+            renderChat(sc.card, sc.message || 'Sent.');
+            app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: ' + (sc.message || 'Sent.') + ' The card now shows the conversation; a reply appears there.' }] }).catch(() => {});
+            return;
+          }
           finish(sc.message || 'Done.');
           // "Draft with my AI": the person's click asks the assistant to start, so it does not wait for a message.
           if (action.decision === 'draft') {

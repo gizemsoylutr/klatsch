@@ -51,6 +51,13 @@ describe('messages: a conversation with a friend, from any chat or the Klatsch p
     assert.equal(relay.klatsch.conversation(eve, 'alice').messages.length, 0, 'nothing went yet');
     const sent = await aliceChat.call('klatsch_card', { key: card.key, decision: 'approved', text: HELLO });
     assert.match(sent.data.message, /Sent/);
+    // The card goes on as the conversation with Eve, so her reply shows up in it without asking the AI again.
+    const chat = sent.data.card as { key: string; chat: { with: { handle: string }; messages: { mine: boolean; text: string }[] } };
+    assert.equal(chat.chat.with.handle, 'eve');
+    assert.deepEqual(chat.chat.messages.map((m) => [m.mine, m.text]), [[true, HELLO]]);
+    const later = await aliceChat.call('klatsch_card_state', { key: chat.key });
+    assert.equal(later.data.state, 'open', 'it refreshes like any conversation card, so a reply appears in it');
+    assert.deepEqual(later.data.chat.messages.map((m: { text: string }) => m.text), [HELLO]);
     const view = relay.klatsch.conversation(eve, 'alice');
     assert.deepEqual(view.messages.map((m) => [m.mine, m.text]), [[false, HELLO]], 'her edit, not the draft');
     assert.equal(view.unread, 1);

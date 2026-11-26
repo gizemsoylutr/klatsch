@@ -630,6 +630,8 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           const said = (message: string) => ({ content: [{ type: 'text' as const, text: message }], structuredContent: { message } });
           // A friend link: made by the person's click, returned to the card only (the card shows it to copy).
           let link: string | undefined;
+          // A message sent from its card: the card goes on as the conversation with that friend.
+          let sentTo: string | undefined;
           const files =
             input.decision === 'approved' || input.decision === 'answer' || input.decision === 'reply' ? (input.files ?? []).map((f) => ({ name: f.name, bytes: Buffer.from(f.data, 'base64') })) : [];
           // A conversation's key stays for every reply in it (each one the person's own click), until it expires.
@@ -673,6 +675,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
                 ...(input.text !== undefined && decision === 'approved' ? { text: input.text } : {}),
               });
               // Files go with the question just asked, or the answer just sent, in the same transaction.
+              if (decision === 'approved' && approval.action === 'send_message') sentTo = approval.payload.handle;
               if (decision === 'approved' && files.length && approval.action === 'send_message') {
                 for (const file of files) klatsch.attachToMessage(id, String(result?.message_id ?? ''), file, 'dialog');
               } else if (decision === 'approved' && files.length) {
@@ -696,6 +699,11 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           });
           keepOutcome(klatsch.db, secret, input.key, message);
           if (link) return { content: [{ type: 'text' as const, text: message }], structuredContent: { message, link } };
+          if (sentTo) {
+            const { other } = klatsch.friendFor(id, sentTo);
+            const card = chatCard(issueKey(klatsch.db, secret, id, 'chat', other.id, Date.now() + CHAT_KEY_TTL_MS), chatPayload(id, other.handle, true));
+            return { content: [{ type: 'text' as const, text: message }], structuredContent: { message, card } };
+          }
           return said(message);
         } catch (error) {
           return failure(error);
