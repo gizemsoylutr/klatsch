@@ -358,8 +358,8 @@ const DEMO = {
   /** The conversation a review account starts with, oldest first; the last line, the demo friend's, is unread. */
   history: [
     { demo: true, text: 'Thanks again for the book tip! I finished it on the train this morning.', hoursAgo: 50 },
-    { demo: false, text: 'So glad you liked it! Dinner this week? It has been too long.', hoursAgo: 49 },
-    { demo: true, text: 'Yes please! Friday works best for me. You pick the place? Somewhere cozy, not too loud.', hoursAgo: 26 },
+    { demo: false, text: 'So glad you liked it! Tell me what you read next.', hoursAgo: 49 },
+    { demo: true, text: 'Hey! Dinner this week? It has been too long. Friday works best for me. You pick the place? Somewhere cozy, not too loud.', hoursAgo: 3 },
   ],
   reply(text: string): string {
     const t = text.toLowerCase();
@@ -1583,7 +1583,14 @@ export class Klatsch {
         this.db.prepare('DELETE FROM events WHERE ref = ?').run(id);
       }
       this.db.prepare(`DELETE FROM messages WHERE ${between}`).run(demo.id, reviewer.id, reviewer.id, demo.id);
-      this.db.prepare(`UPDATE asks SET state = 'withdrawn' WHERE state = 'open' AND ((asker_id = ? AND helper_id = ?) OR (asker_id = ? AND helper_id = ?))`).run(demo.id, reviewer.id, reviewer.id, demo.id);
+      // Every question between the two goes too, with its files and events: a closed one left in the inbox would
+      // open in a chat as if it could still be answered.
+      const asks = `(asker_id = ? AND helper_id = ?) OR (asker_id = ? AND helper_id = ?)`;
+      for (const { id } of this.db.prepare(`SELECT id FROM asks WHERE ${asks}`).all(demo.id, reviewer.id, reviewer.id, demo.id) as { id: string }[]) {
+        this.db.prepare('DELETE FROM attachments WHERE ask_id = ?').run(id);
+        this.db.prepare('DELETE FROM events WHERE ref = ?').run(id);
+      }
+      this.db.prepare(`DELETE FROM asks WHERE ${asks}`).run(demo.id, reviewer.id, reviewer.id, demo.id);
       this.seedDemoConversation(demo.id, reviewer.id, this.friendshipOf(reviewer.id, demo.id)!);
       this.seedDemoQuestion(demo.id, reviewer.id);
       this.audit(reviewer.id, 'cli', 'review.reset');

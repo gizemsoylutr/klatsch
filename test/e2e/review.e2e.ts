@@ -35,7 +35,7 @@ describe('review account: a password for one account, and a demo friend for the 
     // A conversation to start from, its last line (the demo friend's) unread.
     const thread = relay.klatsch.conversation(reviewer, '@klatsch-demo').messages;
     assert.equal(thread.length, 3);
-    assert.match(thread.at(-1)!.text, /Friday works best/);
+    assert.match(thread.at(-1)!.text, /^Hey! Dinner this week\?.*Friday works best/);
     assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').unread, 1);
     assert.equal(await relay.klatsch.passwordSignIn('alice', password), undefined, 'only the review account has a password');
     assert.equal(await relay.klatsch.passwordSignIn('reviewer', 'wrong'), undefined);
@@ -107,8 +107,10 @@ describe('review account: a password for one account, and a demo friend for the 
 
   it('review-reset puts the demo back as new and keeps the password', async () => {
     relay.klatsch.resetReviewDemo('@reviewer');
+    assert.equal((relay.db.prepare("SELECT COUNT(*) n FROM events WHERE user_id = ? AND read_at IS NULL").get(reviewer) as { n: number }).n, 2, 'one message, one question');
     assert.equal(relay.klatsch.conversation(reviewer, '@klatsch-demo').messages.length, 3);
     assert.equal(relay.klatsch.asksOf(reviewer).filter((k) => k.state === 'open').length, 1);
+    assert.equal(relay.klatsch.asksOf(reviewer).length, 1, 'closed questions are gone, so none opens in a chat again');
     assert.ok(await relay.klatsch.passwordSignIn('reviewer', password));
     assert.throws(() => relay.klatsch.resetReviewDemo('alice'), /not a review account/);
   });

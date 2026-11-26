@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The demo friend of a review account behaves like a friend: it writes back about 20 seconds later (so its reply arrives unread, with a notification) about what it was sent (a booking, a hike, a question of which to pick), answers questions with an opinion instead of echoing them, and a review account starts with a short conversation and a real question waiting. `klatsch review-reset --user <handle>` puts that back as new and keeps the password.
+- The demo friend of a review account behaves like a friend: it writes back about 20 seconds later (so its reply arrives unread, with a notification) about what it was sent (a booking, a hike, a question of which to pick), answers questions with an opinion instead of echoing them, and a review account starts with a short conversation, ending in the demo friend's dinner invitation, and a real question waiting. `klatsch review-reset --user <handle>` puts that back as new (every earlier question between the two goes, so none opens in a chat as if it could still be answered) and keeps the password.
 - The consent page says what a connected chat app can do (see friends, open conversations, draft; never read a friend's words unless "Draft with my AI"; never send or share by itself), and lets the app's callback redirect on to another of its https sites, which ChatGPT's developer platform does.
 - Settings on a browser whose notifications belong to another account says so, and offers neither Turn on nor Turn off here.
 - A support page (`/support`, linked in the footer, on a relay that names its operator): how to reach the operator, where bugs go, what to check when notifications do not show, how messaging, chat apps and removing things work. The privacy notice lists messages among what is kept.
