@@ -676,6 +676,18 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
               });
               // Files go with the question just asked, or the answer just sent, in the same transaction.
               if (decision === 'approved' && approval.action === 'send_message') sentTo = approval.payload.handle;
+              // An answer to a friend: the card goes on as the conversation with them, too.
+              if (decision === 'approved' && approval.action === 'answer_ask') {
+                const asker = klatsch.asksOf(id).find((k) => k.id === approval.payload.ask_id && k.role === 'helper')?.other.handle;
+                if (asker) {
+                  try {
+                    klatsch.friendFor(id, asker);
+                    sentTo = asker;
+                  } catch {
+                    // Asked through a shared circle, not a friend: no conversation to show.
+                  }
+                }
+              }
               if (decision === 'approved' && files.length && approval.action === 'send_message') {
                 for (const file of files) klatsch.attachToMessage(id, String(result?.message_id ?? ''), file, 'dialog');
               } else if (decision === 'approved' && files.length) {

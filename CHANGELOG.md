@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An answer sent from its card in a chat turns the card into the conversation with the friend who asked, like a sent message. The demo friend writes back to the answer to its question ("Great! I will pick you up at 9:00…").
 - A question asked from its card in a chat waits there ("Waiting for their answer…") and shows the answer when it comes, also when the chat shows the card again; nobody has to ask the AI what they said.
 - A review account can make a friend link, so a reviewer sees how adding a friend works; nobody can join by it ("This link comes from a Klatsch demo account. It adds nobody."). The demo friend no longer asks its question again once it is answered or declined: `review-reset` brings it back.
 - A message sent from its card in a chat turns the card into the conversation with that friend: it refreshes while on screen, so their reply shows up there without asking the AI again. Every card of a conversation stays live until it expires, so opening it again no longer closes an earlier one.

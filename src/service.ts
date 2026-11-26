@@ -361,6 +361,11 @@ const DEMO = {
     { demo: false, text: 'So glad you liked it! Tell me what you read next.', hoursAgo: 49 },
     { demo: true, text: 'Hey! Free on Saturday? It has been too long. Maybe a museum? You pick, I am in for anything.', hoursAgo: 3 },
   ],
+  /** What it writes back once its question (the hike) is answered. */
+  answered(text: string): string {
+    if (/\b(no|not|can't|cannot|can’t|sorry|another time)\b/i.test(text)) return 'No worries, another time! Let me know when you are free.';
+    return 'Great! I will pick you up at 9:00. Bring a jacket, it gets windy at the top.';
+  },
   reply(text: string): string {
     const t = text.toLowerCase();
     if (/\b(museum|exhibition|gallery|ticket|tickets)\b/.test(t)) {
@@ -1945,6 +1950,11 @@ export class Klatsch {
     this.event(row.asker_id, 'ask.answered', askId);
     this.event(row.asker_id, 'ask.answer', askId);
     this.audit(helperId, via, 'ask.answer', askId);
+    // The demo friend writes back to the answer in the conversation, as a friend would.
+    if (this.isDemo(row.asker_id) && this.friendshipOf(row.asker_id, helperId)) {
+      const handle = this.user(helperId).handle;
+      this.asDemo(() => this.sendMessage(row.asker_id, handle, DEMO.answered(answer), 'cli'));
+    }
     this.notifyUser(row.asker_id, notifications.other);
   }
 
