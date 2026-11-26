@@ -175,6 +175,24 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       max: 2000,
     };
   };
+  /**
+   * A question the person answered: what was asked, their answer, and the asker's first message after it, if they
+   * are friends. Only for the person who answered.
+   */
+  const answeredView = (userId: string, askId: string): { from: string; question: string; answer: string; friend: boolean; reply?: string } | undefined => {
+    const ask = klatsch.asksOf(userId).find((k) => k.id === askId && k.role === 'helper' && k.state === 'answered');
+    if (!ask) return undefined;
+    const at = (klatsch.db.prepare('SELECT answered_at FROM asks WHERE id = ?').get(askId) as { answered_at: number | null } | undefined)?.answered_at ?? 0;
+    let reply: string | undefined;
+    let friend = false;
+    try {
+      reply = chatPayload(userId, ask.other.handle, false).messages.find((m) => !m.mine && m.at >= at)?.text;
+      friend = true;
+    } catch {
+      // Not friends: answered through a shared circle, so there is no conversation to wait on.
+    }
+    return { from: ask.other.name, question: ask.question, answer: ask.answer ?? '', friend, ...(reply ? { reply } : {}) };
+  };
   /** Whether this request can become an MCP task: only then is `watch` worth suggesting. */
   const canWatch = (): boolean => {
     const extensions = (server.server.getClientCapabilities() as { extensions?: Record<string, unknown> } | undefined)?.extensions;
@@ -632,6 +650,8 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           let link: string | undefined;
           // A message sent from its card: the card goes on as the conversation with that friend.
           let sentTo: string | undefined;
+          // An answer sent from its card: the card shows the question, the answer, and the reply when it comes.
+          let answeredAsk: string | undefined;
           const files =
             input.decision === 'approved' || input.decision === 'answer' || input.decision === 'reply' ? (input.files ?? []).map((f) => ({ name: f.name, bytes: Buffer.from(f.data, 'base64') })) : [];
           // A conversation's key stays for every reply in it (each one the person's own click), until it expires.
@@ -676,18 +696,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
               });
               // Files go with the question just asked, or the answer just sent, in the same transaction.
               if (decision === 'approved' && approval.action === 'send_message') sentTo = approval.payload.handle;
-              // An answer to a friend: the card goes on as the conversation with them, too.
-              if (decision === 'approved' && approval.action === 'answer_ask') {
-                const asker = klatsch.asksOf(id).find((k) => k.id === approval.payload.ask_id && k.role === 'helper')?.other.handle;
-                if (asker) {
-                  try {
-                    klatsch.friendFor(id, asker);
-                    sentTo = asker;
-                  } catch {
-                    // Asked through a shared circle, not a friend: no conversation to show.
-                  }
-                }
-              }
+              if (decision === 'approved' && approval.action === 'answer_ask') answeredAsk = approval.payload.ask_id;
               if (decision === 'approved' && files.length && approval.action === 'send_message') {
                 for (const file of files) klatsch.attachToMessage(id, String(result?.message_id ?? ''), file, 'dialog');
               } else if (decision === 'approved' && files.length) {
@@ -699,6 +708,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
             }
             if (input.decision === 'answer') {
               klatsch.answerByHand(id, used.ref, input.answer ?? '');
+              answeredAsk = used.ref;
               for (const file of files) klatsch.attach(id, used.ref, file, 'dialog');
               return CARD_NOTES.answered;
             }
@@ -711,6 +721,10 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           });
           keepOutcome(klatsch.db, secret, input.key, message);
           if (link) return { content: [{ type: 'text' as const, text: message }], structuredContent: { message, link } };
+          if (answeredAsk) {
+            const answered = answeredView(id, answeredAsk);
+            if (answered) return { content: [{ type: 'text' as const, text: message }], structuredContent: { message, answered } };
+          }
           if (sentTo) {
             const { other } = klatsch.friendFor(id, sentTo);
             const card = chatCard(issueKey(klatsch.db, secret, id, 'chat', other.id, Date.now() + CHAT_KEY_TTL_MS), chatPayload(id, other.handle, true));
@@ -747,6 +761,13 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           } catch {
             return { content: [{ type: 'text', text: 'gone' }], structuredContent: { state: 'gone', message: CARD_NOTES.closed } };
           }
+        }
+        // An answer the person sent from the card: the question, their answer, and the reply once it comes.
+        if (found.state === 'done' && (found.kind === 'ask' || found.kind === 'approval')) {
+          const approval = found.kind === 'approval' ? getApproval(klatsch.db, id, found.ref!) : undefined;
+          const askId = found.kind === 'ask' ? found.ref! : approval?.action === 'answer_ask' && approval.state === 'approved' ? approval.payload.ask_id : undefined;
+          const answered = askId ? answeredView(id, askId) : undefined;
+          if (answered) return { content: [{ type: 'text', text: 'done' }], structuredContent: { state: 'done', message: found.outcome ?? CARD_NOTES.done, answered } };
         }
         // A question the person asked from the card: the card waits for the answer and shows it when it comes.
         if (found.state === 'done' && found.kind === 'approval') {

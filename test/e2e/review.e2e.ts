@@ -119,14 +119,15 @@ describe('review account: a password for one account, and a demo friend for the 
     assert.throws(() => relay.klatsch.resetReviewDemo('alice'), /not a review account/);
   });
 
-  it('answering the demo friend’s question from the card turns it into the conversation, where the friend writes back', async () => {
+  it('answering the demo friend’s question from the card shows the question, the answer and the friend’s reply', async () => {
     const chat = await agent(relay, relay.chatAppToken(reviewer), { dialogs: false, cards: true });
     const open = relay.klatsch.asksOf(reviewer).find((k) => k.role === 'helper' && k.state === 'open')!;
     const drafted = await chat.call('answer_ask', { ask_id: open.id, answer: 'Yes, still on! Pick me up at 9?' });
     const sent = await chat.call('klatsch_card', { key: drafted.meta['dev.klatsch/card'].key, decision: 'approved' });
-    const card = sent.data.card as { chat: { with: { handle: string }; messages: { mine: boolean; text: string }[] } };
-    assert.equal(card.chat.with.handle, 'klatsch-demo');
-    assert.match(card.chat.messages.at(-1)!.text, /pick you up at 9:00/, 'the demo friend wrote back');
+    const answered = sent.data.answered as { from: string; question: string; answer: string; reply?: string };
+    assert.match(answered.question, /hike on Sunday/);
+    assert.equal(answered.answer, 'Yes, still on! Pick me up at 9?');
+    assert.match(answered.reply ?? '', /pick you up at 9:00/, 'the demo friend wrote back, shown under the answer');
     await chat.close();
   });
 

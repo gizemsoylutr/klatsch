@@ -335,6 +335,55 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };
   /** A question asked from the card: it waits there for the answer and shows it when it comes. */
+  /** "Draft with my AI": first a word on how to answer and in what tone, then the assistant drafts. */
+  const guide = (onGo) => {
+    const panel = el('div', undefined, 'guide');
+    const label = el('label', 'How should your AI answer? (optional)'); label.htmlFor = 'how';
+    const how = el('input'); how.type = 'text'; how.id = 'how'; how.maxLength = 300;
+    how.placeholder = 'e.g. "Yes, pick me up at 9" or "No, I am busy that day"';
+    let tone = '';
+    const tones = el('div', undefined, 'row'); tones.style.justifyContent = 'flex-start';
+    const toneButtons = ['Friendly', 'Short', 'Formal'].map((t) => {
+      const b = el('button', t); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', () => {
+        tone = tone === t ? '' : t;
+        toneButtons.forEach((x) => { const on = x.textContent === tone; x.setAttribute('aria-pressed', String(on)); x.className = on ? 'primary' : ''; });
+      });
+      return b;
+    });
+    tones.append(...toneButtons);
+    const go = el('button', 'Draft it', 'primary'); go.type = 'button';
+    go.addEventListener('click', () => {
+      go.disabled = true;
+      const words = how.value.trim();
+      onGo((words ? 'How I want to answer: ' + words + '.' : '') + (tone ? ' Tone: ' + tone.toLowerCase() + '.' : ''));
+    });
+    const row = el('div', undefined, 'row'); row.append(go);
+    panel.append(label, how, el('p', 'Tone', 'who'), tones, row);
+    setTimeout(() => how.focus(), 0);
+    return panel;
+  };
+  /** An answer sent from the card: the question, the answer, and the friend's reply when it comes. */
+  const showAnswered = (a, message) => {
+    const parts = [el('p', 'Klatsch', 'brand'), el('h1', 'You answered ' + a.from)];
+    if (message) parts.push(el('p', message, 'note'));
+    parts.push(el('p', 'Their question', 'who'), el('p', a.question, 'text'), el('p', 'Your answer', 'who'), el('p', a.answer, 'done'));
+    if (a.reply) parts.push(el('p', a.from + ' wrote back', 'who'), el('p', a.reply, 'done'));
+    else if (a.friend) parts.push(el('p', 'Waiting for ' + a.from + ' to reply…', 'note'));
+    root.replaceChildren(...parts, ...notifyOffer());
+  };
+  const awaitReply = (key) => {
+    if (poll) clearInterval(poll);
+    poll = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const result = await app.callServerTool({ name: 'klatsch_card_state', arguments: { key } });
+        const a = ((result && result.structuredContent) || {}).answered;
+        if (!a) { clearInterval(poll); return; }
+        if (a.reply) { clearInterval(poll); showAnswered(a, ''); }
+      } catch {}
+    }, 8000);
+  };
   const showAnswer = (ask) => {
     const old = root.querySelector('.answer');
     if (old) old.remove();
@@ -413,14 +462,18 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       } catch { said.textContent = 'That did not work. Try again, or write on your Klatsch page.'; }
       finally { send.disabled = false; }
     });
-    draft.addEventListener('click', async () => {
+    draft.addEventListener('click', () => {
       draft.disabled = true;
-      try {
-        const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: 'draft' } });
-        if (result.isError) { fail(result); draft.disabled = false; return; }
-        said.textContent = (result.structuredContent || {}).message || 'Sent to your AI.';
-        app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read my conversation with @' + chat.with.handle + ' from my Klatsch inbox and draft a reply for me to send.' }] }).catch(() => {});
-      } catch { draft.disabled = false; said.textContent = 'That did not work.'; }
+      const panel = guide(async (how) => {
+        try {
+          const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: 'draft' } });
+          if (result.isError) { fail(result); draft.disabled = false; panel.remove(); return; }
+          panel.remove();
+          said.textContent = (result.structuredContent || {}).message || 'Sent to your AI.';
+          app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read my conversation with @' + chat.with.handle + ' from my Klatsch inbox and draft a reply for me to send.' + (how ? ' ' + how : '') }] }).catch(() => {});
+        } catch { draft.disabled = false; panel.remove(); said.textContent = 'That did not work.'; }
+      });
+      row.after(panel);
     });
     const row = el('div', undefined, 'row'); row.append(page, draft, send);
     if (notice) said.textContent = notice;
@@ -480,7 +533,16 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     const buttons = card.actions.map((action) => {
       const b = el('button', action.label, action.primary ? 'primary' : '');
       b.type = 'button';
-      b.addEventListener('click', async () => {
+      b.addEventListener('click', () => {
+        // "Draft with my AI": ask first how to answer, then draft.
+        if (action.decision === 'draft') {
+          if (root.querySelector('.guide')) return;
+          row.after(guide((how) => run(how)));
+          return;
+        }
+        run('');
+      });
+      const run = async (how) => {
         const answer = box ? box.value.trim() : '';
         if (action.decision === 'answer' && !answer) { box.focus(); return; }
         buttons.forEach((x) => (x.disabled = true));
@@ -503,6 +565,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
           }
           const sc = result.structuredContent || {};
           if (typeof sc.link === 'string') { showLink(sc.message || 'Your link', sc.link); return; }
+          // An answer sent: the card shows the question, the answer, and the reply when it comes.
+          if (sc.answered) {
+            showAnswered(sc.answered, sc.message || '');
+            if (!sc.answered.reply && sc.answered.friend) awaitReply(card.key);
+            app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: ' + (sc.message || 'Answer sent.') + ' The card shows the reply when it comes.' }] }).catch(() => {});
+            return;
+          }
           // A message sent: the card becomes the conversation, so the friend's reply shows up here as it comes.
           if (sc.card && sc.card.chat) {
             renderChat(sc.card, sc.message || 'Sent.');
@@ -514,13 +583,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
           if (action.decision === 'approved' && card.waitsForAnswer) awaitAnswer(card.key);
           // "Draft with my AI": the person's click asks the assistant to start, so it does not wait for a message.
           if (action.decision === 'draft') {
-            app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read the question I just sent you from my Klatsch inbox and draft an answer for me to approve.' }] }).catch(() => {});
+            app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read the question I just sent you from my Klatsch inbox and draft an answer for me to approve.' + (how ? ' ' + how : '') }] }).catch(() => {});
           }
         } catch (error) {
           buttons.forEach((x) => (x.disabled = false));
           root.append(el('p', 'That did not work. Try again, or decide on your Klatsch page.', 'flags'));
         }
-      });
+      };
       return b;
     });
     row.append(...buttons);
@@ -537,6 +606,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       if (sc.state === 'done') {
         root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'Done.', 'done'));
         if (sc.ask) { showAnswer(sc.ask); if (sc.ask.waiting) awaitAnswer(card.key); }
+        if (sc.answered) { showAnswered(sc.answered, sc.message || ''); if (!sc.answered.reply && sc.answered.friend) awaitReply(card.key); }
         return;
       }
       if (sc.state === 'gone') { root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), el('p', sc.message || 'This card is no longer open.', 'note')); return; }

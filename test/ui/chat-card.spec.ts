@@ -145,8 +145,13 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     const shown = await eveChat.call('show_question', { ask_id: ask.id });
     const { card, errors } = await openCard(page, eveChat, JSON.parse(shown.raw));
     await card.getByRole('button', { name: 'Draft with my AI' }).click();
+    // First a word on how to answer, and a tone; the assistant is asked to draft with them.
+    await card.getByLabel('How should your AI answer? (optional)').fill('Yes, the one by the river');
+    await card.getByRole('button', { name: 'Short' }).click();
+    await card.getByRole('button', { name: 'Draft it' }).click();
     await expect(card.getByText(/Sent to your AI/)).toBeVisible();
     await expect.poll(() => page.evaluate<number>('(window.messages || []).length')).toBe(1);
+    expect(await page.evaluate<string>('JSON.stringify(window.messages)')).toMatch(/How I want to answer: Yes, the one by the river\. Tone: short\./);
     const quote = ((await eveChat.call('inbox')).data.events as { type?: string; quote?: string }[]).find((e) => e.type === 'quote')!;
     expect(quote.quote).toBe('Draft this one?');
     expect(errors).toEqual([]);
@@ -221,6 +226,26 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     relay.klatsch.answerByHand(eveId, ask.id, 'The one near the U-Bahn.');
     await expect(card.getByText('The one near the U-Bahn.')).toBeVisible({ timeout: 15_000 });
     await expect(card.getByText('Eve answered:')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('an answer sent from its card shows the question, the answer, and the reply when it comes', async ({ page }) => {
+    const gusId = relay.klatsch.ensureUser('gus', 'Gus');
+    try { relay.klatsch.addMember(relay.klatsch.friendCircle(aliceId), gusId, aliceId); } catch {}
+    const gusChat = await agent(relay, relay.chatAppToken(gusId), { dialogs: false, cards: true });
+    const asked = await gusChat.call('ask_person', { handle: '@alice', question: 'Hike on Sunday?' });
+    await gusChat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
+    await gusChat.close();
+    const askId = relay.klatsch.asksOf(aliceId).find((k) => k.question === 'Hike on Sunday?')!.id;
+    const shown = await aliceChat.call('show_question', { ask_id: askId });
+    const { card, errors } = await openCard(page, aliceChat, JSON.parse(shown.raw));
+    await card.getByLabel('Your answer').fill('Yes! Pick me up at 9.');
+    await card.getByRole('button', { name: 'Send answer' }).click();
+    await expect(card.getByRole('heading', { name: 'You answered Gus' })).toBeVisible();
+    await expect(card.getByText('Hike on Sunday?')).toBeVisible();
+    await expect(card.getByText('Waiting for Gus to reply…')).toBeVisible();
+    relay.klatsch.sendMessage(gusId, 'alice', 'Great, see you at 9!', 'dialog');
+    await expect(card.getByText('Great, see you at 9!')).toBeVisible({ timeout: 15_000 });
     expect(errors).toEqual([]);
   });
 });
