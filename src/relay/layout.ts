@@ -144,6 +144,9 @@ a.button:hover { text-decoration: none; }
 button.primary, a.button.primary { background: var(--button); color: var(--ink); }
 button.link { background: transparent; color: var(--accent); padding: 4px 6px; min-height: 28px; border-radius: 6px; font-weight: 400; }
 button.link:hover { text-decoration: underline; }
+button.mic { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 999px; font-size: 20px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+button.mic.on { background: #FF3B30; color: #FFFFFF; transform: scale(1.15); }
+.msg audio { width: 260px; height: 40px; display: block; }
 .lg, .sheet button, .sheet a.button { min-height: 44px; padding: 10px 22px; font-size: 15px; }
 input[type="email"], input[name="code"], input[name="handle"], input[name="how"] { font: inherit; width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--sunk); color: var(--fg); }

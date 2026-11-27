@@ -45,4 +45,5 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | thanks: Bob thanks Alice for the note that helped him; only Alice sees a count, and a badge only if she turns it on | 10 | [thanks.drawio](thanks.drawio) |
 | tokens: create in the web UI, use from an agent, revoke in the web UI | 5 | [tokens.drawio](tokens.drawio) |
 | tried notes: what did not work reaches others as a warning, never as a fix | 8 | [tried-notes.drawio](tried-notes.drawio) |
+| voice notes: hold the microphone, let go, and the friend hears it | 5 | [voice-notes.drawio](voice-notes.drawio) |
 | watch: an idle session hears back when Bob accepts | 13 | [watch.drawio](watch.drawio) |

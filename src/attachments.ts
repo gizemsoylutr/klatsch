@@ -32,7 +32,8 @@ export function sniff(bytes: Uint8Array): AttachmentKind | undefined {
   // hold video; the file is served as audio/mp4, sandboxed, which a browser plays as sound or not at all.
   if (at(bytes, 4, 'ftyp')) {
     const brand = String.fromCharCode(...bytes.subarray(8, 12));
-    if (['M4A ', 'M4B ', 'mp42', 'isom', 'dash'].includes(brand)) return { mime: 'audio/mp4', kind: 'audio' };
+    // iso5/iso6/mp41: what a browser's own recorder writes (Safari's voice notes).
+    if (['M4A ', 'M4B ', 'mp42', 'mp41', 'isom', 'iso5', 'iso6', 'dash'].includes(brand)) return { mime: 'audio/mp4', kind: 'audio' };
   }
   return undefined;
 }

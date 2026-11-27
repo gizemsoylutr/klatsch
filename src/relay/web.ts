@@ -51,6 +51,7 @@ import {
 import { copy } from './copy.ts';
 import { PASSKEY_SCRIPT } from './passkey-script.ts';
 import { ICON_SVG, MANIFEST, PUSH_SCRIPT, SERVICE_WORKER } from './push-script.ts';
+import { RECORD_SCRIPT } from './record-script.ts';
 import { vapidFromSecret } from '../notify/push.ts';
 import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer } from './layout.ts';
 
@@ -197,6 +198,8 @@ type Env = { Variables: { userId: string; csrf: string; session: string } };
 const PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
 /** The pages with a passkey button: the same, plus the one same-origin script and its posts back to the relay. */
 const SCRIPT_CSP = "default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+/** A conversation page: the recorder script (/ui/record.js), and voice notes that play from this relay. */
+const CHAT_CSP = SCRIPT_CSP.replace("img-src 'self' data:;", "img-src 'self' data:; media-src 'self';");
 
 /**
  * The OAuth consent page: its form is answered with a redirect back to the client, and browsers check that
@@ -213,9 +216,10 @@ const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redir
 /** The headers of every page the relay serves to a browser: the web UI and the landing page at `/`. */
 export const pageHeaders: MiddlewareHandler = async (c, next) => {
   await next();
-  // Only a page with a passkey button set the script policy itself (sign-in and Settings); it keeps it, all else gets none.
+  // Only pages that run a script of ours set their own policy (passkeys, notifications, the voice note recorder on a
+  // conversation); they keep it, all else gets none.
   const own = c.res.headers.get('Content-Security-Policy');
-  c.header('Content-Security-Policy', own === SCRIPT_CSP || own === FILE_CSP || (own !== null && own.startsWith(CONSENT_CSP_START)) ? own : PAGE_CSP);
+  c.header('Content-Security-Policy', own === SCRIPT_CSP || own === CHAT_CSP || own === FILE_CSP || (own !== null && own.startsWith(CONSENT_CSP_START)) ? own : PAGE_CSP);
   // same-origin, not no-referrer: under no-referrer browsers send `Origin: null` on form posts,
   // which the Origin checks then refuse. The login token still never leaves this origin.
   c.header('Referrer-Policy', 'same-origin');
@@ -975,6 +979,10 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   });
 
   // Notifications on a phone or browser (Web Push): the page script, the service worker, and what a home screen needs.
+  web.get('/record.js', (c) => {
+    c.header('Content-Type', 'text/javascript; charset=utf-8');
+    return c.body(RECORD_SCRIPT);
+  });
   web.get('/push.js', (c) => {
     c.header('Content-Type', 'text/javascript; charset=utf-8');
     return c.body(PUSH_SCRIPT);
@@ -2044,12 +2052,17 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p>${homeLink}`), 404);
       throw error;
     }
-    return show(c, view.other.name, 'home', chatPage(view, c.get('csrf'), !klatsch.isGuest(c.get('userId'))));
+    const files = !klatsch.isGuest(c.get('userId'));
+    // The voice note button runs /ui/record.js, and voice notes play inline: both same-origin.
+    c.header('Content-Security-Policy', CHAT_CSP);
+    return show(c, view.other.name, 'home', chatPage(view, c.get('csrf'), files));
   });
   web.post('/chat/:handle', async (c) => {
     const form = await c.req.parseBody({ all: true });
-    const text = typeof form.text === 'string' ? form.text : '';
+    const typed = typeof form.text === 'string' ? form.text : '';
     const files = await formFiles(form);
+    // A voice note or a file alone, like in a messenger: the message says what it is, for Home and the friend's AI.
+    const text = typed.trim() || !files.length ? typed : form.voice === '1' ? copy.chat.voiceNote : copy.chat.fileOnly;
     const back = `/ui/chat/${encodeURIComponent(normalHandle(c.req.param('handle')))}`;
     return attempt(
       c,
@@ -2500,7 +2513,13 @@ function chatPage(view: ConversationView, csrf: string, files = true) {
               (m) => html`<li class="msg${m.mine ? ' mine' : ''}">
                 <span class="m">${m.mine ? t.you : view.other.name} · ${when(m.at)}</span>
                 <p>${m.text}</p>
-                ${m.files.length ? html`<span class="files">${m.files.map((f) => html`<a href="/ui/attachments/${f.id}">📎 ${f.name}</a> `)}</span>` : ''}
+                ${m.files.length
+                  ? html`<span class="files">${m.files.map((f) =>
+                      f.mime.startsWith('audio/')
+                        ? html`<audio controls preload="metadata" src="/ui/attachments/${f.id}" aria-label="${f.name}"></audio>`
+                        : html`<a href="/ui/attachments/${f.id}">📎 ${f.name}</a> `,
+                    )}</span>`
+                  : ''}
               </li>`,
             )}
           </ol>`
@@ -2513,8 +2532,12 @@ function chatPage(view: ConversationView, csrf: string, files = true) {
           ? html`<label for="file" class="m">${t.attachLabel}</label>
               <input id="file" type="file" name="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" />`
           : ''}
-        <div class="acts"><button class="primary">${t.send}</button></div>
-      </form>
+        <div class="acts">${files
+          ? html`<p class="m" data-record-status aria-live="polite"></p><button type="button" class="mic" data-record data-action="/ui/chat/${handle}" data-csrf="${csrf}"
+              data-hint="${t.recordHint}" data-recording="${t.recording}" data-sending="${t.recordSending}" data-cancelled="${t.recordCancelled}"
+              data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">🎤</button>`
+          : ''}<button class="primary">${t.send}</button></div>
+      </form>${files ? html`<script src="/ui/record.js" defer></script>` : ''}
       ${view.messages.some((m) => !m.mine)
         ? html`${howForm(`/ui/chat/${handle}/agent`, t.toAgent, t.how, t.howPlaceholder, csrf)}<p class="hint">${t.toAgentNote}</p>`
         : ''}
