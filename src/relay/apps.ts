@@ -272,6 +272,8 @@ dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .flags { font-size: 13px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 8px 10px; margin: 0; }
 label { font-size: 13px; font-weight: 600; }
 input[type=file] { font: inherit; font-size: 13px; color: var(--fg); }
+button.mic { width: 40px; height: 40px; padding: 0; border-radius: 999px; font-size: 18px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+button.mic.on { background: #FF3B30; color: #FFFFFF; }
 input[type=text] { width: 100%; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
 textarea { width: 100%; min-height: 76px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; resize: vertical; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -451,6 +453,55 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     const page = el('button', 'Open in Klatsch'); page.type = 'button';
     page.addEventListener('click', () => app.openLink({ url: chat.page }).catch(() => {}));
     const fail = (result) => { let why = 'That did not work.'; try { why = JSON.parse(result.content[0].text).message || why; } catch {} said.textContent = why; };
+    // Hold to talk, like a messenger. Where the chat app gives the card no microphone, the same button opens the
+    // conversation on the Klatsch page, which records.
+    const mic = chat.files === false ? null : el('button', '🎤', 'mic');
+    if (mic) {
+      mic.type = 'button'; mic.title = 'Hold to record a voice note'; mic.setAttribute('aria-label', mic.title);
+      const perms = ((app.getHostCapabilities() || {}).sandbox || {}).permissions;
+      const noMic = !window.MediaRecorder || !navigator.mediaDevices || (perms && !perms.microphone);
+      const elsewhere = () => { said.textContent = 'This chat app does not let Klatsch use the microphone. Record it on your Klatsch page.'; app.openLink({ url: chat.page }).catch(() => {}); };
+      let rec = null, stream = null, parts = [], at = 0, held = false, cancel = false, clock = null;
+      const free = () => { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; clearInterval(clock); mic.className = 'mic'; };
+      const begin = async () => {
+        if (noMic) { elsewhere(); return; }
+        if (rec) return;
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { elsewhere(); return; }
+        if (!held) { free(); said.textContent = 'Hold the microphone to record, let go to send.'; return; }
+        parts = []; cancel = false;
+        const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+        rec = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+        rec.ondataavailable = (e) => { if (e.data && e.data.size) parts.push(e.data); };
+        rec.onstop = deliver;
+        rec.start(); at = Date.now(); mic.className = 'mic on';
+        const tick = () => { const s = Math.floor((Date.now() - at) / 1000); said.textContent = 'Recording ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' · let go to send, slide away to cancel'; if (s >= 120) end(false); };
+        tick(); clock = setInterval(tick, 250);
+      };
+      const end = (drop) => { if (!rec) return; cancel = drop || Date.now() - at < 600; const r = rec; rec = null; r.stop(); free(); };
+      async function deliver() {
+        if (cancel) { said.textContent = 'Cancelled.'; return; }
+        const type = (parts[0] && parts[0].type) || 'audio/webm';
+        const blob = new Blob(parts, { type });
+        if (blob.size > 5 * 1024 * 1024) { said.textContent = 'That is too long for one voice note.'; return; }
+        said.textContent = 'Sending…'; mic.disabled = true;
+        try {
+          const data = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1] || ''); r.onerror = reject; r.readAsDataURL(blob); });
+          const name = 'voice-note.' + (type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm');
+          const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: 'reply', text: '', voice: true, files: [{ name, data }] } });
+          if (result.isError) { fail(result); return; }
+          const sc = result.structuredContent || {};
+          said.textContent = sc.message || 'Sent.';
+          if (sc.chat) { chat.messages = sc.chat.messages; fill(chat.messages); }
+          app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human sent a voice note to @' + chat.with.handle + ' from the card.' }] }).catch(() => {});
+        } catch { said.textContent = 'The voice note did not go. Try again, or record it on your Klatsch page.'; }
+        finally { mic.disabled = false; }
+      }
+      mic.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; e.preventDefault(); held = true; try { mic.setPointerCapture(e.pointerId); } catch {} begin(); });
+      mic.addEventListener('pointerup', () => { held = false; end(false); });
+      mic.addEventListener('pointercancel', () => { held = false; end(true); });
+      mic.addEventListener('pointermove', (e) => { if (!rec) return; const b = mic.getBoundingClientRect(); if (e.clientX < b.left - 60 || e.clientX > b.right + 60 || e.clientY < b.top - 60 || e.clientY > b.bottom + 60) { held = false; end(true); } });
+      mic.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
     send.addEventListener('click', async () => {
       const text = box.value.trim();
       if (!text) { box.focus(); return; }
@@ -482,7 +533,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       });
       row.after(panel);
     });
-    const row = el('div', undefined, 'row'); row.append(page, draft, send);
+    const row = el('div', undefined, 'row'); row.append(page, draft, ...(mic ? [mic] : []), send);
     if (notice) said.textContent = notice;
     root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), list, label, box, ...(picker ? [flabel, picker] : []), row, said, el('p', card.note, 'note'), ...notifyOffer());
     // New messages show up while the card is on screen; reading them here marks them read.

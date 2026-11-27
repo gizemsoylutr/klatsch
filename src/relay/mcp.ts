@@ -17,7 +17,7 @@ import { transaction } from '../store/db.ts';
 import { approvalCard, CARD_META, CARD_URI, cardHtml, CHAT_KEY_TTL_MS, chatCard, friendCard, issueKey, keepOutcome, keyState, questionCard, showsCards, useKey, type Card, type ChatPayload } from './apps.ts';
 import { createInvite } from '../auth/invites.ts';
 import { RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
-import { ASK, ASKS_ONLY, CARD_NOTES, DATA_NOTE, FRIENDS, MESSAGE, NOTES, pendingReminder, SEARCHES_PER_HOUR, START_LISTENING, THANKS, TOO_MANY_OPEN, TOO_MANY_SEARCHES, WATCH } from '../copy/agent.ts';
+import { ASK, ASKS_ONLY, CARD_NOTES, DATA_NOTE, FILE_ONLY, FRIENDS, MESSAGE, VOICE_NOTE, NOTES, pendingReminder, SEARCHES_PER_HOUR, START_LISTENING, THANKS, TOO_MANY_OPEN, TOO_MANY_SEARCHES, WATCH } from '../copy/agent.ts';
 import { keyedHash, safeEqual } from '../crypto.ts';
 import {
   answerAskInput,
@@ -620,7 +620,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     'Klatsch card',
     CARD_URI,
     { title: 'Klatsch card', description: 'Where your human decides a Klatsch request, or answers a question, inside the chat.', mimeType: RESOURCE_MIME_TYPE },
-    async () => ({ contents: [{ uri: CARD_URI, mimeType: RESOURCE_MIME_TYPE, text: cardHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } } }] }),
+    async () => ({ contents: [{ uri: CARD_URI, mimeType: RESOURCE_MIME_TYPE, text: cardHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] }, permissions: { microphone: {} } } } }] }),
   );
 
   {
@@ -640,6 +640,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
           text: z.string().max(2000).optional(),
           // Files picked in the card, base64: at most 3, 5 MB each (the relay checks the real size and type).
           files: z.array(z.object({ name: z.string().max(200), data: z.string().max(7_200_000) })).max(3).optional(),
+          voice: z.boolean().optional(),
         }),
         _meta: { ui: { resourceUri: CARD_URI, visibility: ['app'] } },
         scopeChallenge: requireScopes('inbox:read'),
@@ -662,7 +663,10 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
             const handle = klatsch.user(open.ref!).handle;
             if (input.decision === 'reply') {
               transaction(klatsch.db, () => {
-                const messageId = klatsch.sendMessage(id, handle, input.text ?? '', 'dialog');
+                // A voice note or a file alone, like in a messenger: the message says what it is.
+                const typed = input.text ?? '';
+                const text = typed.trim() || !files.length ? typed : input.voice ? VOICE_NOTE : FILE_ONLY;
+                const messageId = klatsch.sendMessage(id, handle, text, 'dialog');
                 for (const file of files) klatsch.attachToMessage(id, messageId, file, 'dialog');
               });
               const message = CARD_NOTES.messageSent;

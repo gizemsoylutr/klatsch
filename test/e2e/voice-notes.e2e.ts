@@ -4,7 +4,7 @@
 // (WebM, and Safari's MP4) are taken. Guests have no button, since they send no files.
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { browser, startRelay, type Browser, type Relay } from './harness.ts';
+import { agent, browser, startRelay, type Browser, type Relay } from './harness.ts';
 
 const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, ...Array(60).fill(3)]);
 // What Safari's MediaRecorder writes: an ISO media file of brand iso5.
@@ -66,6 +66,22 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
     const empty = await aliceBrowser.post('/ui/chat/eve', { text: '   ' });
     assert.notEqual(empty.status, 303);
     assert.equal(relay.klatsch.conversation(eve, '@alice').messages.length, before);
+  });
+
+  it('from the card in a chat app: the card asks for the microphone, and a voice note alone is a message', async () => {
+    const chat = await agent(relay, relay.chatAppToken(alice), { dialogs: false, cards: true });
+    const resource = (await chat.readResource('ui://klatsch/card.html')).contents[0] as { _meta?: { ui?: { permissions?: unknown } } };
+    assert.deepEqual(resource._meta?.ui?.permissions, { microphone: {} });
+    const shown = await chat.call('conversation', { handle: '@eve' });
+    const key = shown.meta['dev.klatsch/card'].key;
+    const sent = await chat.call('klatsch_card', { key, decision: 'reply', text: '', voice: true, files: [{ name: 'voice-note.webm', data: Buffer.from(WEBM).toString('base64') }] });
+    assert.equal(sent.isError, false, sent.raw);
+    const last = relay.klatsch.conversation(eve, '@alice').messages.at(-1)!;
+    assert.equal(last.text, '🎤 Voice note');
+    assert.equal(last.files[0]!.mime, 'audio/webm');
+    // Nothing at all from the card is still refused.
+    assert.equal((await chat.call('klatsch_card', { key, decision: 'reply', text: '' })).isError, true);
+    await chat.close();
   });
 
   it('a guest has no microphone button (guests send no files)', async () => {

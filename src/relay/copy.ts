@@ -1,3 +1,4 @@
+import { FILE_ONLY, VOICE_NOTE } from '../copy/agent.ts';
 import { html } from 'hono/html';
 import { consent } from '../copy/consent.ts';
 import { handoff } from '../copy/handoff.ts';
@@ -322,8 +323,8 @@ export const copy = {
     recordDenied: 'Klatsch may not use the microphone. Allow it in the browser to record.',
     recordFailed: 'The voice note did not go. Try again.',
     recordTooLong: 'That is too long for one voice note.',
-    voiceNote: '🎤 Voice note',
-    fileOnly: '📎 File',
+    voiceNote: VOICE_NOTE,
+    fileOnly: FILE_ONLY,
     toAgent: 'Draft a reply with my AI',
     how: 'What should your AI say? (optional)',
     howPlaceholder: 'e.g. yes, Saturday works, keep it short',
