@@ -62,6 +62,20 @@ export const ATTACH = {
   gone: 'This file is not here any more, or not for you.',
 };
 
+/**
+ * A guest ("Try it without an account"): a few hours with the demo friend only. Said to the agent and on the page
+ * alike, so each line also tells the person how to get the real thing.
+ */
+export const GUEST = {
+  demoOnly: 'A guest has the demo friend only. Sign in to add a real friend.',
+  noFiles: 'Files need an account. Sign in to send photos, PDFs or voice notes.',
+  noAccount: 'Guests cannot add a sign-in. Sign in with an account instead; the guest goes after its hours.',
+  messages: 'A guest sends at most 30 messages. Sign in to keep going.',
+  asks: 'A guest asks at most 5 questions. Sign in to keep going.',
+  busy: 'Guest mode is busy right now. Try again later, or sign in.',
+  off: 'Guest mode is not on for this relay.',
+};
+
 /** `friends`: whom your human can ask directly. */
 export const FRIENDS = {
   some: (n: number) => `Your human's ${n === 1 ? 'friend' : `${n} friends`}: write to any of them with send_message, and open a conversation with conversation.`,

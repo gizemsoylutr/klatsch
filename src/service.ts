@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ATTACH, ASK, MESSAGE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, GUEST, MESSAGE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -347,6 +347,18 @@ const THREAD_FOR_AGENT = 10;
 const DEMO_HANDLE = 'klatsch-demo';
 /** Handles nobody can pick: the demo friend's, and names that would look like Klatsch speaking. */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set([DEMO_HANDLE, 'klatsch', 'admin', 'support', 'review']);
+/** Every guest's handle starts with this, so nobody else can pick one that looks like a guest. */
+const GUEST_PREFIX = 'guest-';
+/** Whether nobody may pick `handle`: a reserved one, or one that looks like a guest's. */
+export const reservedHandle = (handle: string) => RESERVED_HANDLES.has(handle) || handle.startsWith(GUEST_PREFIX);
+/**
+ * Guests ("Try it without an account"): how long one lasts (from the click, never renewed), how many live at once
+ * on a relay, and what one may do in that time. A guest's only friend is the demo friend.
+ */
+export const GUEST_HOURS = 5;
+const GUEST_LIVE_MAX = 300;
+const GUEST_MESSAGES = 30;
+const GUEST_ASKS = 5;
 /**
  * What the demo friend says. It plays a friend, not Klatsch: it writes back about what was written to it, so a
  * reviewer sees what Klatsch is for (a plan made in a chat reaching a friend, a friend's opinion coming back).
@@ -513,7 +525,7 @@ export class Klatsch {
     return transaction(this.db, () => {
       let id = this.userByGitHub(github.id);
       if (!id) {
-        if (!HANDLE.test(handle) || RESERVED_HANDLES.has(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
+        if (!HANDLE.test(handle) || reservedHandle(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
         id = newId('usr');
         this.db
           .prepare('INSERT INTO users (id, handle, display_name, github_id, github_login, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -550,7 +562,7 @@ export class Klatsch {
         if (this.usersByEmail(google.email).length || this.mailboxTaken(google.email) || this.mailboxRemovedFrom(google.email, circle.id, circle.invite)) {
           throw new KlatschError('forbidden', 'This link is not valid.');
         }
-        if (!HANDLE.test(handle) || RESERVED_HANDLES.has(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
+        if (!HANDLE.test(handle) || reservedHandle(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
         id = newId('usr');
         this.db.prepare('INSERT INTO users (id, handle, display_name, google_sub, google_email, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, handle, google.name, google.sub, google.email, Date.now());
         this.audit(id, 'web', 'google.create');
@@ -563,6 +575,7 @@ export class Klatsch {
 
   /** Connects a Google account to a person who has none, after they confirmed it in their own session. */
   linkGoogle(userId: string, google: { sub: string; email: string }): boolean {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noAccount);
     return transaction(this.db, () => {
       if (this.userByGoogle(google.sub) || this.user(userId).google_sub !== null) return false;
       this.db.prepare('UPDATE users SET google_sub = ?, google_email = ? WHERE id = ?').run(google.sub, google.email, userId);
@@ -634,7 +647,7 @@ export class Klatsch {
       let id = people[0];
       if (!id) {
         if (this.mailboxTaken(email) || this.mailboxRemovedFrom(email, circle.id, circle.invite)) throw new KlatschError('forbidden', 'This link is not valid.');
-        if (!HANDLE.test(handle) || RESERVED_HANDLES.has(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
+        if (!HANDLE.test(handle) || reservedHandle(handle) || this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle)) return 'taken';
         id = newId('usr');
         this.db.prepare('INSERT INTO users (id, handle, display_name, created_at) VALUES (?, ?, ?, ?)').run(id, handle, handle, Date.now());
         this.audit(id, 'web', 'email.create');
@@ -650,6 +663,7 @@ export class Klatsch {
    * if either side is already connected. The person hears of it, content-free, in case it was not them.
    */
   linkGitHub(userId: string, github: { id: number; login: string }): boolean {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noAccount);
     return transaction(this.db, () => {
       if (this.userByGitHub(github.id) || this.user(userId).github_id !== null) return false;
       this.db.prepare('UPDATE users SET github_id = ?, github_login = ? WHERE id = ?').run(github.id, github.login, userId);
@@ -661,6 +675,7 @@ export class Klatsch {
 
   /** A passkey the person just made in their own session; at most `PASSKEYS_PER_PERSON`, and never one stored before. */
   addPasskey(userId: string, passkey: { id: string; publicKey: Uint8Array; counter: number; transports: string[]; synced: boolean }): void {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noAccount);
     transaction(this.db, () => {
       const { n } = this.db.prepare('SELECT count(*) n FROM passkeys WHERE user_id = ?').get(userId) as { n: number };
       if (n >= PASSKEYS_PER_PERSON) throw new KlatschError('forbidden', `You have ${PASSKEYS_PER_PERSON} passkeys; remove one first.`);
@@ -698,6 +713,7 @@ export class Klatsch {
 
   /** The user who creates a circle owns it; an existing circle keeps its owner. */
   ensureCircle(name: string, ownerId: string): string {
+    this.refuseGuest(ownerId);
     const existing = this.db.prepare('SELECT id FROM circles WHERE name = ?').get(name) as { id: string } | undefined;
     if (existing) return existing.id;
     const id = newId('cir');
@@ -715,6 +731,7 @@ export class Klatsch {
    * suffix nobody sees; pages show the other person instead. At most 20 waiting ones per person.
    */
   friendCircle(userId: string): string {
+    this.refuseGuest(userId);
     // A review account may make a link, so a reviewer sees how adding a friend works; nobody can use it to join
     // (acceptInvite), so the account still reaches no real person.
     // Links still waiting (unused, unexpired, friendship not ended), and how many were made in a day.
@@ -798,6 +815,7 @@ export class Klatsch {
   }
 
   addMember(circleId: string, userId: string, invitedBy?: string): void {
+    this.refuseGuest(userId);
     this.db
       .prepare('INSERT OR IGNORE INTO memberships (circle_id, user_id, invited_by, created_at) VALUES (?, ?, ?, ?)')
       .run(circleId, userId, invitedBy ?? null, Date.now());
@@ -831,6 +849,7 @@ export class Klatsch {
 
   /** The seam for an address that is already proven (a confirmation link, or GitHub's primary verified address). */
   setVerifiedEmail(userId: string, email: string, via: Via): void {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noAccount);
     if (!isEmail(email)) throw new KlatschError('invalid', 'That is not an email address Klatsch accepts.');
     this.db.prepare('UPDATE users SET email = ?, email_verified_at = ?, mailbox = ? WHERE id = ?').run(email, Date.now(), mailboxOf(email), userId);
     this.rememberMailbox(userId, mailboxOf(email));
@@ -871,9 +890,10 @@ export class Klatsch {
       }
       this.db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, userId);
       this.db.prepare('INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(newId('push'), userId, endpoint, sub.p256dh, sub.auth, Date.now());
+      // A guest gets one device.
       this.db
-        .prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND rowid NOT IN (SELECT rowid FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 10)')
-        .run(userId, userId);
+        .prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND rowid NOT IN (SELECT rowid FROM push_subscriptions WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)')
+        .run(userId, userId, this.isGuest(userId) ? 1 : 10);
       if (!resync) this.audit(userId, 'web', 'push.on');
       return 'on' as const;
     });
@@ -1045,7 +1065,27 @@ export class Klatsch {
     return Boolean((this.db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId) as { password_hash: string | null } | undefined)?.password_hash);
   }
 
+  /** When a guest goes; undefined for everyone else. */
+  guestExpiresAt(userId: string): number | undefined {
+    return (this.db.prepare('SELECT guest_expires_at AS at FROM users WHERE id = ?').get(userId) as { at: number | null } | undefined)?.at ?? undefined;
+  }
+
+  isGuest(userId: string): boolean {
+    return this.guestExpiresAt(userId) !== undefined;
+  }
+
+  /**
+   * The one rule that keeps guests from real people: a guest never gains a membership. Every path that adds one
+   * (`addMember`, `friendCircle`, `ensureCircle`) asks here; only `startGuest` writes a guest's two memberships,
+   * in the pair circle with the demo friend. A test counts the places that insert memberships, so a new one cannot
+   * appear without this check.
+   */
+  private refuseGuest(userId: string): void {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.demoOnly);
+  }
+
   joinPublic(userId: string, token: string): 'joined' | 'already-member' {
+    this.refuseGuest(userId);
     if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account does not join public circles.');
     return transaction(this.db, () => {
       const circle = this.publicCircle(token);
@@ -1064,7 +1104,9 @@ export class Klatsch {
    * Someone removed from the circle can only come back on an invite its owner created after the removal, which clears the removal.
    */
   acceptInvite(userId: string, invite: Invite): 'joined' | 'already-member' | 'already-friends' {
-    // Outsiders hold a review account's password: it reaches no real people, by invite or friend link.
+    // Outsiders hold a review account's password, and anyone can be a guest: neither reaches real people, by invite or friend link.
+    this.refuseGuest(userId);
+    if (this.isGuest(invite.createdBy)) throw new KlatschError('forbidden', 'This link comes from a Klatsch demo account. It adds nobody.');
     if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account has the demo friend only.');
     if (this.isReviewAccount(invite.createdBy)) throw new KlatschError('forbidden', 'This link comes from a Klatsch demo account. It adds nobody.');
     return transaction(this.db, () => {
@@ -1094,7 +1136,7 @@ export class Klatsch {
    */
   mayInvite(userId: string, circleId: string): boolean {
     const role = this.memberRole(userId, circleId);
-    if (!role || this.isReviewAccount(userId)) return false;
+    if (!role || this.isReviewAccount(userId) || this.isGuest(userId)) return false;
     // A friendship has its one invite, from the person who made it; an ended one takes nobody.
     const kind = this.db.prepare('SELECT pair, ended_at FROM circles WHERE id = ?').get(circleId) as { pair: number; ended_at: number | null };
     if (kind.ended_at !== null || (kind.pair && role !== 'owner')) return false;
@@ -1443,7 +1485,8 @@ export class Klatsch {
     const now = Date.now();
     const open = this.db.prepare(`SELECT count(*) AS n FROM asks WHERE asker_id = ? AND state = 'open' AND expires_at > ?`).get(askerId, now) as { n: number };
     const today = this.db.prepare('SELECT count(*) AS n FROM asks WHERE asker_id = ? AND created_at > ?').get(askerId, now - DAY) as { n: number };
-    return open.n < ASKS_OPEN && today.n < ASKS_PER_DAY;
+    // A guest lives a few hours, so its day is its whole life.
+    return open.n < ASKS_OPEN && today.n < (this.isGuest(askerId) ? GUEST_ASKS : ASKS_PER_DAY);
   }
 
   /**
@@ -1453,7 +1496,7 @@ export class Klatsch {
   private createAsk(askerId: string, handle: string, tags: string[], question: string, options: { demo?: boolean } = {}): string {
     const helper = this.askTarget(askerId, handle);
     // The demo friend's own seeded question is not one person's asking: no limit, or a busy review day would fail.
-    if (!options.demo && !this.canAsk(askerId)) throw new KlatschError('forbidden', ASK.tooMany);
+    if (!options.demo && !this.canAsk(askerId)) throw new KlatschError('forbidden', this.isGuest(askerId) ? GUEST.asks : ASK.tooMany);
     const resolved = this.previewAsk(tags, question).tags;
     const id = newId('k');
     const now = Date.now();
@@ -1525,13 +1568,10 @@ export class Klatsch {
       // A typo must not hand a real person's account a password that outsiders will hold.
       const known = this.db.prepare('SELECT id, password_hash FROM users WHERE handle = ?').get(handle) as { id: string; password_hash: string | null } | undefined;
       if (known && known.password_hash === null && !options.existing) throw new KlatschError('forbidden', `@${handle} is an existing account without a password. Use another handle, or --yes to make it a review account.`);
-      // The demo friend answers in its own name only: a real person who has its handle is never made one.
-      const demoRow = this.db.prepare('SELECT demo FROM users WHERE handle = ?').get(DEMO_HANDLE) as { demo: number } | undefined;
-      if (demoRow && !demoRow.demo) throw new KlatschError('forbidden', `@${DEMO_HANDLE} belongs to a real person here; the demo friend cannot be set up.`);
+      if (this.isGuest(known?.id ?? '')) throw new KlatschError('forbidden', `@${handle} is a guest.`);
+      const demo = this.demoFriend();
       const reviewer = this.ensureUser(handle, name);
       this.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), reviewer);
-      const demo = this.ensureUser(DEMO_HANDLE, 'Klatsch Demo');
-      this.db.prepare('UPDATE users SET demo = 1 WHERE id = ?').run(demo);
       if (!this.friendshipOf(reviewer, demo)) {
         const circle = this.friendCircle(demo);
         this.addMember(circle, reviewer, demo);
@@ -1553,6 +1593,68 @@ export class Klatsch {
     if (!ok || !row) return undefined;
     this.audit(row.id, 'web', 'review.signin');
     return row.id;
+  }
+
+  /** The demo friend, made the first time it is needed. */
+  private demoFriend(): string {
+    // The demo friend answers in its own name only: a real person who has its handle is never made one.
+    const demoRow = this.db.prepare('SELECT demo FROM users WHERE handle = ?').get(DEMO_HANDLE) as { demo: number } | undefined;
+    if (demoRow && !demoRow.demo) throw new KlatschError('forbidden', `@${DEMO_HANDLE} belongs to a real person here; the demo friend cannot be set up.`);
+    const demo = this.ensureUser(DEMO_HANDLE, 'Klatsch Demo');
+    this.db.prepare('UPDATE users SET demo = 1 WHERE id = ?').run(demo);
+    return demo;
+  }
+
+  // ---------- guests ----------
+
+  /**
+   * "Try it without an account": a guest for GUEST_HOURS, whose only friend is the demo friend, with the demo
+   * conversation and question waiting. The guest picks no name and no handle, adds no sign-in, sends no files
+   * and gains no other membership (`refuseGuest`), so nothing it writes reaches a real person, and the demo friend
+   * answers with fixed lines, never a model. Everything goes when its hours are up (`sweepGuests`).
+   */
+  startGuest(now = Date.now()): string {
+    if (!this.config.guest) throw new KlatschError('forbidden', GUEST.off);
+    this.sweepGuests(now);
+    return transaction(this.db, () => {
+      const live = this.db.prepare('SELECT count(*) AS n FROM users WHERE guest_expires_at IS NOT NULL').get() as { n: number };
+      if (live.n >= GUEST_LIVE_MAX) throw new KlatschError('forbidden', GUEST.busy);
+      const demo = this.demoFriend();
+      const letters = 'abcdefghjkmnpqrstuvwxyz23456789';
+      let handle: string;
+      do handle = GUEST_PREFIX + [...randomBytes(6)].map((b) => letters[b % letters.length]).join('');
+      while (this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle));
+      const guest = newId('usr');
+      this.db.prepare('INSERT INTO users (id, handle, display_name, created_at, guest_expires_at) VALUES (?, ?, ?, ?, ?)').run(guest, handle, 'Guest', now, now + GUEST_HOURS * HOUR);
+      const circle = newId('cir');
+      this.db.prepare('INSERT INTO circles (id, name, created_at, pair, join_cap) VALUES (?, ?, ?, 1, 2)').run(circle, `friends-${circle.slice(-10)}`, now);
+      // The only memberships a guest ever has: this pair circle with the demo friend, written here and nowhere else.
+      const join = this.db.prepare('INSERT INTO memberships (circle_id, user_id, role, invited_by, created_at) VALUES (?, ?, ?, ?, ?)');
+      join.run(circle, demo, 'owner', null, now);
+      join.run(circle, guest, 'member', demo, now);
+      this.seedDemoConversation(demo, guest, circle);
+      this.seedDemoQuestion(demo, guest);
+      this.audit(guest, 'web', 'guest.start');
+      return guest;
+    });
+  }
+
+  /** A guest ends now ("End guest session", or its hours are up): its pair circle and everything in it, then the account. */
+  endGuest(userId: string, via: Via): void {
+    if (!this.isGuest(userId)) throw new KlatschError('forbidden', 'This is not a guest.');
+    transaction(this.db, () => {
+      const removed = new Set<string>();
+      const circles = (this.db.prepare('SELECT circle_id FROM memberships WHERE user_id = ?').all(userId) as { circle_id: string }[]).map((r) => r.circle_id);
+      if (circles.length) purge(this.db, 'circles', 'id', circles, removed);
+      this.db.prepare('DELETE FROM events WHERE ref IN (SELECT value FROM json_each(?))').run(JSON.stringify([...removed]));
+      this.deleteAccount(userId, via);
+    });
+  }
+
+  /** Ends every guest whose hours are up. Cheap (an index); the relay calls it on every signed-in request and tool call. */
+  sweepGuests(now = Date.now()): void {
+    const due = this.db.prepare('SELECT id FROM users WHERE guest_expires_at IS NOT NULL AND guest_expires_at <= ?').all(now) as { id: string }[];
+    for (const { id } of due) this.endGuest(id, 'cli');
   }
 
   hasReviewAccounts(): boolean {
@@ -1620,6 +1722,7 @@ export class Klatsch {
    * within ten minutes of answering). Its type is read from its bytes; it is sealed, and goes with the question.
    */
   attach(userId: string, askId: string, file: { name: string; bytes: Uint8Array }, via: Via = 'web'): { id: string; name: string; mime: string; size: number } {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noFiles);
     this.dropExpiredAttachments();
     const row = this.askRow(askId);
     if (!row || row.expires_at <= Date.now() || !this.sharePrivateCircle(row.asker_id, row.helper_id)) throw new KlatschError('forbidden', ASK.notOpen);
@@ -1722,8 +1825,10 @@ export class Klatsch {
 
   /** Whether `userId` may send another message now. */
   canMessage(userId: string): boolean {
+    // The demo friend writes back to every reviewer and guest: no daily limit, or a busy day would silence it.
+    if (this.isDemo(userId)) return true;
     const today = this.db.prepare('SELECT count(*) AS n FROM messages WHERE sender_id = ? AND created_at > ?').get(userId, Date.now() - DAY) as { n: number };
-    return today.n < MESSAGES_PER_DAY;
+    return today.n < (this.isGuest(userId) ? GUEST_MESSAGES : MESSAGES_PER_DAY);
   }
 
   /**
@@ -1734,7 +1839,7 @@ export class Klatsch {
   sendMessage(senderId: string, handle: string, text: string, via: Via = 'web'): string {
     const { circleId, other } = this.friendFor(senderId, handle);
     this.previewMessage(text);
-    if (!this.canMessage(senderId)) throw new KlatschError('forbidden', MESSAGE.tooMany);
+    if (!this.canMessage(senderId)) throw new KlatschError('forbidden', this.isGuest(senderId) ? GUEST.messages : MESSAGE.tooMany);
     this.dropOldMessages();
     const id = newId('m');
     const always = this.hasGrant(other.id, senderId, 'deliver');
@@ -1757,6 +1862,7 @@ export class Klatsch {
 
   /** A file with a message, by its sender, within ten minutes of sending it. Its type is read from its bytes. */
   attachToMessage(userId: string, messageId: string, file: { name: string; bytes: Uint8Array }, via: Via = 'web'): { id: string; name: string; mime: string; size: number } {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noFiles);
     this.dropExpiredAttachments();
     const row = this.db.prepare('SELECT sender_id, recipient_id, circle_id, created_at FROM messages WHERE id = ?').get(messageId) as
       | { sender_id: string; recipient_id: string; circle_id: string; created_at: number }

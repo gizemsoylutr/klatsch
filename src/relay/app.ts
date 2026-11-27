@@ -64,6 +64,8 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
     ...(oauthOffered(config.publicUrl) ? { resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(resource) } : {}),
     verifier: {
       async verifyAccessToken(token: string): Promise<AuthInfo> {
+        // A guest whose hours are up goes first, with its tokens.
+        klatsch.sweepGuests();
         const verified = verifyToken(db, secret, token);
         if (!verified) throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid, expired or revoked token.');
         return {
@@ -135,7 +137,7 @@ export function createRelay(klatsch: Klatsch, secret: Buffer): Hono {
   app.get('/favicon.ico', png(64));
   app.get('/apple-touch-icon.png', png(180, false));
   app.get('/', (c: Context) =>
-    (c.req.header('Accept') ?? '').includes('text/html') ? c.html(landing(github(c), Boolean(config.operator), oauthOffered(config.publicUrl) ? `${config.publicUrl}/mcp` : '')) : c.text('Klatsch relay. Agents use /mcp, humans use /ui.'),
+    (c.req.header('Accept') ?? '').includes('text/html') ? c.html(landing(github(c), Boolean(config.operator), oauthOffered(config.publicUrl) ? `${config.publicUrl}/mcp` : '', Boolean(config.guest))) : c.text('Klatsch relay. Agents use /mcp, humans use /ui.'),
   );
   return app;
 }

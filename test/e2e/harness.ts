@@ -37,7 +37,7 @@ export interface Mail {
  * With `github`, "Sign in with GitHub" talks to the stand-in it returns for the relay's URL (test/github-fake.ts).
  */
 export async function startRelay(
-  options: { mail?: boolean; approvalWaitMs?: number; dbFile?: string; secret?: Buffer; github?: (base: string) => GitHub; google?: (base: string) => Google; operator?: Operator } = {},
+  options: { mail?: boolean; approvalWaitMs?: number; dbFile?: string; secret?: Buffer; github?: (base: string) => GitHub; google?: (base: string) => Google; operator?: Operator; guest?: boolean } = {},
 ) {
   // Listen first, then build the relay for the port we got: no race for a free port between scenarios.
   let relay: Hono | undefined;
@@ -54,6 +54,7 @@ export async function startRelay(
     ...(options.github ? { github: options.github(base) } : {}),
     ...(options.google ? { google: options.google(base) } : {}),
     ...(options.operator ? { operator: options.operator } : {}),
+    ...(options.guest ? { guest: true } : {}),
   });
   const db = openDb(options.dbFile ?? ':memory:');
   seedVocabulary(db);

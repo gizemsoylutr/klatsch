@@ -744,4 +744,9 @@ export const migrations: string[] = [
   );
   CREATE INDEX push_off_by_user ON push_off (user_id);
   `,
+  // Guests ("Try it without an account"): when the account and everything in it goes. NULL for everyone else.
+  `
+  ALTER TABLE users ADD COLUMN guest_expires_at INTEGER;
+  CREATE INDEX users_by_guest_expiry ON users (guest_expires_at) WHERE guest_expires_at IS NOT NULL;
+  `,
 ];

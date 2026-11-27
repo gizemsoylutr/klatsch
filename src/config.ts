@@ -22,6 +22,8 @@ export interface Config {
   google?: Google;
   /** Who runs this relay, for its privacy and terms pages. Without it those pages do not exist. */
   operator?: Operator;
+  /** "Try it without an account": a guest for a few hours whose only friend is the demo friend. Off unless set. */
+  guest?: boolean;
 }
 
 export interface Google {
@@ -63,6 +65,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     ...(overrides.github ? { github: overrides.github } : {}),
     ...(overrides.google ? { google: overrides.google } : {}),
     ...(overrides.operator ? { operator: overrides.operator } : {}),
+    ...(overrides.guest ? { guest: true } : {}),
   };
 }
 
@@ -72,7 +75,7 @@ const LOOPBACK_BINDS = [...LOOPBACK_NAMES, '::1'];
 /**
  * Settings for a relay in a container, where flags are awkward: `KLATSCH_PUBLIC_URL`, `KLATSCH_HOST`,
  * `KLATSCH_PORT`, `KLATSCH_DATA_DIR`, and the GitHub OAuth App (`KLATSCH_GITHUB_CLIENT_ID` with
- * `KLATSCH_GITHUB_CLIENT_SECRET`, or `KLATSCH_GITHUB_CLIENT_SECRET_FILE` for a Docker secret). Unset or
+ * `KLATSCH_GITHUB_CLIENT_SECRET`, or `KLATSCH_GITHUB_CLIENT_SECRET_FILE` for a Docker secret), and `KLATSCH_GUEST=1` for guest mode. Unset or
  * empty variables are left to the defaults (or the flags).
  */
 export function envConfig(env: NodeJS.ProcessEnv): Partial<Config> {
@@ -92,6 +95,7 @@ export function envConfig(env: NodeJS.ProcessEnv): Partial<Config> {
     ...(pick('KLATSCH_DATA_DIR') ? { dataDir: pick('KLATSCH_DATA_DIR') } : {}),
     ...(github ? { github } : {}),
     ...(google ? { google } : {}),
+    ...(pick('KLATSCH_GUEST') === '1' ? { guest: true } : {}),
   };
 }
 

@@ -75,7 +75,7 @@ export const copy = {
     how: {
       kicker: 'How it works',
       heading: ['Your agent asks.', 'People decide.'],
-      sub: 'Each step that shares something is yours to approve. Nothing moves without a click in your own browser.',
+      sub: 'Each step that shares something is yours to approve. Nothing moves without your click, in Klatsch’s card in the chat or on its page.',
       steps: [
         {
           title: 'Your agent drafts a sip',
@@ -116,7 +116,7 @@ export const copy = {
       kicker: 'Privacy',
       heading: ['Built so agents', 'can’t overshare.'],
       tiles: [
-        { title: 'People approve, in the browser', line: 'Every share, intro, question and answer waits for a click on a page your agent can’t reach.' },
+        { title: 'People approve, not agents', line: 'Every message, share, intro, question and answer waits for your click, in Klatsch’s own card or page. Your AI drafts; it can’t send.' },
         { title: 'Agents never read each other', line: 'They get ids, tags and states. Words reach your agent only when a person hands them over.' },
         { title: 'Circles you choose', line: 'Private circles grow by invite. A public commons shows no list of names, and your open notes reach it only when you tick it.' },
       ],
@@ -126,27 +126,20 @@ export const copy = {
       heading: 'The agent you already use.',
       tiles: [
         {
-          state: 'Tried live',
           title: 'ChatGPT',
           line: 'Add Klatsch as a connector by its address. You sign in here and approve the connection; every share still waits for you.',
         },
         {
-          state: 'Ready, not yet run live',
-          part: true,
           title: 'Claude',
           line: 'On claude.ai, the desktop app and the phone: add Klatsch as a custom connector and ask a friend from any chat.',
         },
-        { state: 'Tested end to end', title: 'Claude Code', line: 'Approval pages open from the chat. Idle sessions wake up when news arrives.' },
-        { state: 'Ready, not yet run live', part: true, title: 'Codex', line: 'One command writes the project config. Approvals fall back to a short code.' },
+        { title: 'Claude Code', line: 'Approval pages open from the chat. Idle sessions wake up when news arrives.' },
+        { title: 'Codex', line: 'One command writes the project config. Approvals fall back to a short code.' },
         {
-          state: 'Ready, not yet run live',
-          part: true,
           title: 'GitHub Copilot',
           line: 'VS Code and the Copilot CLI, through a small local proxy. Your token stays in a file only you can read.',
         },
         {
-          state: 'Ready, not yet run live',
-          part: true,
           title: 'Any MCP client',
           line: 'Clients that speak OAuth connect by the address alone; the rest through the local proxy.',
         },
@@ -610,6 +603,36 @@ export const copy = {
     failed: 'That handle and password do not match a review account.',
     note: 'Everyone else signs in with a link, GitHub, Google or a passkey.',
     link: 'Reviewing Klatsch for a directory? Sign in with the review account',
+  },
+
+  /** "Try it without an account": a guest for a few hours whose only friend is the demo friend. */
+  guest: {
+    link: 'Just looking? Try it without an account',
+    landing: 'Try it without an account',
+    title: (hours: number) => `Try Klatsch for ${hours} hours`,
+    lead: 'You get a guest account with one friend: the Klatsch demo friend. Write to it, answer its question, ask it something, and connect ChatGPT or Claude to do the same from a chat.',
+    points: (hours: number) => [
+      'The demo friend is a script with fixed replies, not a person and not an AI. Nobody else reads what you write.',
+      'No name, email or password. As a guest you cannot add real friends, join circles or send files.',
+      `After ${hours} hours the guest account and everything in it are deleted. You can end it sooner from Home.`,
+    ],
+    start: 'Start as a guest',
+    signInInstead: 'Have an account? Sign in',
+    busyTitle: 'Try again later',
+    banner: (left: string) => `You are a guest. This account and everything in it is deleted in ${left}.`,
+    upgrade: 'To bring a real friend, end the guest session and sign in.',
+    end: 'End guest session',
+    ended: 'Guest session ended',
+    endedLine: 'The guest account and everything in it are deleted.',
+    notHere: 'Not for guests',
+    notHereLine: 'This needs an account. End the guest session from Home and sign in to use it.',
+    consent: (left: string) => `You are a guest: this connection ends with the guest account, in ${left}.`,
+    left: (ms: number) => {
+      const minutes = Math.max(1, Math.ceil(ms / 60_000));
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+    },
   },
 
   /** Notifications on a phone or browser (Web Push): a line, never what anyone wrote. */

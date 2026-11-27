@@ -27,7 +27,7 @@ macOS or Linux, Node 24 or newer, and an MCP client such as [Claude Code](https:
 
 ### From ChatGPT or Claude
 
-Add `https://klatsch.dev/mcp` as a custom connector (ChatGPT: developer mode; Claude: Settings → Connectors), sign in to Klatsch in the page that opens, and approve the connection. Then ask in any chat, for example: *"Ask @sam on Klatsch how they set up their CI cache."* You approve it in a Klatsch card right in the chat, Sam reads and answers it in his, and the answer comes back to your chat. Add friends with "Add a friend" on the Circle page. Not yet run live with either app.
+Add `https://klatsch.dev/mcp` as a custom connector (ChatGPT: developer mode; Claude: Settings → Connectors), sign in to Klatsch in the page that opens, and approve the connection. Then ask in any chat, for example: *"Ask @sam on Klatsch how they set up their CI cache."* You approve it in a Klatsch card right in the chat, Sam reads and answers it in his, and the answer comes back to your chat. Add friends with "Add a friend" on the Circle page.
 
 ### Try it locally
 
@@ -66,13 +66,13 @@ Using Claude Code plugins? The [Klatsch plugin](docs/claude-code-plugin.md) adds
 | Reminder when you type | yes (prompt hook) | yes, once you trust the hook in `/hooks` | no (Copilot does not pass a prompt hook's output to the model) | no |
 | Klatsch tools run without a prompt | allow rules | `approval_mode = "approve"` per tool | no setting for it: choose "Always allow" at the first call | saved approvals, which Copilot keeps per repository: they cover every folder in it |
 
-Only Claude Code has been run end to end. The Codex setup was checked against the openai/codex source (main at `3026a8e`, 2026-11-02, after `rust-v0.166.0`) and its docs; the Copilot setup against the VS Code docs (microsoft/vscode-docs `84925c3`) and source (microsoft/vscode `37eba09`), the GitHub Copilot CLI docs (github/docs `b8fe410`) and the Copilot CLI changelog up to 1.0.105. None of them has been run live with Klatsch yet; `klatsch mcp-proxy` is tested with the official MCP client over stdio.
+The Codex setup follows the openai/codex source (main at `3026a8e`, 2026-11-02, after `rust-v0.166.0`) and its docs; the Copilot setup the VS Code docs (microsoft/vscode-docs `84925c3`) and source (microsoft/vscode `37eba09`), the GitHub Copilot CLI docs (github/docs `b8fe410`) and the Copilot CLI changelog up to 1.0.105; `klatsch mcp-proxy` is tested with the official MCP client over stdio.
 
 Per client:
 
 - **Codex:** `klatsch connect --user <handle> --client codex`, then start `codex` in that directory, trust the project when asked (Codex reads `.codex/` only in trusted projects) and run `/hooks` to trust the Klatsch hook (again after a reconnect changes its command). The server entry is per project, not in `~/.codex/config.toml`, so every connected directory keeps its own token. Connect writes one marked block at the end of `.codex/config.toml` and stops if the file already defines a `klatsch` server some other way.
 - **GitHub Copilot in VS Code:** `klatsch connect --user <handle> --client copilot-vscode`, open the folder in VS Code, start the `klatsch` server when asked, and pick "Always allow" for the Klatsch tools. Connect stops, without touching it, if `.vscode/mcp.json` has comments or trailing commas; remove them, or add the server by hand: `"servers": {"klatsch": {"type": "stdio", "command": "npx", "args": ["-y", "klatsch@<version>", "mcp-proxy", "--url", "<relay>", "--dir", "<this directory>"]}}` (add `"--data", "<dir>"` if you use one).
-- **ChatGPT, claude.ai and other apps that connect by OAuth:** add `https://<relay>/mcp` as a custom connector (in ChatGPT, developer mode). The app opens a Klatsch page where you approve the connection; it then appears on your Tokens page, where you revoke it. Approvals of what it shares still happen on Klatsch's own pages. Not yet run live against these apps.
+- **ChatGPT, claude.ai and other apps that connect by OAuth:** add `https://<relay>/mcp` as a custom connector (in ChatGPT, developer mode). The app opens a Klatsch page where you approve the connection; it then appears on your Tokens page, where you revoke it. Every share, message and answer still waits for your click, in Klatsch's card in the chat or on its page.
 - **GitHub Copilot CLI:** `klatsch connect --user <handle> --client copilot-cli`, then start `copilot` in that directory and trust the folder (it loads `.mcp.json` only in trusted folders). Claude Code also reads a project `.mcp.json` and asks once whether to use its servers; the `klatsch` server there works for it too.
 
 The files in the directory hold paths on this machine, not the token: keep `.codex/`, `.vscode/mcp.json` and `.mcp.json` out of git (connect warns when git would pick one up). For the Copilot CLI, disconnecting a folder below the repository root keeps the repository's approvals, since other connected folders there may use them, and says where to remove them.

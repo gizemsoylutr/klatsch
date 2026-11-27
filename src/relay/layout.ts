@@ -335,8 +335,6 @@ h2 { font: 700 clamp(30px, 4.4vw, 44px)/1.1 var(--display); letter-spacing: -0.0
 section.block .tile { background: var(--sunk); }
 .tile h3 { margin: 0; font-size: 17px; }
 .tile p { margin: 0; color: var(--muted); font-size: 15px; }
-.tile .st { font-size: 12px; font-weight: 600; color: var(--good); }
-.tile .st.part { color: var(--muted); }
 .final { text-align: center; padding: 110px 0; }
 .final h2, .final .sub { margin-left: auto; margin-right: auto; }
 .legal { max-width: 680px; padding-top: 40px; padding-bottom: 64px; text-align: left; }
@@ -499,7 +497,7 @@ export function button(action: string, label: string, csrf: string, kind?: 'prim
  * are an illustration (captioned as an example, with made-up data), not a live view of anything.
  * `github`: GitHub is the only way in, so the buttons say "Sign in with GitHub".
  */
-export function landing(github: boolean, hasLegal = false, mcpUrl = '') {
+export function landing(github: boolean, hasLegal = false, mcpUrl = '', guest = false) {
   const t = copy.landing;
   const signIn = github ? t.signInGitHub : t.signIn;
   const dots = html`<i></i><i></i><i></i>`;
@@ -510,10 +508,8 @@ export function landing(github: boolean, hasLegal = false, mcpUrl = '') {
       ${win(step.window, html`<div class="card" aria-hidden="true">${step.example}</div>`)}
     </li>`,
   );
-  const tiles = (list: readonly { title: string; line: string; state?: string; part?: boolean }[]) =>
-    html`<ul class="grid3">${list.map(
-      (tile) => html`<li class="tile">${tile.state ? html`<span class="st${tile.part ? ' part' : ''}">${tile.state}</span>` : ''}<h3>${tile.title}</h3><p>${tile.line}</p></li>`,
-    )}</ul>`;
+  const tiles = (list: readonly { title: string; line: string }[]) =>
+    html`<ul class="grid3">${list.map((tile) => html`<li class="tile"><h3>${tile.title}</h3><p>${tile.line}</p></li>`)}</ul>`;
   return document(
     t.title,
     LANDING_STYLE,
@@ -528,7 +524,7 @@ export function landing(github: boolean, hasLegal = false, mcpUrl = '') {
         <p class="eyebrow"><b>${t.eyebrow[0]}</b> ${t.eyebrow[1]}</p>
         <h1>${t.headline[0]} <span>${t.headline[1]}</span></h1>
         <p class="lead">${t.lead}</p>
-        <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a><a class="btn quiet lg" href="#how">${t.howLink}</a></div>
+        <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a>${guest ? html`<a class="btn quiet lg" href="/ui/guest">${copy.guest.landing}</a>` : html`<a class="btn quiet lg" href="#how">${t.howLink}</a>`}</div>
         ${mcpUrl ? html`<p class="cmd"><code>${t.connector(mcpUrl)[0]}</code><span>${t.connector(mcpUrl)[1]}</span></p>` : ''}
         <p class="cmd"><code>${t.demo[0]}</code><span>${t.demo[1]}</span></p>
         <figure>

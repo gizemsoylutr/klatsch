@@ -148,6 +148,10 @@ Like GitHub's: a person is made only on joining by an invite or a public link, a
 
 The relay then also connects out to `oauth2.googleapis.com`. While the consent screen is in *testing*, only test users you list can sign in; publish it when you open up.
 
+## Guest mode (optional)
+
+`KLATSCH_GUEST=1` adds "Try it without an account" to the landing and sign-in pages. One click makes a guest for five hours whose only friend is the demo friend `@klatsch-demo`, which writes back with fixed lines (no model). A guest cannot add friends, open invites, join circles, add an email address, passkey, GitHub or Google, or send files; it sends at most 30 messages and 5 questions. It can connect a chat app or an agent, and their tokens go with it. When its hours are up, the next request deletes it with its pair circle and everything in it. One network makes at most 3 guests an hour and 10 a day, and at most 300 live at once.
+
 ## Privacy and terms pages (optional)
 
 A relay open to other people needs a privacy notice, and Google asks for both links before it publishes a sign-in. Set `KLATSCH_OPERATOR_NAME`, `KLATSCH_OPERATOR_EMAIL` and `KLATSCH_OPERATOR_PROCESSORS` (one sentence naming who hosts, backs up and mails for you) in `.env`, and the relay serves `/privacy` and `/terms`, linked from its landing page. Without them, the pages do not exist.

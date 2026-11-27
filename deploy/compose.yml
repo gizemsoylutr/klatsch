@@ -23,6 +23,8 @@ services:
       KLATSCH_OPERATOR_EMAIL: ${KLATSCH_OPERATOR_EMAIL:-}
       KLATSCH_OPENAI_CHALLENGE: ${KLATSCH_OPENAI_CHALLENGE:-}
       KLATSCH_OPERATOR_PROCESSORS: ${KLATSCH_OPERATOR_PROCESSORS:-}
+      # Optional guest mode (docs/self-hosting.md): 1 turns it on.
+      KLATSCH_GUEST: ${KLATSCH_GUEST:-}
     volumes:
       - data:/data
     # No published port: only Caddy reaches it, over the internal network. `outbound` is only for SMTP and
