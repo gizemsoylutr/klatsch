@@ -6,7 +6,9 @@ import { chromium, expect, test, type Browser, type Page } from '@playwright/tes
 import { agent, startRelay, type Relay } from '../e2e/harness.ts';
 
 /** A chat app's side of MCP Apps for one card; `mic` says whether it gives the card the microphone. */
-const host = (mic: boolean) => `<!doctype html><html><body style="margin:0"><iframe id="card" sandbox="allow-scripts" ${mic ? 'allow="microphone"' : ''} style="width:100%;height:600px;border:0"></iframe>
+// Like ChatGPT and Claude, the card runs on a sandbox origin of its own (here https://card.test), not in a srcdoc
+// frame: a frame without an origin gets no microphone from any browser.
+const host = (mic: boolean) => `<!doctype html><html><body style="margin:0"><iframe id="card" src="https://card.test/card.html" sandbox="allow-scripts allow-same-origin" ${mic ? 'allow="microphone"' : ''} style="width:100%;height:600px;border:0"></iframe>
 <script>
   const frame = document.getElementById('card');
   window.links = [];
@@ -54,8 +56,10 @@ test.describe.serial('voice notes in the card', () => {
   const openCard = async (page: Page, mic: boolean) => {
     const shown = await aliceChat.call('conversation', { handle: '@eve' });
     await page.exposeFunction('klatschCall', async (params: { name: string; arguments: Record<string, unknown> }) => JSON.parse((await aliceChat.call(params.name, params.arguments)).raw));
-    await page.setContent(host(mic));
-    await page.evaluate(`window.toolResult = ${JSON.stringify(JSON.parse(shown.raw))}; document.getElementById('card').srcdoc = ${JSON.stringify(cardPage)};`);
+    const result = JSON.stringify(JSON.parse(shown.raw));
+    await page.route('https://host.test/', (route) => route.fulfill({ contentType: 'text/html', body: host(mic).replace('<script>', `<script>window.toolResult = ${result};`) }));
+    await page.route('https://card.test/card.html', (route) => route.fulfill({ contentType: 'text/html', body: cardPage }));
+    await page.goto('https://host.test/');
     return page.frameLocator('#card');
   };
 
