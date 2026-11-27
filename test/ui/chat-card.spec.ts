@@ -65,8 +65,8 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     page.on('pageerror', (e) => errors.push(e.message));
     await page.exposeFunction('klatschCall', async (params: { name: string; arguments: Record<string, unknown> }) => JSON.parse((await chat.call(params.name, params.arguments)).raw));
-    await page.route('https://host.test/', (route) => route.fulfill({ contentType: 'text/html', body: HOST.replace('<script>', `<script>window.toolResult = ${JSON.stringify(result)};`) }));
-    await page.route('https://card.test/card.html', (route) => route.fulfill({ contentType: 'text/html', body: cardPage }));
+    await page.route('https://host.test/', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: HOST.replace('<script>', `<script>window.toolResult = ${JSON.stringify(result)};`) }));
+    await page.route('https://card.test/card.html', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: cardPage }));
     await page.goto('https://host.test/');
     return { card: page.frameLocator('#card'), errors };
   };
@@ -141,13 +141,13 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     expect(errors).toEqual([]);
   });
 
-  test('"Draft with my AI" sends the question to Eve’s AI and asks it to start, so nobody has to type', async ({ page }) => {
+  test('"Brew a reply" sends the question to Eve’s AI and asks it to start, so nobody has to type', async ({ page }) => {
     const asked = await aliceChat.call('ask_person', { handle: '@eve', question: 'Draft this one?' });
     await aliceChat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
     const ask = relay.klatsch.asksOf(eveId).find((k) => k.question === 'Draft this one?')!;
     const shown = await eveChat.call('show_question', { ask_id: ask.id });
     const { card, errors } = await openCard(page, eveChat, JSON.parse(shown.raw));
-    await card.getByRole('button', { name: 'Draft with my AI' }).click();
+    await card.getByRole('button', { name: /Brew a reply/ }).click();
     // First a word on how to answer, and a tone; the assistant is asked to draft with them.
     await card.getByLabel('How should your AI answer? (optional)').fill('Yes, the one by the river');
     await card.getByRole('button', { name: 'Short' }).click();

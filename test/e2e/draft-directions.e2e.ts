@@ -1,4 +1,4 @@
-// "Draft with my AI" on the Klatsch page, with one optional line on what to say: Alice writes "yes, 9 is fine,
+// "Brew a reply" on the Klatsch page, with one optional line on what to say: Alice writes "yes, 9 is fine,
 // keep it short" next to the button, and her own AI gets that line with the question or the conversation, marked
 // as her words. Left empty, nothing extra goes. The line is one line, at most 300 characters, nothing hidden.
 import assert from 'node:assert/strict';
@@ -34,10 +34,10 @@ describe('draft directions: a word on what to say goes to your own AI with the q
   };
   const events = async () => (await aliceAgent.call('inbox')).data.events as { kind: string; how?: string; note?: string; quote?: string }[];
 
-  it('the conversation shows one box under "Draft with my AI"; what Alice writes there reaches her AI with the question', async () => {
+  it('the conversation shows one box under "Brew a reply"; what Alice writes there reaches her AI with the question', async () => {
     const id = await bobAsks('Can you pick me up on Sunday?');
     const home = await aliceBrowser.get('/ui/chat/bob');
-    assert.match(home.html, new RegExp(`action="/ui/asks/${id}/send"[\\s\\S]*?name="how"[\\s\\S]*?Draft with my AI`));
+    assert.match(home.html, new RegExp(`action="/ui/asks/${id}/send"[\\s\\S]*?name="how"[\\s\\S]*?Brew it`));
     await aliceBrowser.post(`/ui/asks/${id}/send`, { how: '  yes,   9 is fine,\n keep it short ' });
     const question = (await events()).find((e) => e.kind === 'ask.question')!;
     assert.equal(question.quote, 'Can you pick me up on Sunday?');
@@ -56,7 +56,7 @@ describe('draft directions: a word on what to say goes to your own AI with the q
   it('the conversation page has the same box; the line goes with the conversation', async () => {
     await bobBrowser.post('/ui/chat/alice', { text: 'Dinner on Friday?' });
     const page = await aliceBrowser.get('/ui/chat/bob');
-    assert.match(page.html, /action="\/ui\/chat\/bob\/agent"[\s\S]*?name="how"[\s\S]*?Draft a reply with my AI/);
+    assert.match(page.html, /action="\/ui\/chat\/bob\/agent"[\s\S]*?name="how"[\s\S]*?Brew it/);
     await aliceBrowser.post('/ui/chat/bob/agent', { how: 'say yes, ask what to bring' });
     const thread = (await events()).find((e) => e.kind === 'message.thread')!;
     assert.match(thread.quote!, /Dinner on Friday\?/);

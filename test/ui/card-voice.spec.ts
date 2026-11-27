@@ -57,8 +57,8 @@ test.describe.serial('voice notes in the card', () => {
     const shown = await aliceChat.call('conversation', { handle: '@eve' });
     await page.exposeFunction('klatschCall', async (params: { name: string; arguments: Record<string, unknown> }) => JSON.parse((await aliceChat.call(params.name, params.arguments)).raw));
     const result = JSON.stringify(JSON.parse(shown.raw));
-    await page.route('https://host.test/', (route) => route.fulfill({ contentType: 'text/html', body: host(mic).replace('<script>', `<script>window.toolResult = ${result};`) }));
-    await page.route('https://card.test/card.html', (route) => route.fulfill({ contentType: 'text/html', body: cardPage }));
+    await page.route('https://host.test/', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: host(mic).replace('<script>', `<script>window.toolResult = ${result};`) }));
+    await page.route('https://card.test/card.html', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: cardPage }));
     await page.goto('https://host.test/');
     return page.frameLocator('#card');
   };

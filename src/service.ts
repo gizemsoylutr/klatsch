@@ -353,7 +353,7 @@ const MESSAGE_DAYS = 90;
 /** How long after sending its sender may delete a message for everyone. */
 const DELETE_FOR_EVERYONE_MS = 2 * DAY;
 const ATTACHMENT_DAYS = 14;
-/** How many of the friend's messages one "Draft with my AI" hands over. */
+/** How many of the friend's messages one "Brew a reply" hands over. */
 const THREAD_FOR_AGENT = 10;
 /** The demo friend of a review account: answers at once, and always has one question waiting. */
 const DEMO_HANDLE = 'klatsch-demo';

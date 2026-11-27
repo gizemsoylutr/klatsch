@@ -46,7 +46,7 @@ test.describe.serial('direct ask: Home shows both sides, and every step is a cli
     await expect(bob.page.getByText('How did you fix paging?')).toBeVisible();
     await bob.shot('direct-ask-home.png');
     await expect(bob.page.getByText('Only @alice reads it, and it goes straight to the AI they asked with.')).toBeVisible();
-    await bob.click(bob.page.getByRole('button', { name: 'Draft with my AI' }));
+    await bob.click(bob.page.getByRole('button', { name: 'Brew it' }));
     await expect(bob.page.getByText('Your agent gets this from @alice')).toBeVisible();
   });
 

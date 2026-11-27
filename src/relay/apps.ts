@@ -203,11 +203,11 @@ export function questionCard(key: string, from: { name: string; handle: string }
     ...(files.length ? { files } : {}),
     title: `${from.name} (@${from.handle}) asks you`,
     lines: [{ label: 'Question', text: question }],
-    note: `Only ${from.name} reads your answer, and it goes to the AI they asked with. Your AI here reads the question only if you choose "Draft with my AI".`,
+    note: `Only ${from.name} reads your answer, and it goes to the AI they asked with. Your AI here reads the question only if you choose "Brew a reply".`,
     answerBox: { label: 'Your answer', placeholder: 'Write your answer', max: 500 },
     actions: [
       { decision: 'declined', label: 'Decline' },
-      { decision: 'draft', label: 'Draft with my AI' },
+      { decision: 'draft', label: '☕ Brew a reply' },
       { decision: 'answer', label: 'Send answer', primary: true },
     ],
   };
@@ -219,7 +219,7 @@ export function chatCard(key: string, chat: ChatPayload): Card {
     key,
     title: `${chat.with.name} (@${chat.with.handle})`,
     lines: [],
-    note: `Only you and ${chat.with.name} read this. Your AI here reads it only if you choose "Draft with my AI".`,
+    note: `Only you and ${chat.with.name} read this. Your AI here reads it only if you choose "Brew a reply".`,
     actions: [],
     chat,
   };
@@ -339,7 +339,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human made a friend link in the card and will send it themselves.' }] }).catch(() => {});
   };
   /** A question asked from the card: it waits there for the answer and shows it when it comes. */
-  /** "Draft with my AI": first a word on how to answer and in what tone, then the assistant drafts. */
+  /** "Brew a reply": first a word on how to answer and in what tone, then the assistant drafts. */
   const guide = (onGo) => {
     const panel = el('div', undefined, 'guide');
     const label = el('label', 'How should your AI answer? (optional)'); label.htmlFor = 'how';
@@ -449,7 +449,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     }
     const said = el('p', '', 'note');
     const send = el('button', 'Send', 'primary'); send.type = 'button';
-    const draft = el('button', 'Draft with my AI'); draft.type = 'button';
+    const draft = el('button', '☕ Brew a reply'); draft.type = 'button';
     const page = el('button', 'Open in Klatsch'); page.type = 'button';
     page.addEventListener('click', () => app.openLink({ url: chat.page }).catch(() => {}));
     const fail = (result) => { let why = 'That did not work.'; try { why = JSON.parse(result.content[0].text).message || why; } catch {} said.textContent = why; };
@@ -592,7 +592,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       const b = el('button', action.label, action.primary ? 'primary' : '');
       b.type = 'button';
       b.addEventListener('click', () => {
-        // "Draft with my AI": ask first how to answer, then draft.
+        // "Brew a reply": ask first how to answer, then draft.
         if (action.decision === 'draft') {
           if (root.querySelector('.guide')) return;
           row.after(guide((how) => run(how)));
@@ -639,7 +639,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
           finish(sc.message || 'Done.');
           // A question just asked: the card waits for the answer.
           if (action.decision === 'approved' && card.waitsForAnswer) awaitAnswer(card.key);
-          // "Draft with my AI": the person's click asks the assistant to start, so it does not wait for a message.
+          // "Brew a reply": the person's click asks the assistant to start, so it does not wait for a message.
           if (action.decision === 'draft') {
             app.sendMessage({ role: 'user', content: [{ type: 'text', text: 'Read the question I just sent you from my Klatsch inbox and draft an answer for me to approve.' + (how ? ' ' + how : '') }] }).catch(() => {});
           }

@@ -594,7 +594,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       title: 'Open a conversation',
       ...cardTool(),
       description:
-        "Shows your human's conversation with one friend (by handle) in a Klatsch card in the chat, where they read it, reply and attach files. The messages are not returned: your human reads them in the card, or chooses \"Draft with my AI\" there to hand over the recent ones once. Where cards are not shown, it returns the conversation's address on the Klatsch page. Marks the conversation read. Shares nothing.",
+        "Shows your human's conversation with one friend (by handle) in a Klatsch card in the chat, where they read it, reply and attach files. The messages are not returned: your human reads them in the card, or chooses \"Brew a reply\" there to hand over the recent ones once. Where cards are not shown, it returns the conversation's address on the Klatsch page. Marks the conversation read. Shares nothing.",
       annotations: { title: 'Open a conversation', readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       inputSchema: conversationInput,
       outputSchema: conversationOutput,

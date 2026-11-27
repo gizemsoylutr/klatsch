@@ -1995,7 +1995,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.post('/intros/:id/send-always', send(sendQuote, true));
   web.post('/notes/:id/send', send(sendNote, false));
   // Direct questions: only the two people in it act on it, each in their own session.
-  /** The person's optional word on how their AI should answer, from the form next to "Draft with my AI". */
+  /** The person's optional word on how their AI should answer, from the form next to "Brew a reply". */
   const howOf = async (c: Context<Env>) => {
     const how = (await c.req.parseBody()).how;
     return typeof how === 'string' ? how : undefined;
@@ -2385,7 +2385,7 @@ function notice(title: string, body: unknown, muted = true) {
 const homeLink = html`<p><a href="/ui">${copy.layout.home}</a></p>`;
 
 /**
- * "Draft with my AI", with one optional line on what to say ("yes, 9 is fine, keep it short"): the line goes to the
+ * "Brew a reply", with one optional line on what to say ("yes, 9 is fine, keep it short"): the line goes to the
  * person's own AI with the question or conversation. One box and one button, like writing a message.
  */
 function howForm(action: string, label: string, how: string, placeholder: string, csrf: string, kind = 'reply') {
@@ -2622,7 +2622,7 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
 
 /**
  * A direct question between the two, in their conversation: the friend's waiting question with the answer box (and
- * "Draft with my AI" folded below it), or the person's own question waiting for an answer.
+ * "Brew a reply" folded below it), or the person's own question waiting for an answer.
  */
 function askBubble(k: AskView, csrf: string) {
   const a = copy.asks;

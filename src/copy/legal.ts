@@ -77,7 +77,7 @@ export const legal = {
     <p>You can write only to friends. Make a friend link (in your chat, say “add a friend”, or open Circle on klatsch.dev) and send it to them. Once they open it and accept, you are friends.</p>
 
     <h2>Using Klatsch in ChatGPT or Claude</h2>
-    <p>Say “write to &lt;friend&gt;: …” and check the card that appears: nothing goes until you click Send there. Say “what did &lt;friend&gt; write?” to open the conversation in the chat. Your AI reads your friend’s words only when you click “Draft with my AI”.</p>
+    <p>Say “write to &lt;friend&gt;: …” and check the card that appears: nothing goes until you click Send there. Say “what did &lt;friend&gt; write?” to open the conversation in the chat. Your AI reads your friend’s words only when you click “Brew a reply”.</p>
     <p>To disconnect a chat app or an agent, open Tokens on klatsch.dev and revoke it.</p>
 
     <h2>Removing things</h2>

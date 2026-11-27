@@ -171,7 +171,7 @@ export const THANKS = {
 export const NOTES = {
   pending: 'Nothing has happened yet: your human decides on the approval page.',
   inCard: 'Your human decides in the Klatsch card shown in this chat; the card itself shows when it is sent or declined. Reply with one short line pointing to the card. Do not write that it was or was not sent, and do not repeat the text: your message stays as written while the card changes. Do not ask them to approve in words.',
-  questionCard: 'The question is in the Klatsch card shown in this chat, for your human only. They answer there, or choose "Draft with my AI" to send it to you.',
+  questionCard: 'The question is in the Klatsch card shown in this chat, for your human only. They answer there, or choose "Brew a reply" to send it to you.',
   noCards: 'This chat app does not show Klatsch cards. Your human answers on their Klatsch page.',
   pendingCode: 'Nothing has happened yet: show your human the code and approve_url; they decide there.',
   expired: 'The approval expired before your human decided. Nothing was shared.',

@@ -108,7 +108,7 @@ describe('messages: a conversation with a friend, from any chat or the Klatsch p
     assert.equal(relay.klatsch.conversation(eve, 'alice').unread, 0);
   });
 
-  it('“Draft with my AI” hands Eve’s AI the conversation once, labelled as Alice’s words', async () => {
+  it('“Brew a reply” hands Eve’s AI the conversation once, labelled as Alice’s words', async () => {
     const card = (await eveChat.call('conversation', { handle: '@alice' })).meta[CARD];
     const handed = await eveChat.call('klatsch_card', { key: card.key, decision: 'draft' });
     assert.match(handed.data.message, /draft a reply/);

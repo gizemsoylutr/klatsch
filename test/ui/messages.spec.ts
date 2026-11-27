@@ -58,7 +58,7 @@ for (const viewport of [
       await expect(eve.page.locator('.thread').getByText('Yes, I will bring dessert.')).toBeVisible();
       await eve.shot(`messages-eve-${w}.png`);
       await eve.page.locator('details.chatmore > summary').click();
-      await eve.click(eve.page.getByRole('button', { name: 'Draft a reply with my AI' }));
+      await eve.click(eve.page.getByRole('button', { name: 'Brew it' }));
       await expect(eve.page.getByText(/Your AI gets your conversation with @alice/)).toBeVisible();
     });
   });
