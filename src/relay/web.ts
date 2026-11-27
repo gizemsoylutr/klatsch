@@ -1968,11 +1968,17 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.post('/intros/:id/send-always', send(sendQuote, true));
   web.post('/notes/:id/send', send(sendNote, false));
   // Direct questions: only the two people in it act on it, each in their own session.
-  web.post('/asks/:id/send', (c) => {
+  /** The person's optional word on how their AI should answer, from the form next to "Draft with my AI". */
+  const howOf = async (c: Context<Env>) => {
+    const how = (await c.req.parseBody()).how;
+    return typeof how === 'string' ? how : undefined;
+  };
+  web.post('/asks/:id/send', async (c) => {
     let from = '';
+    const how = await howOf(c);
     return attempt(
       c,
-      () => void (from = klatsch.sendAskToAgent(c.get('userId'), c.req.param('id')).from),
+      () => void (from = klatsch.sendAskToAgent(c.get('userId'), c.req.param('id'), how).from),
       '/ui',
       () => c.html(notice(copy.asks.sentTitle, html`<p class="sub">${copy.asks.sent(from)}</p>${homeLink}`)),
     );
@@ -2056,11 +2062,12 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       () => c.redirect(`${back}#end`, 303),
     );
   });
-  web.post('/chat/:handle/agent', (c) => {
+  web.post('/chat/:handle/agent', async (c) => {
     let from = '';
+    const how = await howOf(c);
     return attempt(
       c,
-      () => void (from = klatsch.sendConversationToAgent(c.get('userId'), c.req.param('handle')).from),
+      () => void (from = klatsch.sendConversationToAgent(c.get('userId'), c.req.param('handle'), 'web', how).from),
       '/ui',
       () => c.html(notice(copy.chat.sentToAgentTitle, html`<p class="sub">${copy.chat.sentToAgent(from)}</p>${homeLink}`)),
     );
@@ -2283,6 +2290,17 @@ function notice(title: string, body: unknown, muted = true) {
 const homeLink = html`<p><a href="/ui">${copy.layout.home}</a></p>`;
 
 /**
+ * "Draft with my AI", with one optional line on what to say ("yes, 9 is fine, keep it short"): the line goes to the
+ * person's own AI with the question or conversation. One box and one button, like writing a message.
+ */
+function howForm(action: string, label: string, how: string, placeholder: string, csrf: string, kind = 'reply') {
+  return html`<form class="${kind}" method="post" action="${action}">
+    <input type="hidden" name="csrf" value="${csrf}" />
+    <div class="field"><input type="text" name="how" maxlength="300" autocomplete="off" aria-label="${how}" placeholder="${placeholder}" /><button>${label}</button></div>
+  </form>`;
+}
+
+/**
  * What a guest may open and post: an allow-list, so a page added later is closed to guests until it is put here.
  * Home and conversations, questions, friend links (with other guests only, see `refuseGuest`), notifications,
  * connecting an agent or a chat app (tokens, the code page, approvals, the consent page), and the way out. Not:
@@ -2498,7 +2516,7 @@ function chatPage(view: ConversationView, csrf: string, files = true) {
         <div class="acts"><button class="primary">${t.send}</button></div>
       </form>
       ${view.messages.some((m) => !m.mine)
-        ? html`<div class="acts">${button(`/ui/chat/${handle}/agent`, t.toAgent, csrf)}</div><p class="hint">${t.toAgentNote}</p>`
+        ? html`${howForm(`/ui/chat/${handle}/agent`, t.toAgent, t.how, t.howPlaceholder, csrf)}<p class="hint">${t.toAgentNote}</p>`
         : ''}
       <p class="hint">${t.note(view.other.name)}</p>
     </section>`;
@@ -3029,7 +3047,7 @@ function dashboard(
                 </div>
                 <div class="acts">${
                   k.role === 'helper' && k.state === 'open'
-                    ? html`${button(`/ui/asks/${k.id}/decline`, copy.asks.decline, csrf)}${button(`/ui/asks/${k.id}/send`, copy.asks.draft, csrf)}`
+                    ? button(`/ui/asks/${k.id}/decline`, copy.asks.decline, csrf)
                     : k.role === 'helper'
                       ? html`<span class="m">${k.state === 'answered' ? copy.asks.youAnswered : copy.asks.youDeclined}</span>`
                     : k.state === 'answered'
@@ -3057,7 +3075,8 @@ function dashboard(
                         : ''}
                       <p class="m">${copy.asks.answerGoes(k.other.handle)}</p>
                       <button class="primary">${copy.asks.sendAnswer}</button>
-                    </form>`
+                    </form>
+                    ${howForm(`/ui/asks/${k.id}/send`, copy.asks.draft, copy.asks.how, copy.asks.howPlaceholder, csrf, 'answer')}`
                   : ''}
               </li>`,
             )}

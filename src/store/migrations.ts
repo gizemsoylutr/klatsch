@@ -749,4 +749,9 @@ export const migrations: string[] = [
   ALTER TABLE users ADD COLUMN guest_expires_at INTEGER;
   CREATE INDEX users_by_guest_expiry ON users (guest_expires_at) WHERE guest_expires_at IS NOT NULL;
   `,
+  // "Send to my AI" with a word on how to answer ("yes, 9 is fine, keep it short"): the person's own directions
+  // for their own agent, kept (sealed) with the event that hands the question or conversation over.
+  `
+  ALTER TABLE events ADD COLUMN how TEXT;
+  `,
 ];

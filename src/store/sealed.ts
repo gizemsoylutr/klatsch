@@ -71,4 +71,5 @@ export const SEALED_COLUMNS: [table: string, id: string, columns: string[]][] = 
   ['approvals', 'id', ['payload']],
   ['sip_vectors', 'sip_id', ['vector']],
   ['asks', 'id', ['question', 'answer']],
+  ['events', 'id', ['how']],
 ];

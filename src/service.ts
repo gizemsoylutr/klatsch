@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ATTACH, ASK, GUEST, MESSAGE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -430,6 +430,8 @@ export interface InboxEvent {
   files?: { type: string; size: number }[];
   /** A conversation the human let through: the friend's messages and their own around them, oldest first. */
   messages?: { from: string; text: string; at: string }[];
+  /** The human's own words on how to answer, given with "Send to my AI". */
+  how?: string;
 }
 
 export class Klatsch {
@@ -1978,7 +1980,8 @@ export class Klatsch {
    * The person hands the conversation to their own agent, once, by a click in their session (page or card): the
    * friend's recent messages go to its inbox, so it can draft a reply. Nothing reaches the agent otherwise.
    */
-  sendConversationToAgent(userId: string, handle: string, via: Via = 'web'): { from: string } {
+  sendConversationToAgent(userId: string, handle: string, via: Via = 'web', how?: string): { from: string } {
+    const directions = this.cleanHow(how);
     const { circleId, other } = this.friendFor(userId, handle);
     const from = agentHandle(other.handle);
     if (!from) throw new KlatschError('forbidden', MESSAGE.noFriend);
@@ -1988,7 +1991,7 @@ export class Klatsch {
           `UPDATE messages SET for_agent = 1 WHERE id IN (SELECT id FROM messages WHERE circle_id = ? AND recipient_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT ${THREAD_FOR_AGENT})`,
         )
         .run(circleId, userId, Date.now() - 7 * DAY);
-      this.event(userId, 'message.thread', circleId, true);
+      this.event(userId, 'message.thread', circleId, true, directions);
       this.audit(userId, via, 'message.send-to-agent', circleId);
     });
     return { from };
@@ -2078,13 +2081,26 @@ export class Klatsch {
     this.notifyUser(row.asker_id, notifications.other);
   }
 
+  /**
+   * The person's own word on how their agent should answer ("yes, 9 is fine, keep it short"), or undefined when
+   * they left it empty. One line, nothing hidden, at most HOW_MAX characters.
+   */
+  private cleanHow(how: string | undefined): string | undefined {
+    const clean = how?.replace(/\s+/g, ' ').trim();
+    if (!clean) return undefined;
+    if (clean.length > HOW_MAX) throw new KlatschError('invalid', `Say how to answer in at most ${HOW_MAX} characters.`);
+    refuseHidden(clean);
+    return clean;
+  }
+
   /** The person asked hands the question to their own agent, once, by a click in their session. */
-  sendAskToAgent(userId: string, askId: string): { from: string } {
+  sendAskToAgent(userId: string, askId: string, how?: string): { from: string } {
+    const directions = this.cleanHow(how);
     const row = this.askRow(askId);
     if (row?.helper_id === userId) {
       const { asker } = this.openAskFor(userId, askId);
       this.db.prepare('UPDATE asks SET question_for_agent = 1 WHERE id = ?').run(askId);
-      this.event(userId, 'ask.question', askId, true);
+      this.event(userId, 'ask.question', askId, true, directions);
       this.audit(userId, 'web', 'ask.send', askId);
       return { from: `@${asker.handle}` };
     }
@@ -3076,8 +3092,11 @@ export class Klatsch {
     this.forgetOldQuotes();
     return transaction(this.db, () => {
       const rows = this.db
-        .prepare(`SELECT id, kind, ref, created_at FROM events WHERE user_id = ? AND read_at IS NULL AND kind != 'sip.draft' ORDER BY id`)
-        .all(userId) as { id: number; kind: string; ref: string; created_at: number }[];
+        .prepare(`SELECT id, kind, ref, created_at, how FROM events WHERE user_id = ? AND read_at IS NULL AND kind != 'sip.draft' ORDER BY id`)
+        .all(userId) as { id: number; kind: string; ref: string; created_at: number; how: string | null }[];
+      /** The person's directions, with the event that carried them: shown to their own agent with the quote. */
+      const withHow = (event: InboxEvent | undefined, how: string | null): InboxEvent[] =>
+        !event ? [] : how ? [{ ...event, how, note: `${event.note ?? ''}${HOW_NOTE}`.trim() }] : [event];
       if (rows.length) {
         this.db.prepare('UPDATE events SET read_at = ? WHERE user_id = ? AND read_at IS NULL AND id <= ?').run(Date.now(), userId, rows.at(-1)!.id);
       }
@@ -3087,12 +3106,10 @@ export class Klatsch {
         if (row.kind === 'ask.question' || row.kind === 'ask.answer') {
           // An event the person caused (their click) does not wake; one a standing "always" brought does.
           const auto = Boolean((this.db.prepare('SELECT wakes FROM events WHERE id = ?').get(row.id) as { wakes: number } | undefined)?.wakes);
-          const delivered = this.deliverAsk(userId, row.ref, row.kind === 'ask.answer', auto);
-          return delivered ? [delivered] : [];
+          return withHow(this.deliverAsk(userId, row.ref, row.kind === 'ask.answer', auto), row.how);
         }
         if (row.kind === 'message.thread') {
-          const delivered = this.deliverThread(userId, row.ref);
-          return delivered ? [delivered] : [];
+          return withHow(this.deliverThread(userId, row.ref), row.how);
         }
         if (row.kind === 'message.received') {
           const sender = (this.db.prepare('SELECT sender_id FROM messages WHERE id = ? AND recipient_id = ?').get(row.ref, userId) as { sender_id: string } | undefined)?.sender_id;
@@ -3350,9 +3367,11 @@ export class Klatsch {
   // ---------- plumbing ----------
 
   /** `ownAction`: the person caused it themselves, so it does not wake their watch (see WAKES). */
-  private event(userId: string, kind: string, ref: string, ownAction = false): void {
+  private event(userId: string, kind: string, ref: string, ownAction = false, how?: string): void {
     const wakes = (WAKES as readonly string[]).includes(kind) && !ownAction;
-    this.db.prepare('INSERT INTO events (user_id, kind, ref, created_at, wakes) VALUES (?, ?, ?, ?, ?)').run(userId, kind, ref, Date.now(), wakes ? 1 : 0);
+    this.db
+      .prepare('INSERT INTO events (user_id, kind, ref, created_at, wakes, how) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(userId, kind, ref, Date.now(), wakes ? 1 : 0, how ? sealText(this.db, how) : null);
     // News an agent may be watching for; told after the commit, like a notification, and only as counts.
     // A failure here is logged and never undoes the action or stops what else runs after the commit.
     if (wakes) {

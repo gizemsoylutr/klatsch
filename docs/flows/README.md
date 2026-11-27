@@ -15,6 +15,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | dashboard: drafts, intros and the card, decided in the browser | 7 | [dashboard.drawio](dashboard.drawio) |
 | decline: the solvers say no, the seeker hears so, no names are exchanged | 6 | [decline.drawio](decline.drawio) |
 | direct ask: one person, both humans approve, agents get text only by a click or "always" | 10 | [direct-ask.drawio](direct-ask.drawio) |
+| draft directions: a word on what to say goes to your own AI with the question or conversation | 4 | [draft-directions.drawio](draft-directions.drawio) |
 | sign in by email: a new person joins by invite with a mailed link, and signs in by email again later | 13 | [email-sign-in.drawio](email-sign-in.drawio) |
 | email: confirm an address in the browser, then content-free notifications | 7 | [email.drawio](email.drawio) |
 | friends: a link, a question about anything, an answer typed by hand that reaches the agent that asked | 8 | [friends.drawio](friends.drawio) |

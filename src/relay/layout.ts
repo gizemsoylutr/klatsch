@@ -145,7 +145,7 @@ button.primary, a.button.primary { background: var(--button); color: var(--ink);
 button.link { background: transparent; color: var(--accent); padding: 4px 6px; min-height: 28px; border-radius: 6px; font-weight: 400; }
 button.link:hover { text-decoration: underline; }
 .lg, .sheet button, .sheet a.button { min-height: 44px; padding: 10px 22px; font-size: 15px; }
-input[type="email"], input[name="code"], input[name="handle"] { font: inherit; width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px;
+input[type="email"], input[name="code"], input[name="handle"], input[name="how"] { font: inherit; width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--sunk); color: var(--fg); }
 input[name="code"] { font: 600 22px var(--mono); letter-spacing: 0.15em; text-align: center; text-transform: uppercase; min-height: 52px; }
 .field { display: flex; flex-wrap: wrap; gap: 8px; }
