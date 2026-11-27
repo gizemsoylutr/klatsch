@@ -45,7 +45,7 @@ test.describe.serial('voice notes in the card', () => {
     relay.klatsch.addMember(relay.klatsch.friendCircle(alice), eve, alice);
     aliceChat = await agent(relay, relay.chatAppToken(alice), { dialogs: false, cards: true });
     const resource = (await aliceChat.readResource('ui://klatsch/card.html')).contents[0] as { text: string; _meta?: { ui?: { permissions?: unknown } } };
-    expect(resource._meta?.ui?.permissions).toEqual({ microphone: {} });
+    expect(resource._meta?.ui?.permissions).toEqual({ microphone: {}, clipboardWrite: {} });
     cardPage = resource.text;
   });
   test.afterAll(async () => {

@@ -71,7 +71,7 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
   it('from the card in a chat app: the card asks for the microphone, and a voice note alone is a message', async () => {
     const chat = await agent(relay, relay.chatAppToken(alice), { dialogs: false, cards: true });
     const resource = (await chat.readResource('ui://klatsch/card.html')).contents[0] as { _meta?: { ui?: { permissions?: unknown } } };
-    assert.deepEqual(resource._meta?.ui?.permissions, { microphone: {} });
+    assert.deepEqual(resource._meta?.ui?.permissions, { microphone: {}, clipboardWrite: {} });
     const shown = await chat.call('conversation', { handle: '@eve' });
     const key = shown.meta['dev.klatsch/card'].key;
     const sent = await chat.call('klatsch_card', { key, decision: 'reply', text: '', voice: true, files: [{ name: 'voice-note.webm', data: Buffer.from(WEBM).toString('base64') }] });

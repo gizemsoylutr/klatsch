@@ -620,7 +620,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     'Klatsch card',
     CARD_URI,
     { title: 'Klatsch card', description: 'Where your human decides a Klatsch request, or answers a question, inside the chat.', mimeType: RESOURCE_MIME_TYPE },
-    async () => ({ contents: [{ uri: CARD_URI, mimeType: RESOURCE_MIME_TYPE, text: cardHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] }, permissions: { microphone: {} } } } }] }),
+    async () => ({ contents: [{ uri: CARD_URI, mimeType: RESOURCE_MIME_TYPE, text: cardHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] }, permissions: { microphone: {}, clipboardWrite: {} } } } }] }),
   );
 
   {

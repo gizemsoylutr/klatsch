@@ -8,7 +8,9 @@ import { person } from './people.ts';
 const QUESTION = 'Which bakery near the station did you like? <b>not bold</b>';
 
 /** A chat app's side of MCP Apps, just enough for one card: initialize, the tool result, tools/call, model context. */
-const HOST = `<!doctype html><html><body style="margin:0"><iframe id="card" sandbox="allow-scripts" style="width:100%;height:600px;border:0"></iframe>
+// The card runs on a sandbox origin of its own (https://card.test), as ChatGPT and Claude serve it, not in a srcdoc
+// frame (which has no origin, and crashes some Chromium builds when sandboxed).
+const HOST = `<!doctype html><html><body style="margin:0"><iframe id="card" src="https://card.test/card.html" sandbox="allow-scripts allow-same-origin" allow="clipboard-write" style="width:100%;height:600px;border:0"></iframe>
 <script>
   const frame = document.getElementById('card');
   window.modelContext = [];
@@ -63,8 +65,9 @@ test.describe.serial('the Klatsch card in a chat app', () => {
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     page.on('pageerror', (e) => errors.push(e.message));
     await page.exposeFunction('klatschCall', async (params: { name: string; arguments: Record<string, unknown> }) => JSON.parse((await chat.call(params.name, params.arguments)).raw));
-    await page.setContent(HOST);
-    await page.evaluate(`window.toolResult = ${JSON.stringify(result)}; document.getElementById('card').srcdoc = ${JSON.stringify(cardPage)};`);
+    await page.route('https://host.test/', (route) => route.fulfill({ contentType: 'text/html', body: HOST.replace('<script>', `<script>window.toolResult = ${JSON.stringify(result)};`) }));
+    await page.route('https://card.test/card.html', (route) => route.fulfill({ contentType: 'text/html', body: cardPage }));
+    await page.goto('https://host.test/');
     return { card: page.frameLocator('#card'), errors };
   };
 
