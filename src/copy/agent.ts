@@ -67,7 +67,9 @@ export const ATTACH = {
  * alike, so each line also tells the person how to get the real thing.
  */
 export const GUEST = {
-  demoOnly: 'A guest has the demo friend only. Sign in to add a real friend.',
+  guestsOnly: 'A guest can only be friends with another guest, by a friend link. Sign in to add a real friend.',
+  linkFromGuest: 'This link is from a guest. Open it signed out, in a private window, to join as a guest.',
+  links: 'A guest makes at most 3 friend links.',
   noFiles: 'Files need an account. Sign in to send photos, PDFs or voice notes.',
   noAccount: 'Guests cannot add a sign-in. Sign in with an account instead; the guest goes after its hours.',
   messages: 'A guest sends at most 30 messages. Sign in to keep going.',

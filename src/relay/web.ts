@@ -326,6 +326,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
 
   const allowGuestHour = perKeyLimit(3, HOUR_MS);
   const allowGuestDay = perKeyLimit(10, 24 * HOUR_MS);
+  const guestLinkGone = (c: Context) => c.html(notice(copy.invite.title, html`<p class="sub">${copy.invite.invalid}</p>`), 410);
   const guestBusy = (c: Context, status: 429 | 503) => c.html(notice(copy.guest.busyTitle, html`<p class="sub">${GUEST.busy}</p>`), status);
   web.get('/guest', (c) => {
     if (!config.guest) return c.notFound();
@@ -350,12 +351,30 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     // Both windows count every try, so a network cannot make guests faster by spreading them out.
     const key = addressKey(address(c));
     if (![allowGuestHour(key), allowGuestDay(key)].every(Boolean)) return guestBusy(c, 429);
+    // From a guest's friend link: join that guest at once, and go straight to the conversation.
+    const form = await c.req.parseBody();
+    const token = typeof form.invite === 'string' ? form.invite : '';
+    const invite = token ? findInvite(db, secret, token) : undefined;
+    if (token && (!invite || !klatsch.isGuest(invite.createdBy))) return guestLinkGone(c);
     let guest: string;
     try {
       guest = klatsch.startGuest();
     } catch (error) {
       if (error instanceof KlatschError) return guestBusy(c, 503);
       throw error;
+    }
+    if (invite) {
+      try {
+        klatsch.acceptInvite(guest, invite);
+      } catch (error) {
+        if (!(error instanceof KlatschError)) throw error;
+        klatsch.endGuest(guest, 'web');
+        return guestLinkGone(c);
+      }
+      const earlier = getCookie(c, COOKIE);
+      if (earlier) endSession(db, secret, earlier);
+      arrive(c, startSession(db, secret, guest).session, guest);
+      return c.redirect(`/ui/chat/${encodeURIComponent(klatsch.user(invite.createdBy).handle)}`, 303);
     }
     // Back to where this browser was going (the consent page of a chat app being connected), else Home.
     return signIn(c, guest);
@@ -1075,6 +1094,22 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       // At a public join link, the page says which circle; anyone may join it, so that is no secret.
       const target = c.req.method === 'GET' ? joinTargetOf(c.req.path) : undefined;
       const open = target?.kind === 'public' ? klatsch.publicCircle(target.token) : undefined;
+      // A guest's friend link: the visitor joins as a guest with one click; accounts cannot join it anyway.
+      const fromGuest = config.guest && target?.kind === 'invite' ? findInvite(db, secret, target.token) : undefined;
+      if (fromGuest && klatsch.isGuest(fromGuest.createdBy)) {
+        return c.html(
+          signInScreen(
+            copy.guest.invited(fromGuest.inviterName),
+            html`<p class="lead">${copy.guest.invitedLine(GUEST_HOURS)}</p>
+              <form class="mail" method="post" action="/ui/guest">
+                <input type="hidden" name="csrf" value="${formToken(c)}" />
+                <input type="hidden" name="invite" value="${(target as { token: string }).token}" />
+                <button class="primary">${copy.guest.join}</button>
+              </form>
+              <p>${copy.guest.accountsHere}</p>`,
+          ),
+        );
+      }
       const passkey = passkeyAt(c);
       if (github(c) || google(c) || klatsch.signInMailer || passkey) {
         // One form token for the page: a browser without the cookie yet would otherwise get two values.
@@ -1087,12 +1122,12 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
               passkey ? passkeyBox(token, Boolean(github(c) || google(c) || klatsch.signInMailer)) : ''
             }${github(c) ? html`${githubLink(GITHUB_PATH, t.github)}<p>${t.githubNote}</p><span class="or">${t.or}</span>` : ''}${google(c) ? html`${googleLink(GOOGLE_PATH, t.google)}<p>${t.googleNote}</p><span class="or">${t.or}</span>` : ''}${
               klatsch.signInMailer ? emailForm(c, token) : ''
-            }${config.guest && !open ? html`<p><a href="/ui/guest">${copy.guest.link}</a></p>` : ''}<p>${t.loginLink}</p>${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}${open ? '' : html`<p>${t.inviteNeeded}</p>`}${isHosted(config) ? '' : html`<p>${t.help}</p>`}`,
+            }${config.guest && !target ? html`<p><a href="/ui/guest">${copy.guest.link}</a></p>` : ''}<p>${t.loginLink}</p>${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}${open ? '' : html`<p>${t.inviteNeeded}</p>`}${isHosted(config) ? '' : html`<p>${t.help}</p>`}`,
           ),
           401,
         );
       }
-      return c.html(signInScreen(t.notSignedInTitle, html`<p class="lead">${t.notSignedIn}</p><p>${t.help}</p><p>${t.inviteNeeded}</p>${config.guest ? html`<p><a href="/ui/guest">${copy.guest.link}</a></p>` : ''}${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}`), 401);
+      return c.html(signInScreen(t.notSignedInTitle, html`<p class="lead">${t.notSignedIn}</p><p>${t.help}</p><p>${t.inviteNeeded}</p>${config.guest && !target ? html`<p><a href="/ui/guest">${copy.guest.link}</a></p>` : ''}${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}`), 401);
     }
     // A renewed session gets a cookie that lives as long as it now does.
     if (found.expiresAt) setCookie(c, COOKIE, session, { httpOnly: true, sameSite: 'Lax', secure, path: '/ui', maxAge: Math.floor((found.expiresAt - Date.now()) / 1000) });
@@ -1123,6 +1158,18 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.get('/', (c) => {
     const userId = c.get('userId');
     const user = klatsch.user(userId);
+    // A guest without a friend yet: how long it has, and the link to bring one.
+    const guestAt = klatsch.guestExpiresAt(userId);
+    if (guestAt !== undefined && !klatsch.inAnyCircle(userId)) {
+      return show(
+        c,
+        user.display_name,
+        'home',
+        html`${guestBanner(guestAt, c.get('csrf'))}
+          <div class="ph"><h1>${copy.guest.noFriendTitle}</h1></div>
+          <section class="sec"><p class="hint">${copy.guest.noFriend}</p><p class="hint">${button('/ui/friends/invite', copy.circle.addFriend, c.get('csrf'), 'primary')}</p></section>`,
+      );
+    }
     // Signed in, but circles grow by invite only: nothing to show until one is accepted.
     if (!klatsch.inAnyCircle(userId)) {
       return c.html(
@@ -1493,6 +1540,10 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       return c.html(notice(copy.invite.title, html`<p class="sub">${copy.invite.alreadyMember(invite.circleName)}</p>${circlesLink}`, false));
     }
     if (!klatsch.inviteOpenTo(c.get('userId'), invite)) return invalidInvite(c);
+    // A guest's link joins guests only, and a guest joins no one else's.
+    if (klatsch.isGuest(invite.createdBy) !== klatsch.isGuest(c.get('userId'))) {
+      return c.html(notice(copy.invite.title, html`<p class="sub">${klatsch.isGuest(c.get('userId')) ? GUEST.guestsOnly : GUEST.linkFromGuest}</p>${homeLink}`, false), 403);
+    }
     return c.html(
       dialog(
         copy.invite.heading,
@@ -2233,14 +2284,16 @@ const homeLink = html`<p><a href="/ui">${copy.layout.home}</a></p>`;
 
 /**
  * What a guest may open and post: an allow-list, so a page added later is closed to guests until it is put here.
- * Home and its conversation with the demo friend, questions, notifications, connecting an agent or a chat app
- * (tokens, the code page, approvals, the consent page), and the way out. Not: email, passkeys, GitHub or Google,
- * friends and circles, files, intros, notes, deleting by handle.
+ * Home and conversations, questions, friend links (with other guests only, see `refuseGuest`), notifications,
+ * connecting an agent or a chat app (tokens, the code page, approvals, the consent page), and the way out. Not:
+ * email, passkeys, GitHub or Google, circles, files, intros, notes, deleting by handle.
  */
 const GUEST_PAGES: Record<string, RegExp[]> = {
-  GET: [/^\/ui\/?$/, /^\/ui\/chat\/[^/]+$/, /^\/ui\/settings$/, /^\/ui\/tokens$/, /^\/ui\/connect$/, /^\/ui\/device$/, /^\/ui\/approvals\/[^/]+$/, /^\/ui\/oauth\/authorize$/, /^\/ui\/circle$/],
+  GET: [/^\/ui\/?$/, /^\/ui\/chat\/[^/]+$/, /^\/ui\/settings$/, /^\/ui\/tokens$/, /^\/ui\/connect$/, /^\/ui\/device$/, /^\/ui\/approvals\/[^/]+$/, /^\/ui\/oauth\/authorize$/, /^\/ui\/circle$/, /^\/ui\/invite\/[^/]+$/],
   POST: [
     /^\/ui\/chat\/[^/]+(\/agent)?$/,
+    /^\/ui\/friends\/(invite|[^/]+\/end)$/,
+    /^\/ui\/invite\/[^/]+$/,
     /^\/ui\/asks\/[^/]+\/(answer|decline|withdraw|send)$/,
     /^\/ui\/push\/(subscribe|sync|test|off|unsubscribe|offer\/dismiss)$/,
     /^\/ui\/passkeys\/offer\/dismiss$/,

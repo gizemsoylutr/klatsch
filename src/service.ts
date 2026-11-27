@@ -359,6 +359,8 @@ export const GUEST_HOURS = 5;
 const GUEST_LIVE_MAX = 300;
 const GUEST_MESSAGES = 30;
 const GUEST_ASKS = 5;
+/** Friend links a guest may make in all: enough to try it with a friend or two. */
+const GUEST_LINKS = 3;
 /**
  * What the demo friend says. It plays a friend, not Klatsch: it writes back about what was written to it, so a
  * reviewer sees what Klatsch is for (a plan made in a chat reaching a friend, a friend's opinion coming back).
@@ -713,7 +715,7 @@ export class Klatsch {
 
   /** The user who creates a circle owns it; an existing circle keeps its owner. */
   ensureCircle(name: string, ownerId: string): string {
-    this.refuseGuest(ownerId);
+    if (this.isGuest(ownerId)) throw new KlatschError('forbidden', GUEST.guestsOnly);
     const existing = this.db.prepare('SELECT id FROM circles WHERE name = ?').get(name) as { id: string } | undefined;
     if (existing) return existing.id;
     const id = newId('cir');
@@ -731,7 +733,11 @@ export class Klatsch {
    * suffix nobody sees; pages show the other person instead. At most 20 waiting ones per person.
    */
   friendCircle(userId: string): string {
-    this.refuseGuest(userId);
+    // A guest's link is only for another guest (`refuseGuest` when it is used), and a guest makes few.
+    if (this.isGuest(userId)) {
+      const made = this.db.prepare(`SELECT count(*) AS n FROM memberships m JOIN circles c ON c.id = m.circle_id WHERE m.user_id = ? AND m.role = 'owner' AND c.pair = 1`).get(userId) as { n: number };
+      if (made.n >= GUEST_LINKS) throw new KlatschError('forbidden', GUEST.links);
+    }
     // A review account may make a link, so a reviewer sees how adding a friend works; nobody can use it to join
     // (acceptInvite), so the account still reaches no real person.
     // Links still waiting (unused, unexpired, friendship not ended), and how many were made in a day.
@@ -815,7 +821,7 @@ export class Klatsch {
   }
 
   addMember(circleId: string, userId: string, invitedBy?: string): void {
-    this.refuseGuest(userId);
+    this.refuseGuest(userId, circleId);
     this.db
       .prepare('INSERT OR IGNORE INTO memberships (circle_id, user_id, invited_by, created_at) VALUES (?, ?, ?, ?)')
       .run(circleId, userId, invitedBy ?? null, Date.now());
@@ -1075,17 +1081,27 @@ export class Klatsch {
   }
 
   /**
-   * The one rule that keeps guests from real people: a guest never gains a membership. Every path that adds one
-   * (`addMember`, `friendCircle`, `ensureCircle`) asks here; only `startGuest` writes a guest's two memberships,
-   * in the pair circle with the demo friend. A test counts the places that insert memberships, so a new one cannot
-   * appear without this check.
+   * The one rule that keeps guests and real people apart: a guest is only ever in a circle for two whose other
+   * person is a guest too, and nobody else ever joins a circle a guest is in. `addMember` asks here with the
+   * circle; `joinPublic` and `acceptInvite` ask first, for their own words; `ensureCircle` makes no circle for a
+   * guest, and `friendCircle` makes the guest the only member of a new pair. A test counts the places that insert
+   * memberships, so a new one cannot appear without this check.
    */
-  private refuseGuest(userId: string): void {
-    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.demoOnly);
+  private refuseGuest(userId: string, circleId?: string): void {
+    const guest = this.isGuest(userId);
+    if (circleId === undefined) {
+      if (guest) throw new KlatschError('forbidden', GUEST.guestsOnly);
+      return;
+    }
+    const circle = this.db.prepare('SELECT pair FROM circles WHERE id = ?').get(circleId) as { pair: number } | undefined;
+    const members = (this.db.prepare('SELECT user_id FROM memberships WHERE circle_id = ?').all(circleId) as { user_id: string }[]).map((m) => m.user_id);
+    const withGuests = members.some((m) => this.isGuest(m));
+    if (guest && (!circle?.pair || members.some((m) => !this.isGuest(m)))) throw new KlatschError('forbidden', GUEST.guestsOnly);
+    if (!guest && withGuests) throw new KlatschError('forbidden', GUEST.linkFromGuest);
   }
 
   joinPublic(userId: string, token: string): 'joined' | 'already-member' {
-    this.refuseGuest(userId);
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.guestsOnly);
     if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account does not join public circles.');
     return transaction(this.db, () => {
       const circle = this.publicCircle(token);
@@ -1104,9 +1120,10 @@ export class Klatsch {
    * Someone removed from the circle can only come back on an invite its owner created after the removal, which clears the removal.
    */
   acceptInvite(userId: string, invite: Invite): 'joined' | 'already-member' | 'already-friends' {
-    // Outsiders hold a review account's password, and anyone can be a guest: neither reaches real people, by invite or friend link.
-    this.refuseGuest(userId);
-    if (this.isGuest(invite.createdBy)) throw new KlatschError('forbidden', 'This link comes from a Klatsch demo account. It adds nobody.');
+    // Outsiders hold a review account's password, and anyone can be a guest: neither reaches real people, by invite
+    // or friend link. A guest's friend link is for another guest only.
+    if (this.isGuest(userId) !== this.isGuest(invite.createdBy)) throw new KlatschError('forbidden', this.isGuest(userId) ? GUEST.guestsOnly : GUEST.linkFromGuest);
+    this.refuseGuest(userId, invite.circleId);
     if (this.isReviewAccount(userId)) throw new KlatschError('forbidden', 'A review account has the demo friend only.');
     if (this.isReviewAccount(invite.createdBy)) throw new KlatschError('forbidden', 'This link comes from a Klatsch demo account. It adds nobody.');
     return transaction(this.db, () => {
@@ -1136,7 +1153,8 @@ export class Klatsch {
    */
   mayInvite(userId: string, circleId: string): boolean {
     const role = this.memberRole(userId, circleId);
-    if (!role || this.isReviewAccount(userId) || this.isGuest(userId)) return false;
+    // A guest owns only circles for two (`refuseGuest`), whose one link is checked below like anyone's.
+    if (!role || this.isReviewAccount(userId)) return false;
     // A friendship has its one invite, from the person who made it; an ended one takes nobody.
     const kind = this.db.prepare('SELECT pair, ended_at FROM circles WHERE id = ?').get(circleId) as { pair: number; ended_at: number | null };
     if (kind.ended_at !== null || (kind.pair && role !== 'owner')) return false;
@@ -1608,10 +1626,10 @@ export class Klatsch {
   // ---------- guests ----------
 
   /**
-   * "Try it without an account": a guest for GUEST_HOURS, whose only friend is the demo friend, with the demo
-   * conversation and question waiting. The guest picks no name and no handle, adds no sign-in, sends no files
-   * and gains no other membership (`refuseGuest`), so nothing it writes reaches a real person, and the demo friend
-   * answers with fixed lines, never a model. Everything goes when its hours are up (`sweepGuests`).
+   * "Try it without an account": a guest for GUEST_HOURS, with no friend yet. It invites a friend by link, who joins
+   * as a guest too, and the two write to each other. A guest picks no name and no handle, adds no sign-in, sends
+   * no files, and is only ever in a circle for two with another guest (`refuseGuest`), so nothing it writes reaches
+   * a real person and no real person's words reach it. Everything goes when its hours are up (`sweepGuests`).
    */
   startGuest(now = Date.now()): string {
     if (!this.config.guest) throw new KlatschError('forbidden', GUEST.off);
@@ -1619,27 +1637,23 @@ export class Klatsch {
     return transaction(this.db, () => {
       const live = this.db.prepare('SELECT count(*) AS n FROM users WHERE guest_expires_at IS NOT NULL').get() as { n: number };
       if (live.n >= GUEST_LIVE_MAX) throw new KlatschError('forbidden', GUEST.busy);
-      const demo = this.demoFriend();
       const letters = 'abcdefghjkmnpqrstuvwxyz23456789';
       let handle: string;
       do handle = GUEST_PREFIX + [...randomBytes(6)].map((b) => letters[b % letters.length]).join('');
       while (this.db.prepare('SELECT 1 FROM users WHERE handle = ?').get(handle));
       const guest = newId('usr');
-      this.db.prepare('INSERT INTO users (id, handle, display_name, created_at, guest_expires_at) VALUES (?, ?, ?, ?, ?)').run(guest, handle, 'Guest', now, now + GUEST_HOURS * HOUR);
-      const circle = newId('cir');
-      this.db.prepare('INSERT INTO circles (id, name, created_at, pair, join_cap) VALUES (?, ?, ?, 1, 2)').run(circle, `friends-${circle.slice(-10)}`, now);
-      // The only memberships a guest ever has: this pair circle with the demo friend, written here and nowhere else.
-      const join = this.db.prepare('INSERT INTO memberships (circle_id, user_id, role, invited_by, created_at) VALUES (?, ?, ?, ?, ?)');
-      join.run(circle, demo, 'owner', null, now);
-      join.run(circle, guest, 'member', demo, now);
-      this.seedDemoConversation(demo, guest, circle);
-      this.seedDemoQuestion(demo, guest);
+      // Two guests talking need to tell each other apart: "Guest K7M", from the handle.
+      const name = `Guest ${handle.slice(GUEST_PREFIX.length, GUEST_PREFIX.length + 3).toUpperCase()}`;
+      this.db.prepare('INSERT INTO users (id, handle, display_name, created_at, guest_expires_at) VALUES (?, ?, ?, ?, ?)').run(guest, handle, name, now, now + GUEST_HOURS * HOUR);
       this.audit(guest, 'web', 'guest.start');
       return guest;
     });
   }
 
-  /** A guest ends now ("End guest session", or its hours are up): its pair circle and everything in it, then the account. */
+  /**
+   * A guest ends now ("End guest session", or its hours are up): its circles for two and everything in them (so the
+   * other guest loses that friend at once), then the account.
+   */
   endGuest(userId: string, via: Via): void {
     if (!this.isGuest(userId)) throw new KlatschError('forbidden', 'This is not a guest.');
     transaction(this.db, () => {
