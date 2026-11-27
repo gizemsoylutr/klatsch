@@ -162,7 +162,8 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     const shown = { ...(result.structuredContent ?? {}), note };
     delete (shown as Record<string, unknown>).approve_url;
     delete (shown as Record<string, unknown>).code;
-    const withNotify = { ...card, notify: `${base}/ui/settings#notifications` };
+    // A guest sends no files: its cards offer no picker.
+    const withNotify = { ...card, ...(klatsch.isGuest(caller()) ? { pick: false } : {}), notify: `${base}/ui/settings#notifications` };
     return { ...result, content: [{ type: 'text', text: JSON.stringify(shown) }], structuredContent: shown, _meta: { ...(result._meta ?? {}), [CARD_META]: withNotify } };
   };
   /** A conversation as the card shows it: the last 30 messages, files as links to the person's Klatsch page. */
@@ -173,6 +174,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
       messages: view.messages.map((m) => ({ mine: m.mine, text: m.text, at: m.at, files: m.files.map((f) => ({ name: f.name, url: `${base}/ui/attachments/${f.id}` })) })),
       page: `${base}/ui/chat/${encodeURIComponent(view.other.handle)}`,
       max: 2000,
+      files: !klatsch.isGuest(userId),
     };
   };
   /**

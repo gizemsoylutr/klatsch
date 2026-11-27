@@ -63,6 +63,9 @@ describe('guest mode: a few hours with the demo friend, and nobody else', () => 
     const chat = await visitor.post('/ui/chat/klatsch-demo', { text: 'Museum on Saturday? I can get tickets.' });
     assert.equal(chat.status, 200);
     assert.match(relay.klatsch.conversation(guest, '@klatsch-demo').messages.at(-1)!.text, /count me in/);
+    // No file fields anywhere a guest writes: Home's answer form and the conversation.
+    assert.doesNotMatch((await visitor.go('/ui')).html, /type="file"/);
+    assert.doesNotMatch((await visitor.go('/ui/chat/klatsch-demo')).html, /type="file"/);
     // Settings is only the way out: no email, passkey, GitHub or Google to add.
     const settings = await visitor.go('/ui/settings');
     assert.match(settings.html, /End guest session/);
@@ -107,9 +110,13 @@ describe('guest mode: a few hours with the demo friend, and nobody else', () => 
     for (let i = 0; i < 30; i++) relay.klatsch.sendMessage(guest, '@klatsch-demo', `Message ${i}`);
     assert.throws(() => relay.klatsch.sendMessage(guest, '@klatsch-demo', 'One more'), /at most 30 messages/);
     const chat = await agent(relay, relay.chatAppToken(guest), { dialogs: false, cards: true });
+    // Its cards in the chat offer no file picker either.
+    const shown = await chat.call('conversation', { handle: '@klatsch-demo' });
+    assert.equal(shown.meta['dev.klatsch/card'].chat.files, false);
     for (let i = 0; i < 5; i++) {
       const asked = await chat.call('ask_person', { handle: '@klatsch-demo', question: `Which one, ${i}?` });
       assert.equal(asked.isError, false);
+      assert.equal(asked.meta['dev.klatsch/card'].pick, false);
       await chat.call('klatsch_card', { key: asked.meta['dev.klatsch/card'].key, decision: 'approved' });
     }
     assert.equal((await chat.call('ask_person', { handle: '@klatsch-demo', question: 'And one more?' })).isError, true);

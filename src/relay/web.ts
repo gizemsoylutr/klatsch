@@ -1165,6 +1165,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         c.get('csrf'),
         klatsch.circlesOf(userId).filter((circle) => circle.pair && circle.people === 2).length,
         klatsch.conversationsOf(userId),
+        guestLeft === undefined,
       )}`,
     );
   });
@@ -1986,7 +1987,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p>${homeLink}`), 404);
       throw error;
     }
-    return show(c, view.other.name, 'home', chatPage(view, c.get('csrf')));
+    return show(c, view.other.name, 'home', chatPage(view, c.get('csrf'), !klatsch.isGuest(c.get('userId'))));
   });
   web.post('/chat/:handle', async (c) => {
     const form = await c.req.parseBody({ all: true });
@@ -2416,7 +2417,8 @@ function when(at: number): string {
   return today ? d.toISOString().slice(11, 16) + ' UTC' : d.toISOString().slice(0, 10);
 }
 
-function chatPage(view: ConversationView, csrf: string) {
+/** `files`: false for a guest, who sends no files, so the form has no file field. */
+function chatPage(view: ConversationView, csrf: string, files = true) {
   const t = copy.chat;
   const handle = encodeURIComponent(view.other.handle);
   return html`<div class="ph"><h1>${view.other.name} <span>@${view.other.handle}</span></h1><a class="end" href="/ui">${copy.layout.home}</a></div>
@@ -2436,8 +2438,10 @@ function chatPage(view: ConversationView, csrf: string) {
         <input type="hidden" name="csrf" value="${csrf}" />
         <label for="text">${t.write}</label>
         <textarea id="text" name="text" maxlength="2000" required placeholder="${t.placeholder}"></textarea>
-        <label for="file" class="m">${t.attachLabel}</label>
-        <input id="file" type="file" name="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" />
+        ${files
+          ? html`<label for="file" class="m">${t.attachLabel}</label>
+              <input id="file" type="file" name="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" />`
+          : ''}
         <div class="acts"><button class="primary">${t.send}</button></div>
       </form>
       ${view.messages.some((m) => !m.mine)
@@ -2845,6 +2849,8 @@ function dashboard(
   csrf: string,
   friends = 0,
   conversations: ConversationSummary[] = [],
+  /** False for a guest, who sends no files: no file fields with questions or answers. */
+  files = true,
 ) {
   const t = copy.dashboard;
   const shownStatus = (s: SipRow) => (s.failed ? 'tried' : s.status);
@@ -2979,7 +2985,7 @@ function dashboard(
                         ? button(`/ui/asks/${k.id}/withdraw`, copy.asks.withdraw, csrf, 'link')
                         : ''
                 }</div>
-                ${k.role === 'asker' && k.state === 'open'
+                ${files && k.role === 'asker' && k.state === 'open'
                   ? html`<form class="answer" method="post" action="/ui/asks/${k.id}/attach" enctype="multipart/form-data">
                       <input type="hidden" name="csrf" value="${csrf}" />
                       <label for="file-${k.id}" class="m">${copy.asks.attachLabel}</label>
@@ -2992,8 +2998,10 @@ function dashboard(
                       <input type="hidden" name="csrf" value="${csrf}" />
                       <label for="answer-${k.id}">${copy.asks.yourAnswer}</label>
                       <textarea id="answer-${k.id}" name="answer" maxlength="500" rows="3" required></textarea>
-                      <label for="file-${k.id}" class="m">${copy.asks.attachLabel}</label>
-                      <input id="file-${k.id}" type="file" name="file" multiple accept="${ACCEPT}" />
+                      ${files
+                        ? html`<label for="file-${k.id}" class="m">${copy.asks.attachLabel}</label>
+                            <input id="file-${k.id}" type="file" name="file" multiple accept="${ACCEPT}" />`
+                        : ''}
                       <p class="m">${copy.asks.answerGoes(k.other.handle)}</p>
                       <button class="primary">${copy.asks.sendAnswer}</button>
                     </form>`

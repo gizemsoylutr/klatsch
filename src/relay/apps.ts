@@ -68,6 +68,8 @@ export interface ChatPayload {
   /** The Klatsch page with this conversation. */
   page: string;
   max: number;
+  /** False for a guest, who sends no files: the card shows no file picker. */
+  files: boolean;
 }
 
 /** A conversation card's key lasts a day and works for every reply in it: each send is the person's own click. */
@@ -435,9 +437,14 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     fill(chat.messages);
     const label = el('label', 'Write to ' + chat.with.name); label.htmlFor = 'reply';
     const box = el('textarea'); box.id = 'reply'; box.maxLength = chat.max; box.placeholder = 'Your message';
-    const flabel = el('label', 'Add a photo, PDF or voice note (up to 3, 5 MB each)'); flabel.htmlFor = 'files';
-    const picker = el('input'); picker.type = 'file'; picker.id = 'files'; picker.multiple = true;
-    picker.accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm';
+    // A guest sends no files: no picker at all.
+    const flabel = chat.files === false ? null : el('label', 'Add a photo, PDF or voice note (up to 3, 5 MB each)');
+    const picker = flabel ? el('input') : null;
+    if (picker) {
+      flabel.htmlFor = 'files';
+      picker.type = 'file'; picker.id = 'files'; picker.multiple = true;
+      picker.accept = 'image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm';
+    }
     const said = el('p', '', 'note');
     const send = el('button', 'Send', 'primary'); send.type = 'button';
     const draft = el('button', 'Draft with my AI'); draft.type = 'button';
@@ -447,7 +454,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     send.addEventListener('click', async () => {
       const text = box.value.trim();
       if (!text) { box.focus(); return; }
-      const chosen = [...picker.files].slice(0, 3);
+      const chosen = picker ? [...picker.files].slice(0, 3) : [];
       if (chosen.some((f) => f.size > 5 * 1024 * 1024)) { said.textContent = 'A file is at most 5 MB.'; return; }
       send.disabled = true; said.textContent = 'Sending…';
       try {
@@ -456,7 +463,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
         const result = await app.callServerTool({ name: 'klatsch_card', arguments: { key: card.key, decision: 'reply', text, ...(files.length ? { files } : {}) } });
         if (result.isError) { fail(result); return; }
         const sc = result.structuredContent || {};
-        box.value = ''; picker.value = ''; said.textContent = sc.message || 'Sent.';
+        box.value = ''; if (picker) picker.value = ''; said.textContent = sc.message || 'Sent.';
         if (sc.chat) { chat.messages = sc.chat.messages; fill(chat.messages); }
         app.updateModelContext({ content: [{ type: 'text', text: 'Klatsch: your human sent a message to ' + '@' + chat.with.handle + ' from the card.' }] }).catch(() => {});
       } catch { said.textContent = 'That did not work. Try again, or write on your Klatsch page.'; }
@@ -477,7 +484,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     });
     const row = el('div', undefined, 'row'); row.append(page, draft, send);
     if (notice) said.textContent = notice;
-    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), list, label, box, flabel, picker, row, said, el('p', card.note, 'note'), ...notifyOffer());
+    root.replaceChildren(el('p', 'Klatsch', 'brand'), el('h1', card.title), list, label, box, ...(picker ? [flabel, picker] : []), row, said, el('p', card.note, 'note'), ...notifyOffer());
     // New messages show up while the card is on screen; reading them here marks them read.
     if (poll) clearInterval(poll);
     poll = setInterval(async () => {
