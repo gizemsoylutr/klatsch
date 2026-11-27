@@ -24,8 +24,9 @@ const TOKENS = `
   --display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
+/* Night or day: the device decides (Auto), unless the person chose one in the menu (data-theme on <html>). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #000000; --sunk: #1C1C1E; --fg: #F5F5F7; --soft: #6E6E73; --muted: #A1A1A6; --line: #2C2C2E;
     --accent: #0A84FF; --accent-soft: #0A2A4A; --accent-text: #6CB4FF; --chip: #2C2C2E;
     --good: #30D158; --good-soft: #12301B; --warn: #FFB340; --warn-soft: #3A2A12;
@@ -33,6 +34,15 @@ const TOKENS = `
     --sheet: 0 20px 50px -20px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1);
   }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --bg: #000000; --sunk: #1C1C1E; --fg: #F5F5F7; --soft: #6E6E73; --muted: #A1A1A6; --line: #2C2C2E;
+    --accent: #0A84FF; --accent-soft: #0A2A4A; --accent-text: #6CB4FF; --chip: #2C2C2E;
+    --good: #30D158; --good-soft: #12301B; --warn: #FFB340; --warn-soft: #3A2A12;
+    --bar: rgba(0,0,0,0.78);
+    --sheet: 0 20px 50px -20px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1);
+}
+:root[data-theme="light"] { color-scheme: light; }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--fg);
@@ -305,6 +315,9 @@ details.menu > nav { position: absolute; right: 0; top: 44px; z-index: 2; min-wi
 details.menu > nav a, details.menu > nav button { display: block; text-align: left; padding: 10px 12px; border-radius: 9px; color: var(--fg); background: transparent; box-shadow: none; font: 400 15px/1.2 var(--sans); min-height: 0; width: 100%; }
 details.menu > nav a:hover, details.menu > nav button:hover { background: var(--sunk); text-decoration: none; }
 details.menu > nav form { display: block; }
+details.menu > nav form.theme { display: flex; gap: 4px; padding: 6px 6px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+details.menu > nav form.theme button { flex: 1; text-align: center; padding: 8px 0; font-size: 16px; border-radius: 9px; }
+details.menu > nav form.theme button[aria-pressed="true"] { background: var(--sunk); box-shadow: 0 0 0 1px var(--line) inset; }
 .chats { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; min-height: 0; }
 .chats a.row { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; color: var(--fg); }
 .chats a.row:hover, .chats a.row[aria-current="page"] { background: var(--sunk); text-decoration: none; }
@@ -341,6 +354,37 @@ details.menu > nav form { display: block; }
 .mess .msg.mine { background: var(--accent); color: #FFFFFF; }
 .mess .msg.mine time, .mess .msg.mine .m { color: rgba(255, 255, 255, 0.75); }
 .mess .msg.ask { max-width: min(92%, 520px); gap: 8px; padding: 12px 14px; }
+/* A message's own menu: a small ⌄ in its corner, shown on hover or focus (always, faintly, on a touch screen). */
+.mess .msg { position: relative; }
+.msgmenu { position: absolute; top: 2px; right: 4px; }
+.msg.mine .msgmenu { right: auto; left: -30px; }
+.msg:not(.mine) .msgmenu { right: -30px; }
+.msgmenu > summary { list-style: none; width: 26px; height: 26px; border-radius: 999px; display: grid; place-items: center; cursor: pointer; color: var(--muted); font-size: 13px; opacity: 0; transition: opacity 120ms; }
+.msgmenu > summary::-webkit-details-marker { display: none; }
+.msg:hover .msgmenu > summary, .msgmenu > summary:focus-visible, .msgmenu[open] > summary { opacity: 1; }
+@media (pointer: coarse) { .msgmenu > summary { opacity: 0.55; } }
+/* Upward: the newest messages sit at the bottom of the conversation, where a menu opening down would be cut off. */
+.msgmenu .pop { position: absolute; bottom: 28px; z-index: 3; min-width: 190px; display: grid; padding: 6px; border-radius: 12px; background: var(--sunk); color: var(--fg); box-shadow: var(--sheet); animation: rise 150ms ease-out both; }
+.msg.mine .msgmenu .pop { left: 0; }
+.msg:not(.mine) .msgmenu .pop { right: 0; }
+.msgmenu .pop form { display: block; }
+.msgmenu .pop button, .msgmenu .pop summary { display: block; width: 100%; text-align: left; padding: 9px 12px; border-radius: 8px; background: transparent; color: var(--fg); box-shadow: none; font: 400 14px/1.2 var(--sans); min-height: 0; cursor: pointer; list-style: none; }
+.msgmenu .pop summary::-webkit-details-marker { display: none; }
+.msgmenu .pop button:hover, .msgmenu .pop summary:hover { background: var(--chip); }
+.msgmenu .del[open] > summary { color: var(--muted); }
+.msgmenu .del form button { color: #FF3B30; padding-left: 20px; }
+.mess .msg.gone p { font-style: italic; color: var(--muted); }
+.mess .msg.mine.gone { background: var(--sunk); color: var(--muted); }
+.mess .msg.mine.gone time { color: var(--muted); }
+.mess .msg:target { animation: flash 1.2s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+.pinbar { display: flex; gap: 10px; align-items: baseline; padding: 8px 20px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--fg); background: var(--sunk); }
+.pinbar:hover { text-decoration: none; }
+.pinbar span { font-weight: 600; flex-shrink: 0; }
+.pinbar q { quotes: none; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ol.starred { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+ol.starred a { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--sunk); color: var(--fg); }
+ol.starred a:hover { text-decoration: none; filter: brightness(1.05); }
 .mess .msg.ask .chatmore { padding: 0; }
 .mess .askacts { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; }
 .mess .askacts form { display: inline; }
@@ -408,8 +452,9 @@ const LANDING_STYLE = `${TOKENS}
 :root { --band: #F5F5F7; --win: #FFFFFF; --win-bar: #ECECEF; --term: #1D1D1F; --term-fg: #E8E8ED; --term-dim: #8E8E93; --term-ok: #63D17A; --term-acc: #64B5FF;
   --shadow: 0 30px 60px -20px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06); }
 @media (prefers-color-scheme: dark) {
-  :root { --band: #111113; --win: #1C1C1E; --win-bar: #2C2C2E; --term: #0B0B0C; --shadow: 0 30px 60px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08); }
+  :root:not([data-theme="light"]) { --band: #111113; --win: #1C1C1E; --win-bar: #2C2C2E; --term: #0B0B0C; --shadow: 0 30px 60px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08); }
 }
+:root[data-theme="dark"] { --band: #111113; --win: #1C1C1E; --win-bar: #2C2C2E; --term: #0B0B0C; --shadow: 0 30px 60px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.08); }
 body { font-size: 16px; }
 a.btn:hover, .nav a:hover, footer a:hover { text-decoration: none; }
 .wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }

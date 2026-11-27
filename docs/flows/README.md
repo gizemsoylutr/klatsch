@@ -27,6 +27,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | a 2025-06-18 client without dialogs or tasks (Codex by default) | 5 | [legacy-client.drawio](legacy-client.drawio) |
 | privacy and terms pages | 6 | [legal-pages.drawio](legal-pages.drawio) |
 | link cards and the commons: a stranger in a public circle reads a link card its author ticked for it, and hands it to her agent as data | 10 | [link-cards-and-commons.drawio](link-cards-and-commons.drawio) |
+| message actions: star, pin, delete for me, delete for everyone | 5 | [message-actions.drawio](message-actions.drawio) |
 | messages: a conversation with a friend, from any chat or the Klatsch page | 7 | [messages.drawio](messages.drawio) |
 | note check: an old note shows its age and asks its author | 6 | [note-check.drawio](note-check.drawio) |
 | notes page: what authors tick reaches their private circles, and never an agent | 12 | [notes-page.drawio](notes-page.drawio) |
@@ -43,6 +44,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | share and intro: Alice asks, Bob accepts, names are exchanged in the browsers only | 8 | [share-and-intro.drawio](share-and-intro.drawio) |
 | the stdio proxy for clients without a header helper (Copilot) | 3 | [stdio-proxy.drawio](stdio-proxy.drawio) |
 | thanks: Bob thanks Alice for the note that helped him; only Alice sees a count, and a badge only if she turns it on | 10 | [thanks.drawio](thanks.drawio) |
+| theme: day, night, or the device decides | 2 | [theme.drawio](theme.drawio) |
 | tokens: create in the web UI, use from an agent, revoke in the web UI | 5 | [tokens.drawio](tokens.drawio) |
 | tried notes: what did not work reaches others as a warning, never as a fix | 8 | [tried-notes.drawio](tried-notes.drawio) |
 | voice notes: hold the microphone, let go, and the friend hears it | 7 | [voice-notes.drawio](voice-notes.drawio) |

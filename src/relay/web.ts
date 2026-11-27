@@ -214,8 +214,17 @@ const CONSENT_CSP_START = "default-src 'none'; style-src 'unsafe-inline'; img-sr
 const consentCsp = (redirectUri: string) => `${CONSENT_CSP_START}${new URL(redirectUri).origin} https:; frame-ancestors 'none'; base-uri 'none'`;
 
 /** The headers of every page the relay serves to a browser: the web UI and the landing page at `/`. */
+/** Night or day, as the person chose it in the menu; without the cookie the device decides. */
+export const THEME_COOKIE = 'klatsch_theme';
+const THEMES = ['light', 'dark'] as const;
 export const pageHeaders: MiddlewareHandler = async (c, next) => {
   await next();
+  // A chosen theme marks the page's <html>, so the page's own colours follow it without any script.
+  const theme = getCookie(c, THEME_COOKIE);
+  if ((THEMES as readonly string[]).includes(theme ?? '') && (c.res.headers.get('content-type') ?? '').startsWith('text/html')) {
+    const body = await c.res.text();
+    c.res = new Response(body.replace('<html lang="en">', `<html lang="en" data-theme="${theme}">`), c.res);
+  }
   // Only pages that run a script of ours set their own policy (passkeys, notifications, the voice note recorder on a
   // conversation); they keep it, all else gets none.
   const own = c.res.headers.get('Content-Security-Policy');
@@ -1214,7 +1223,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const asks = klatsch.asksOf(userId);
     return c.html(messenger(
       user.display_name,
-      chatSide(conversations, asks, c.get('csrf')),
+      chatSide(conversations, asks, c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto'),
       // On the first Home after signing in, the script opens the browser's own passkey dialog by itself, once.
       html`<div class="scroll"><div class="inner"><div class="pick"><h1>${copy.chat.pick}</h1><p>${copy.chat.pickLine}</p></div>${guestLeft !== undefined ? guestBanner(guestLeft, c.get('csrf')) : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
         user,
@@ -2072,7 +2081,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const userId = c.get('userId');
     const asks = klatsch.asksOf(userId);
     const between = asks.filter((k) => (k.state === 'open' || k.state === 'answered') && k.other.handle === view.other.handle).sort((x, y) => x.createdAt - y.createdAt);
-    return c.html(messenger(view.other.name, chatSide(klatsch.conversationsOf(userId), asks, c.get('csrf'), view.other.handle), chatPane(view, c.get('csrf'), files, between), true));
+    return c.html(messenger(view.other.name, chatSide(klatsch.conversationsOf(userId), asks, c.get('csrf'), view.other.handle, getCookie(c, THEME_COOKIE) ?? 'auto'), chatPane(view, c.get('csrf'), files, between), true));
   });
   web.post('/chat/:handle', async (c) => {
     const form = await c.req.parseBody({ all: true });
@@ -2300,6 +2309,62 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   const guestBanner = (expiresAt: number, csrf: string) =>
     html`<section class="offer" aria-label="${copy.guest.end}"><p>${copy.guest.banner(copy.guest.left(expiresAt - Date.now()))}</p><p class="sub">${copy.guest.upgrade}</p>${button('/ui/guest/end', copy.guest.end, csrf, 'primary')}</section>`;
 
+  // A message's own menu: star or unstar (for oneself), pin or unpin (for both), delete for oneself or for everyone.
+  const MESSAGE_ACTIONS = ['star', 'unstar', 'pin', 'unpin', 'hide', 'delete'] as const;
+  web.post('/messages/:id/:action', (c) => {
+    const action = c.req.param('action') as (typeof MESSAGE_ACTIONS)[number];
+    if (!MESSAGE_ACTIONS.includes(action)) return c.notFound();
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    let other = '';
+    return attempt(
+      c,
+      () => {
+        other =
+          action === 'star' || action === 'unstar'
+            ? klatsch.starMessage(userId, id, action === 'star')
+            : action === 'pin' || action === 'unpin'
+              ? klatsch.pinMessage(userId, id, action === 'pin')
+              : action === 'hide'
+                ? klatsch.hideMessage(userId, id)
+                : klatsch.deleteMessageForEveryone(userId, id);
+      },
+      '/ui',
+      () => c.redirect(`/ui/chat/${encodeURIComponent(other)}${action === 'hide' || action === 'delete' ? '#end' : `#m-${id}`}`, 303),
+    );
+  });
+
+  // The person's starred messages, in the messenger's pane.
+  web.get('/starred', (c) => {
+    const userId = c.get('userId');
+    const t = copy.chat;
+    const starred = klatsch.starredOf(userId);
+    return c.html(
+      messenger(
+        t.starredTitle,
+        chatSide(klatsch.conversationsOf(userId), klatsch.asksOf(userId), c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto'),
+        html`<header class="chathead"><a class="iconbtn back" href="/ui" aria-label="${t.back}">‹</a><div class="who"><h1>${t.starredTitle}</h1></div></header>
+          <div class="scroll"><div class="inner">${starred.length
+            ? html`<ol class="starred">${starred.map(
+                (m) => html`<li><a href="/ui/chat/${encodeURIComponent(m.other.handle)}#m-${m.id}"><span class="m">${m.mine ? t.you : m.other.name} · ${shortWhen(m.at)}</span><p>${m.text}</p></a></li>`,
+              )}</ol>`
+            : html`<p class="hint">${t.starredNone}</p>`}</div></div>`,
+        true,
+      ),
+    );
+  });
+
+  // Night or day for this browser: a year, everywhere on the relay; Auto removes the choice.
+  web.post('/theme', async (c) => {
+    const theme = (await c.req.parseBody()).theme;
+    if (theme === 'light' || theme === 'dark') setCookie(c, THEME_COOKIE, theme, { path: '/', maxAge: 365 * 24 * 60 * 60, sameSite: 'Lax', secure, httpOnly: true });
+    else deleteCookie(c, THEME_COOKIE, { path: '/', secure });
+    // Back to the page it was chosen on, when that is a page of this relay.
+    const from = c.req.header('Referer');
+    const back = from && from.startsWith(`${base(c)}/ui`) ? new URL(from).pathname : '/ui';
+    return c.redirect(back, 303);
+  });
+
   web.post('/logout', (c) => {
     endSession(db, secret, c.get('session'));
     deleteCookie(c, COOKIE, { path: '/ui' });
@@ -2337,7 +2402,7 @@ function howForm(action: string, label: string, how: string, placeholder: string
  * email, passkeys, GitHub or Google, circles, files, intros, notes, deleting by handle.
  */
 const GUEST_PAGES: Record<string, RegExp[]> = {
-  GET: [/^\/ui\/?$/, /^\/ui\/chat\/[^/]+$/, /^\/ui\/settings$/, /^\/ui\/tokens$/, /^\/ui\/connect$/, /^\/ui\/device$/, /^\/ui\/approvals\/[^/]+$/, /^\/ui\/oauth\/authorize$/, /^\/ui\/circle$/, /^\/ui\/invite\/[^/]+$/],
+  GET: [/^\/ui\/?$/, /^\/ui\/chat\/[^/]+$/, /^\/ui\/settings$/, /^\/ui\/tokens$/, /^\/ui\/connect$/, /^\/ui\/device$/, /^\/ui\/approvals\/[^/]+$/, /^\/ui\/oauth\/authorize$/, /^\/ui\/circle$/, /^\/ui\/invite\/[^/]+$/, /^\/ui\/starred$/],
   POST: [
     /^\/ui\/chat\/[^/]+(\/agent)?$/,
     /^\/ui\/friends\/(invite|[^/]+\/end)$/,
@@ -2351,6 +2416,8 @@ const GUEST_PAGES: Record<string, RegExp[]> = {
     /^\/ui\/sips\/[^/]+\/(approve|reject|retire)$/,
     /^\/ui\/oauth\/authorize$/,
     /^\/ui\/guest\/end$/,
+    /^\/ui\/theme$/,
+    /^\/ui\/messages\/[^/]+\/(star|unstar|pin|unpin|hide|delete)$/,
     /^\/ui\/logout$/,
   ],
 };
@@ -2524,7 +2591,7 @@ function shortWhen(at: number): string {
  * The left side of the messenger: the sign, "add a friend", a menu for the other pages, and the chats, newest
  * first. A friend's waiting question shows as the chat's last line.
  */
-function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string) {
+function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string, theme = 'auto') {
   const t = copy.chat;
   const nav = copy.layout.nav;
   const asking = new Map(asks.filter((k) => k.role === 'helper' && k.state === 'open').map((k) => [k.other.handle, k.question]));
@@ -2532,14 +2599,17 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
       <a class="lockup" href="/ui"><span class="cup" aria-hidden="true">${CUP_MARK}</span>${copy.layout.brand}</a>
       <form method="post" action="/ui/friends/invite"><input type="hidden" name="csrf" value="${csrf}" /><button class="iconbtn" aria-label="${copy.circle.addFriend}" title="${copy.circle.addFriend}">＋</button></form>
       <details class="menu"><summary aria-label="${t.menu}" title="${t.menu}">⋯</summary>
-        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${nav.circle}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/device">${copy.chat.enterCode}</a>
+        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${nav.circle}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/starred">${copy.chat.starred}</a><a href="/ui/device">${copy.chat.enterCode}</a>
+          <form class="theme" method="post" action="/ui/theme" aria-label="${t.theme}"><input type="hidden" name="csrf" value="${csrf}" />${(['light', 'dark', 'auto'] as const).map(
+            (v) => html`<button name="theme" value="${v}"${theme === v ? html` aria-pressed="true"` : ''} title="${t.themes[v]}" aria-label="${t.themes[v]}">${t.themeIcons[v]}</button>`,
+          )}</form>
           <form method="post" action="/ui/logout"><input type="hidden" name="csrf" value="${csrf}" /><button>${copy.dashboard.signOut}</button></form></nav>
       </details>
     </div>
     ${conversations.length
       ? html`<ul class="chats">${conversations.map((x) => {
           const ask = asking.get(x.other.handle);
-          const last = ask ? `${t.asksYou} ${ask}` : x.last ? `${x.last.mine ? `${t.you}: ` : ''}${x.last.text}` : `@${x.other.handle}`;
+          const last = ask ? `${t.asksYou} ${ask}` : x.last ? (x.last.deleted ? t.deleted : `${x.last.mine ? `${t.you}: ` : ''}${x.last.text}`) : `@${x.other.handle}`;
           const fresh = x.unread > 0 || Boolean(ask);
           return html`<li><a class="row${fresh ? ' new' : ''}" href="/ui/chat/${encodeURIComponent(x.other.handle)}"${current === x.other.handle ? html` aria-current="page"` : ''}>
             ${avatar(x.other.name, { blue: true })}
@@ -2572,6 +2642,21 @@ function askBubble(k: AskView, csrf: string) {
   </li>`;
 }
 
+/**
+ * A message's own menu (⌄): star or unstar, pin or unpin, and delete, which opens to its two choices (so one click
+ * deletes nothing): for me, and for everyone on the sender's own messages within two days.
+ */
+function msgMenu(m: ConversationView['messages'][number], csrf: string) {
+  const t = copy.chat;
+  const act = (action: string, label: string) =>
+    html`<form method="post" action="/ui/messages/${m.id}/${action}"><input type="hidden" name="csrf" value="${csrf}" /><button>${label}</button></form>`;
+  const forAll = m.mine && !m.deleted && Date.now() - m.at < 2 * DAY_MS;
+  return html`<details class="msgmenu"><summary aria-label="${t.options}" title="${t.options}">⌄</summary><div class="pop">
+    ${m.deleted ? '' : html`${act(m.starred ? 'unstar' : 'star', m.starred ? t.unstar : t.star)}${act(m.pinned ? 'unpin' : 'pin', m.pinned ? t.unpin : t.pin)}`}
+    <details class="del"><summary>${t.del}</summary>${act('hide', t.delForMe)}${forAll ? act('delete', t.delForAll) : ''}</details>
+  </div></details>`;
+}
+
 /** The open conversation on the right: who, the messages (the newest at the bottom), and the bar to write in. */
 function chatPane(view: ConversationView, csrf: string, files = true, asks: AskView[] = []) {
   const t = copy.chat;
@@ -2583,12 +2668,14 @@ function chatPane(view: ConversationView, csrf: string, files = true, asks: AskV
       ${avatar(view.other.name, { blue: true })}
       <div class="who"><h1>${view.other.name}</h1><span>@${view.other.handle}</span></div>
     </header>
+    ${view.pinned && !view.pinned.deleted ? html`<a class="pinbar" href="#m-${view.pinned.id}"><span>📌 ${t.pinnedLabel}</span><q>${view.pinned.text}</q></a>` : ''}
     <div class="stream">
       ${view.messages.length
         ? html`<ol class="thread" aria-label="${t.heading}">
             ${view.messages.map(
-              (m) => html`<li class="msg${m.mine ? ' mine' : ''}">
-                <p>${m.text}</p>
+              (m) => html`<li class="msg${m.mine ? ' mine' : ''}${m.deleted ? ' gone' : ''}" id="m-${m.id}">
+                ${msgMenu(m, csrf)}
+                <p>${m.deleted ? t.deleted : m.text}</p>
                 ${m.files.length
                   ? html`<span class="files">${m.files.map((f) =>
                       f.mime.startsWith('audio/')
@@ -2596,7 +2683,7 @@ function chatPane(view: ConversationView, csrf: string, files = true, asks: AskV
                         : html`<a href="/ui/attachments/${f.id}">📎 ${f.name}</a> `,
                     )}</span>`
                   : ''}
-                <time datetime="${new Date(m.at).toISOString()}">${shortWhen(m.at)}</time>
+                <time datetime="${new Date(m.at).toISOString()}">${m.pinned ? '📌 ' : ''}${m.starred ? '⭐ ' : ''}${shortWhen(m.at)}</time>
               </li>`,
             )}
             ${asks.map((k) => askBubble(k, csrf))}

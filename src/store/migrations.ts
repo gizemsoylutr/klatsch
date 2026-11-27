@@ -754,4 +754,19 @@ export const migrations: string[] = [
   `
   ALTER TABLE events ADD COLUMN how TEXT;
   `,
+  // Messages like a messenger: deleted for everyone (the sender, within two days), pinned in the conversation (one
+  // at a time, both see it); and each person's own marks: starred, or deleted only for them.
+  `
+  ALTER TABLE messages ADD COLUMN deleted_at INTEGER;
+  ALTER TABLE messages ADD COLUMN pinned_at INTEGER;
+  ALTER TABLE messages ADD COLUMN pinned_by TEXT REFERENCES users(id);
+  CREATE TABLE message_marks (
+    message_id TEXT NOT NULL REFERENCES messages(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    starred_at INTEGER,
+    hidden_at INTEGER,
+    PRIMARY KEY (message_id, user_id)
+  );
+  CREATE INDEX message_marks_by_user ON message_marks (user_id);
+  `,
 ];

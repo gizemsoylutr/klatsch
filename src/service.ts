@@ -208,13 +208,23 @@ export interface ConversationView {
   unread: number;
   /** The person chose to always let their agent read this friend's words. */
   sends: boolean;
-  messages: { id: string; mine: boolean; text: string; at: number; read: boolean; files: { id: string; name: string; mime: string; size: number }[] }[];
+  messages: { id: string; mine: boolean; text: string; at: number; read: boolean; files: { id: string; name: string; mime: string; size: number }[]; starred: boolean; pinned: boolean; deleted: boolean }[];
+  /** The message pinned in this conversation, if any: both people see it at the top. */
+  pinned?: { id: string; text: string; deleted: boolean };
+}
+/** A message the person starred, for their own list of starred messages. */
+export interface StarredView {
+  id: string;
+  other: { name: string; handle: string };
+  mine: boolean;
+  text: string;
+  at: number;
 }
 export interface ConversationSummary {
   circleId: string;
   other: { name: string; handle: string };
   unread: number;
-  last?: { mine: boolean; text: string; at: number };
+  last?: { mine: boolean; text: string; at: number; deleted?: boolean };
 }
 
 /** A direct question, as the asker or the person asked sees it on their own page. */
@@ -340,6 +350,8 @@ const ANSWER_MAX = 500;
 export const MESSAGE_MAX = 2000;
 const MESSAGES_PER_DAY = 200;
 const MESSAGE_DAYS = 90;
+/** How long after sending its sender may delete a message for everyone. */
+const DELETE_FOR_EVERYONE_MS = 2 * DAY;
 const ATTACHMENT_DAYS = 14;
 /** How many of the friend's messages one "Draft with my AI" hands over. */
 const THREAD_FOR_AGENT = 10;
@@ -1922,8 +1934,14 @@ export class Klatsch {
     this.dropExpiredAttachments();
     const rows = (
       this.db
-        .prepare('SELECT id, sender_id, body, created_at, read_at FROM messages WHERE circle_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
-        .all(circleId, options.limit ?? 50) as { id: string; sender_id: string; body: string; created_at: number; read_at: number | null }[]
+        .prepare(
+          `SELECT m.id, m.sender_id, m.body, m.created_at, m.read_at, m.deleted_at, m.pinned_at, k.starred_at FROM messages m
+           LEFT JOIN message_marks k ON k.message_id = m.id AND k.user_id = ?
+           WHERE m.circle_id = ? AND k.hidden_at IS NULL ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?`,
+        )
+        .all(userId, circleId, options.limit ?? 50) as {
+        id: string; sender_id: string; body: string; created_at: number; read_at: number | null; deleted_at: number | null; pinned_at: number | null; starred_at: number | null;
+      }[]
     ).reverse();
     const files = (messageId: string) =>
       this.db
@@ -1944,8 +1962,106 @@ export class Klatsch {
       other: { name: other.display_name, handle: other.handle },
       unread,
       sends: this.hasGrant(userId, other.id, 'deliver'),
-      messages: rows.map((r) => ({ id: r.id, mine: r.sender_id === userId, text: r.body, at: r.created_at, read: r.read_at !== null, files: files(r.id) })),
+      messages: rows.map((r) => ({
+        id: r.id,
+        mine: r.sender_id === userId,
+        text: r.deleted_at ? '' : r.body,
+        at: r.created_at,
+        read: r.read_at !== null,
+        files: r.deleted_at ? [] : files(r.id),
+        starred: r.starred_at !== null,
+        pinned: r.pinned_at !== null,
+        deleted: r.deleted_at !== null,
+      })),
+      ...(() => {
+        const pin = this.db.prepare('SELECT id, body, deleted_at FROM messages WHERE circle_id = ? AND pinned_at IS NOT NULL ORDER BY pinned_at DESC LIMIT 1').get(circleId) as
+          | { id: string; body: string; deleted_at: number | null }
+          | undefined;
+        return pin ? { pinned: { id: pin.id, text: pin.deleted_at ? '' : pin.body, deleted: pin.deleted_at !== null } } : {};
+      })(),
     };
+  }
+
+  /**
+   * One message of a conversation the person is in (sent or received, in a friendship that still stands), with
+   * the friend's handle; anything else is "not yours", whoever asks.
+   */
+  private ownMessage(userId: string, messageId: string) {
+    const row = this.db.prepare('SELECT id, sender_id, recipient_id, circle_id, created_at, deleted_at FROM messages WHERE id = ?').get(messageId) as
+      | { id: string; sender_id: string; recipient_id: string; circle_id: string; created_at: number; deleted_at: number | null }
+      | undefined;
+    if (!row || (row.sender_id !== userId && row.recipient_id !== userId) || this.friendshipOf(row.sender_id, row.recipient_id) !== row.circle_id) {
+      throw new KlatschError('forbidden', MESSAGE.notYours);
+    }
+    return { ...row, other: this.user(row.sender_id === userId ? row.recipient_id : row.sender_id).handle };
+  }
+
+  private mark(userId: string, messageId: string, column: 'starred_at' | 'hidden_at', value: number | null): void {
+    this.db.prepare(`INSERT INTO message_marks (message_id, user_id, ${column}) VALUES (?, ?, ?) ON CONFLICT (message_id, user_id) DO UPDATE SET ${column} = excluded.${column}`).run(messageId, userId, value);
+  }
+
+  /** A star on a message, only for the person: their list of starred messages. Returns the friend's handle. */
+  starMessage(userId: string, messageId: string, on: boolean): string {
+    const row = this.ownMessage(userId, messageId);
+    this.mark(userId, messageId, 'starred_at', on && !row.deleted_at ? Date.now() : null);
+    return row.other;
+  }
+
+  /** "Delete for me": gone from this person's conversation only; the friend still has it. */
+  hideMessage(userId: string, messageId: string): string {
+    const row = this.ownMessage(userId, messageId);
+    transaction(this.db, () => {
+      this.mark(userId, messageId, 'hidden_at', Date.now());
+      this.mark(userId, messageId, 'starred_at', null);
+    });
+    this.audit(userId, 'web', 'message.hide', messageId);
+    return row.other;
+  }
+
+  /**
+   * "Delete for everyone": by its sender, within two days. Its words and files go for both (the conversation shows
+   * that a message was deleted), it is unpinned, and no agent gets it from now on. An agent that already got it
+   * keeps what it got.
+   */
+  deleteMessageForEveryone(userId: string, messageId: string): string {
+    const row = this.ownMessage(userId, messageId);
+    if (row.sender_id !== userId || Date.now() - row.created_at > DELETE_FOR_EVERYONE_MS) throw new KlatschError('forbidden', MESSAGE.deleteTooLate);
+    if (row.deleted_at) return row.other;
+    transaction(this.db, () => {
+      this.db.prepare('DELETE FROM message_files WHERE message_id = ?').run(messageId);
+      this.db.prepare('UPDATE messages SET body = ?, deleted_at = ?, pinned_at = NULL, pinned_by = NULL, for_agent = 0 WHERE id = ?').run(sealText(this.db, ''), Date.now(), messageId);
+      this.db.prepare('UPDATE message_marks SET starred_at = NULL WHERE message_id = ?').run(messageId);
+      this.db.prepare(`DELETE FROM events WHERE ref = ? AND kind IN ('message.received', 'message.thread')`).run(messageId);
+      this.audit(userId, 'web', 'message.delete', messageId);
+    });
+    return row.other;
+  }
+
+  /** Pins a message at the top of the conversation, for both; one at a time. `on` false unpins it. */
+  pinMessage(userId: string, messageId: string, on: boolean): string {
+    const row = this.ownMessage(userId, messageId);
+    if (on && row.deleted_at) throw new KlatschError('forbidden', MESSAGE.notYours);
+    transaction(this.db, () => {
+      if (on) this.db.prepare('UPDATE messages SET pinned_at = NULL, pinned_by = NULL WHERE circle_id = ? AND pinned_at IS NOT NULL').run(row.circle_id);
+      this.db.prepare('UPDATE messages SET pinned_at = ?, pinned_by = ? WHERE id = ?').run(on ? Date.now() : null, on ? userId : null, messageId);
+    });
+    return row.other;
+  }
+
+  /** The person's starred messages, newest first, from friendships that still stand. */
+  starredOf(userId: string): StarredView[] {
+    const rows = this.db
+      .prepare(
+        `SELECT m.id, m.sender_id, m.recipient_id, m.circle_id, m.body, m.created_at FROM message_marks k JOIN messages m ON m.id = k.message_id
+         WHERE k.user_id = ? AND k.starred_at IS NOT NULL AND k.hidden_at IS NULL AND m.deleted_at IS NULL ORDER BY k.starred_at DESC LIMIT 200`,
+      )
+      .all(userId) as { id: string; sender_id: string; recipient_id: string; circle_id: string; body: string; created_at: number }[];
+    return rows
+      .filter((r) => this.friendshipOf(r.sender_id, r.recipient_id) === r.circle_id)
+      .map((r) => {
+        const other = this.user(r.sender_id === userId ? r.recipient_id : r.sender_id);
+        return { id: r.id, other: { name: other.display_name, handle: other.handle }, mine: r.sender_id === userId, text: r.body, at: r.created_at };
+      });
   }
 
   private unreadFrom(userId: string, circleId: string): number {
@@ -1965,14 +2081,17 @@ export class Klatsch {
       .all(userId) as { circle_id: string; user_id: string; handle: string; display_name: string }[];
     return friends
       .map((f) => {
-        const last = this.db.prepare('SELECT sender_id, body, created_at FROM messages WHERE circle_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(f.circle_id) as
-          | { sender_id: string; body: string; created_at: number }
-          | undefined;
+        const last = this.db
+          .prepare(
+            `SELECT m.sender_id, m.body, m.created_at, m.deleted_at FROM messages m LEFT JOIN message_marks k ON k.message_id = m.id AND k.user_id = ?
+             WHERE m.circle_id = ? AND k.hidden_at IS NULL ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1`,
+          )
+          .get(userId, f.circle_id) as { sender_id: string; body: string; created_at: number; deleted_at: number | null } | undefined;
         return {
           circleId: f.circle_id,
           other: { name: f.display_name, handle: f.handle },
           unread: this.unreadFrom(userId, f.circle_id),
-          ...(last ? { last: { mine: last.sender_id === userId, text: last.body, at: last.created_at } } : {}),
+          ...(last ? { last: { mine: last.sender_id === userId, text: last.deleted_at ? '' : last.body, at: last.created_at, ...(last.deleted_at ? { deleted: true } : {}) } } : {}),
         };
       })
       .sort((a, b) => (b.last?.at ?? 0) - (a.last?.at ?? 0) || a.other.handle.localeCompare(b.other.handle));
@@ -2016,7 +2135,7 @@ export class Klatsch {
     if (waiting.since === null) return undefined;
     const rows = this.db
       .prepare(
-        `SELECT sender_id, body, created_at, for_agent FROM messages WHERE circle_id = ? AND created_at >= ? ORDER BY created_at, rowid LIMIT ${THREAD_FOR_AGENT * 2}`,
+        `SELECT sender_id, body, created_at, for_agent FROM messages WHERE circle_id = ? AND created_at >= ? AND deleted_at IS NULL ORDER BY created_at, rowid LIMIT ${THREAD_FOR_AGENT * 2}`,
       )
       .all(circleId, waiting.since) as { sender_id: string; body: string; created_at: number; for_agent: number }[];
     this.db.prepare('UPDATE messages SET for_agent = 0 WHERE circle_id = ? AND recipient_id = ? AND for_agent = 1').run(circleId, userId);
@@ -2046,6 +2165,7 @@ export class Klatsch {
     if (!this.db.prepare('SELECT 1 FROM messages WHERE created_at < ? LIMIT 1').get(old)) return;
     transaction(this.db, () => {
       this.db.prepare('DELETE FROM message_files WHERE message_id IN (SELECT id FROM messages WHERE created_at < ?)').run(old);
+      this.db.prepare('DELETE FROM message_marks WHERE message_id IN (SELECT id FROM messages WHERE created_at < ?)').run(old);
       this.db.prepare('DELETE FROM messages WHERE created_at < ?').run(old);
     });
   }
@@ -2053,6 +2173,7 @@ export class Klatsch {
   /** A friendship ended: its conversation and files go, for both. */
   private dropConversation(circleId: string): void {
     this.db.prepare('DELETE FROM message_files WHERE message_id IN (SELECT id FROM messages WHERE circle_id = ?)').run(circleId);
+    this.db.prepare('DELETE FROM message_marks WHERE message_id IN (SELECT id FROM messages WHERE circle_id = ?)').run(circleId);
     this.db.prepare(`DELETE FROM events WHERE kind IN ('message.received', 'message.thread') AND (ref = ? OR ref IN (SELECT id FROM messages WHERE circle_id = ?))`).run(circleId, circleId);
     this.db.prepare('DELETE FROM messages WHERE circle_id = ?').run(circleId);
   }

@@ -94,6 +94,8 @@ export const FRIENDS = {
 };
 /** Messages between friends: one conversation per friend. */
 export const MESSAGE = {
+  notYours: 'This message is not in one of your conversations.',
+  deleteTooLate: 'A message can be deleted for everyone by its sender, within two days of sending it.',
   noFriend: 'Your human has no friend with that handle. The friends tool lists their friends; to add one, call add_friend.',
   empty: 'Write a message first.',
   tooLong: 'A message is at most 2000 characters.',
