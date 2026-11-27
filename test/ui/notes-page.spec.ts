@@ -34,7 +34,7 @@ test.describe.serial('notes page: tick on the approval page, read from the top b
 
   test('Alice opens Notes and reads it, with his name', async () => {
     await alice.open(`${relay.base}/ui`);
-    await alice.click(alice.page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Notes' }));
+    await alice.goTo('Notes');
     await expect(alice.page.getByRole('heading', { name: 'Notes from your circles' })).toBeVisible();
     await expect(alice.page.getByText('Keyset paging beats OFFSET.')).toBeVisible();
     await expect(alice.page.getByText('@bob')).toBeVisible();

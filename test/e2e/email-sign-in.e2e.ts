@@ -38,8 +38,8 @@ describe('sign in by email: a new person joins by invite with a mailed link, and
     laptop = signedOutBrowser(relay);
     const page = await laptop.go(inviteLink, { headers: { 'Sec-Fetch-Site': 'none' } });
     assert.equal(page.status, 401);
-    assert.match(page.html, /<form class="mail" method="post" action="\/ui\/auth\/email">/);
-    assert.match(page.html, /<button class="primary">Email me a sign-in link<\/button>/);
+    assert.match(page.html, /<form class="composer" method="post" action="\/ui\/auth\/email">/);
+    assert.match(page.html, /<button class="primary send" aria-label="Email me a sign-in link">/);
     assert.doesNotMatch(page.html, /demo|Gizem/, 'nothing about the invite before signing in');
   });
 

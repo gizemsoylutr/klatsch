@@ -1852,7 +1852,9 @@ export class Klatsch {
    * in the card): their click is the approval. Only the friend reads it. It reaches the friend's agent only if
    * the friend chose to always get this person's words there.
    */
-  sendMessage(senderId: string, handle: string, text: string, via: Via = 'web'): string {
+  sendMessage(senderId: string, handle: string, typed: string, via: Via = 'web'): string {
+    // A form sends a line break as CRLF; one line break is one \n, so a message of several lines is not refused as hidden.
+    const text = typed.replace(/\r\n?/g, '\n');
     const { circleId, other } = this.friendFor(senderId, handle);
     this.previewMessage(text);
     if (!this.canMessage(senderId)) throw new KlatschError('forbidden', this.isGuest(senderId) ? GUEST.messages : MESSAGE.tooMany);
@@ -2056,7 +2058,8 @@ export class Klatsch {
   }
 
   /** The person asked writes the answer themselves, on their page: their click is the approval. */
-  answerByHand(helperId: string, askId: string, answer: string): void {
+  answerByHand(helperId: string, askId: string, typed: string): void {
+    const answer = typed.replace(/\r\n?/g, '\n');
     const text = answer.trim();
     if (!text) throw new KlatschError('invalid', ASK.emptyAnswer);
     if (text.length > ANSWER_MAX) throw new KlatschError('invalid', ASK.longAnswer);

@@ -81,10 +81,12 @@ describe('friends: a link, a question about anything, an answer typed by hand th
     const asked = await aliceAgent.call('ask_person', { handle: '@eve', question: QUESTION });
     assert.equal(asked.data.state, 'asked', asked.raw);
     askId = asked.data.ask_id;
-    const home = (await eveBrowser.get('/ui')).html;
-    assert.ok(home.includes(QUESTION));
-    assert.match(home, /action="\/ui\/asks\/[^"]+\/answer"/);
-    assert.match(home, /Only @alice reads it, and it goes straight to the AI they asked with\./);
+    // Home lists it as Alice's chat; the conversation shows the question and answers it in its bar.
+    assert.match((await eveBrowser.get('/ui')).html, /asks you:/);
+    const chat = (await eveBrowser.get('/ui/chat/alice')).html;
+    assert.ok(chat.includes(QUESTION));
+    assert.match(chat, /action="\/ui\/asks\/[^"]+\/answer"/);
+    assert.match(chat, /Only @alice reads it, and it goes straight to the AI they asked with\./);
   });
 
   it('an empty answer sends nothing; Eve’s typed answer goes straight to Alice’s agent', async () => {
@@ -98,13 +100,14 @@ describe('friends: a link, a question about anything, an answer typed by hand th
     const quote = ((await aliceAgent.call('inbox')).data.events as { type?: string; quote?: string; from?: string; text: string }[]).find((e) => e.type === 'quote')!;
     assert.equal(quote.quote, ANSWER);
     assert.equal(quote.from, '@eve');
-    assert.match((await aliceBrowser.get('/ui')).html, /Sent to your AI/);
+    assert.match((await aliceBrowser.get('/ui/chat/eve')).html, /Sent to your AI/);
     assert.ok((await eveBrowser.post(`/ui/asks/${askId}/answer`, { answer: 'again' })).status >= 400, 'answered once');
     // Home keeps the conversation on both sides, and counts the friend; no coding-only chips for people who only ask.
+    const eveChat = (await eveBrowser.get('/ui/chat/alice')).html;
+    assert.ok(eveChat.includes(QUESTION) && eveChat.includes(ANSWER));
+    assert.match(eveChat, /You answered/);
+    assert.ok(!eveChat.includes('action="/ui/asks/' + askId + '/answer"'), 'no answer box once answered');
     const eveHome = (await eveBrowser.get('/ui')).html;
-    assert.ok(eveHome.includes(QUESTION) && eveHome.includes(ANSWER));
-    assert.match(eveHome, /You answered/);
-    assert.ok(!eveHome.includes('action="/ui/asks/' + askId + '/answer"'), 'no answer box once answered');
     assert.match(eveHome, /<b>1<\/b> friend</);
     assert.ok(!eveHome.includes('intro requests'));
     await aliceBrowser.post(`/ui/asks/${askId}/send`);

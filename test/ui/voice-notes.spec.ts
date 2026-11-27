@@ -19,7 +19,7 @@ test('Alice holds the microphone, talks, lets go, and Eve hears the voice note',
   await a.open(`${relay.base}/ui/chat/eve`);
   const mic = a.page.getByRole('button', { name: 'Hold to record a voice note' });
   await expect(mic).toBeVisible();
-  await expect(a.page.getByText('Hold the microphone to record, let go to send.')).toBeVisible();
+  await expect(mic).toHaveAttribute('title', 'Hold to record a voice note');
 
   const box = (await mic.boundingBox())!;
   await a.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -36,12 +36,29 @@ test('Alice holds the microphone, talks, lets go, and Eve hears the voice note',
   await a.page.mouse.move(again.x + again.width / 2, again.y + again.height / 2);
   await a.page.mouse.down();
   await expect(a.page.getByText(/Recording/)).toBeVisible();
-  await a.page.mouse.move(again.x - 200, again.y - 200);
+  await a.page.mouse.move(again.x - 200, again.y + again.height / 2);
   await expect(a.page.getByText('Cancelled.')).toBeVisible();
   await a.page.mouse.up();
   await expect(a.page.locator('.msg.mine audio')).toHaveCount(1);
 
-  const sent = relay.klatsch.conversation(eve, '@alice').messages.at(-1)!;
+  // Hands-free: a tap starts recording without holding; a second tap sends.
+  await mic.click();
+  await expect(a.page.getByText(/tap 🎤 to send/)).toBeVisible();
+  await a.page.waitForTimeout(1200);
+  await Promise.all([a.page.waitForEvent('load'), mic.click()]);
+  await expect(a.page.locator('.msg.mine audio')).toHaveCount(2);
+
+  // Enter sends a message; Shift+Enter is a new line.
+  const message = a.page.getByRole('textbox', { name: 'Your message' });
+  await message.fill('First line');
+  await message.press('Shift+Enter');
+  await message.pressSequentially('second line');
+  await Promise.all([a.page.waitForEvent('load'), message.press('Enter')]);
+  await expect(a.page.locator('.msg.mine p').last()).toHaveText('First line\nsecond line');
+
+  const voice = relay.klatsch.conversation(eve, '@alice').messages.filter((m) => m.files.length).at(-1)!;
+  expect(voice.text).toBe('🎤 Voice note');
+  const sent = voice;
   expect(sent.text).toBe('🎤 Voice note');
   expect(sent.files[0]!.mime).toMatch(/^audio\//);
   expect(sent.files[0]!.size).toBeGreaterThan(1000);

@@ -28,6 +28,10 @@ export interface Person {
   shot(file: string): Promise<void>;
   /** No CSP violation, and every form post carried this relay's Origin and was not refused for it. */
   expectCleanBrowser(): Promise<void>;
+  /** Goes to another page from Home's menu (⋯), or from a page's own tabs where it has them. */
+  goTo(label: 'Notes' | 'Circle' | 'Tokens' | 'Settings'): Promise<Response>;
+  /** Signs out from Home's menu. */
+  signOut(): Promise<Response>;
 }
 
 export async function person(
@@ -84,7 +88,22 @@ export async function person(
     return response;
   };
 
+
+  const goTo: Person['goTo'] = async (label) => {
+    const tabs = page.locator('nav.tabs');
+    if (await tabs.count()) return click(tabs.getByRole('link', { name: label }));
+    await page.locator('details.menu > summary').click();
+    return click(page.locator('details.menu').getByRole('link', { name: label }));
+  };
+  const signOut: Person['signOut'] = async () => {
+    const inBar = page.locator('.me').getByRole('button', { name: 'Sign out' });
+    if (await inBar.count()) return click(inBar);
+    await page.locator('details.menu > summary').click();
+    return click(page.locator('details.menu').getByRole('button', { name: 'Sign out' }));
+  };
   const self: Person = {
+    goTo,
+    signOut,
     name,
     context,
     page,
@@ -106,9 +125,9 @@ export async function person(
     const signedIn = await open(loginLink);
     expect(signedIn.status()).toBe(200);
     expect(page.url()).toBe(`${at}/ui`);
-    // Home greets a member; someone in no circle (`member: false`) is told they need an invite instead.
-    const greeting = new RegExp(`^Hi, ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\. `);
-    await expect(page.getByRole('heading', { level: 1, name: member ? greeting : 'You need an invite', exact: !member })).toBeVisible();
+    // A member's Home is the messenger (the chats on the side); someone in no circle (`member: false`) is told they need an invite instead.
+    if (member) await expect(page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
+    else await expect(page.getByRole('heading', { level: 1, name: 'You need an invite', exact: true })).toBeVisible();
     if (!member) await expect(page.locator('.me .name')).toHaveText(name);
   }
   return self;

@@ -37,7 +37,7 @@ for (const viewport of [
       await alice.page.getByLabel('Your message').fill('Dinner on Friday at 19:00?');
       await alice.page.locator('input[type=file]').setInputFiles({ name: 'map.png', mimeType: 'image/png', buffer: PNG });
       await alice.click(alice.page.getByRole('button', { name: 'Send' }));
-      await expect(alice.page.getByText('Dinner on Friday at 19:00?')).toBeVisible();
+      await expect(alice.page.locator('.thread').getByText('Dinner on Friday at 19:00?')).toBeVisible();
       await expect(alice.page.getByRole('link', { name: /map\.png/ })).toBeVisible();
       await alice.shot(`messages-alice-${w}.png`);
       const [scroll, client] = await alice.page.evaluate<[number, number]>('[document.documentElement.scrollWidth, document.documentElement.clientWidth]');
@@ -47,15 +47,17 @@ for (const viewport of [
     test('Eve sees it as new on Home, reads it, writes back and hands it to her AI', async () => {
       const w = viewport.width;
       await eve.open(`${relay.base}/ui`);
-      await expect(eve.page.getByRole('heading', { name: /Messages/ })).toBeVisible();
-      await expect(eve.page.getByText('1 new', { exact: true })).toBeVisible();
+      // Home is the chat list: Alice's chat with one new message.
+      const chats = eve.page.getByRole('complementary', { name: 'Chats' });
+      await expect(chats.getByLabel('1 new')).toBeVisible();
       await eve.shot(`messages-home-${w}.png`);
-      await eve.click(eve.page.getByRole('link', { name: 'Open' }));
-      await expect(eve.page.getByText('Dinner on Friday at 19:00?')).toBeVisible();
+      await eve.click(chats.getByRole('link', { name: /Alice/ }));
+      await expect(eve.page.locator('.thread').getByText('Dinner on Friday at 19:00?')).toBeVisible();
       await eve.page.getByLabel('Your message').fill('Yes, I will bring dessert.');
       await eve.click(eve.page.getByRole('button', { name: 'Send' }));
-      await expect(eve.page.getByText('Yes, I will bring dessert.')).toBeVisible();
+      await expect(eve.page.locator('.thread').getByText('Yes, I will bring dessert.')).toBeVisible();
       await eve.shot(`messages-eve-${w}.png`);
+      await eve.page.locator('details.chatmore > summary').click();
       await eve.click(eve.page.getByRole('button', { name: 'Draft a reply with my AI' }));
       await expect(eve.page.getByText(/Your AI gets your conversation with @alice/)).toBeVisible();
     });

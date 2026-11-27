@@ -12,6 +12,9 @@ test('a reviewer signs in with the handle and password they were given', async (
   const p = await person(browser, relay, 'Alice', import.meta.filename, relay.loginLink(alice));
   await p.context.clearCookies();
   await p.open(`${relay.base}/ui`);
+  // The way in for reviewers is folded under "What Klatsch keeps, and more".
+  const more = p.page.getByText('What Klatsch keeps, and more');
+  if (await more.count()) await more.click();
   await p.click(p.page.getByRole('link', { name: /review account/ }));
   await p.page.getByLabel('Handle').fill('reviewer');
   await p.page.getByLabel('Password').fill('wrong');
@@ -20,7 +23,7 @@ test('a reviewer signs in with the handle and password they were given', async (
   await p.page.getByLabel('Handle').fill('reviewer');
   await p.page.getByLabel('Password').fill(password);
   await p.click(p.page.getByRole('button', { name: 'Sign in' }));
-  await expect(p.page.getByRole('heading', { level: 1, name: /Hi, Directory Reviewer/ })).toBeVisible();
+  await expect(p.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
   await p.shot('review-signed-in.png');
   await p.context.close();
   await relay.close();

@@ -25,7 +25,7 @@ test.describe.serial('tokens: create and revoke in the browser', () => {
   });
 
   test('Alice opens "Agent tokens" and clicks "Connect an agent"; the command is shown once', async () => {
-    await alice.click(alice.page.getByRole('navigation').getByRole('link', { name: 'Tokens' }));
+    await alice.goTo('Tokens');
     await expect(alice.page).toHaveTitle('Agent tokens · Klatsch');
     const created = await alice.click(alice.page.getByRole('button', { name: 'Connect an agent' }));
     expect(created.status()).toBe(200);

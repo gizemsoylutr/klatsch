@@ -42,7 +42,9 @@ test.describe.serial('approval by code: Alice types the code her agent showed', 
   });
 
   test('Alice follows the link on her dashboard to the code page', async () => {
-    await alice.click(alice.page.getByRole('link', { name: /Got a code from your agent/ }));
+    // Home's menu (⋯) has the code page.
+    await alice.page.locator('details.menu > summary').click();
+    await alice.click(alice.page.getByRole('link', { name: 'Enter a code from your agent' }));
     expect(alice.page.url()).toBe(`${relay.base}/ui/device`);
     await expect(alice.page.getByText('Enter the code your agent showed in the terminal.')).toBeVisible();
     await expect(alice.page.getByRole('textbox')).toBeFocused();

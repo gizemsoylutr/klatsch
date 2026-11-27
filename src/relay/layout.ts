@@ -64,7 +64,8 @@ code, .cmd { font: 13px/1.6 var(--mono); }
 .avatar.blue { background: var(--accent); color: var(--ink); }
 .avatar.lg { width: 44px; height: 44px; font-size: 18px; }
 
-main.page { width: 100%; max-width: 980px; margin: 0 auto; padding: 40px 24px 64px; }
+/* Room at the bottom for the phone's own bars (Safari's address pill floats over the page): the last button scrolls clear. */
+main.page { width: 100%; max-width: 980px; margin: 0 auto; padding: 40px 24px calc(96px + env(safe-area-inset-bottom)); }
 .ph { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 16px; }
 .ph h1 { font: 700 34px/1.12 var(--display); letter-spacing: -0.025em; overflow-wrap: anywhere; }
 .ph .end { margin-left: auto; }
@@ -229,24 +230,163 @@ main.center { flex-grow: 1; display: grid; place-items: center; padding: 48px 16
 .ok { width: 52px; height: 52px; border-radius: 999px; background: var(--good-soft); color: var(--good); display: grid; place-items: center; font-size: 26px; }
 .ok.muted { background: var(--chip); color: var(--muted); }
 
-/* One centred block, not two halves of the screen: the words on the left, the way in on a card beside them. */
-main.signin { flex-grow: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 72px; align-items: center; width: 100%; max-width: 1080px; margin: 0 auto; padding: 56px 24px; }
-.signin .left { display: grid; justify-items: start; gap: 16px; }
-.signin .left .wordmark { font: 700 22px/1.2 var(--display); letter-spacing: -0.02em; margin-top: 12px; }
-.signin .left h1 { font: 700 38px/1.08 var(--display); letter-spacing: -0.03em; max-width: 13ch; }
-.signin .left p { color: var(--muted); max-width: 38ch; }
-.signin .right { background: var(--sunk); border-radius: 20px; padding: 36px 32px; display: grid; justify-items: start; gap: 14px; }
-.signin .right h2 { font: 600 24px/1.2 var(--display); }
-.signin .right p { font-size: 13px; color: var(--muted); }
-.signin .right .lead { font-size: 15px; color: var(--fg); }
+/* Sign-in: one narrow column, and every line of text starts at the same left edge. */
+/* One block in the middle of the screen, on a phone as on a wide screen: the sign, the words, the ways in. */
+main.signin { flex-grow: 1; display: flex; justify-content: center; align-items: center; width: 100%; padding: 32px 24px calc(32px + env(safe-area-inset-bottom)); }
+.chat { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 20px; }
+.chat .lockup { align-self: flex-start; margin-bottom: 28px; }
+/* A small, quiet entrance: the words knock once, the rest rises in. None for people who asked for less motion. */
+@keyframes knock { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) rotate(-0.6deg); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.chat .words .first { display: inline-block; animation: knock 520ms ease-in-out 200ms 1 both; }
+.chat .words .sub, .chat .replies, .chat form.composer, .chat .more, .chat > p, .chat > ul, .chat > form { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.chat .words .sub { animation-delay: 650ms; }
+.chat .replies { animation-delay: 800ms; }
+.chat > p, .chat > ul { animation-delay: 650ms; }
+.chat form.composer, .chat > form { animation-delay: 900ms; }
+.chat .more { animation-delay: 1000ms; }
+@media (prefers-reduced-motion: reduce) { .chat *, .chat { animation: none !important; } }
+.chat .lockup { display: inline-flex; align-items: center; gap: 8px; color: var(--fg); font: 600 15px/1 var(--display); }
+.chat .lockup:hover { text-decoration: none; }
+.chat .lockup .cup { width: 26px; height: 26px; border-radius: 7px; }
+.chat .words h1 { font: 700 32px/1.1 var(--display); letter-spacing: -0.025em; }
+.chat .words h1 .sub { color: var(--soft); display: block; }
+.chat .words h1 .first { color: var(--fg); }
+.chat > p, .chat > ul { font-size: 14px; color: var(--muted); margin: 0; }
+.chat > p.lead { font-size: 15px; color: var(--fg); }
+.chat > ul { padding-left: 18px; display: grid; gap: 4px; }
+/* The ways in share one row, in equal parts, on any phone: never a second row. */
+.replies { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+.replies > [hidden] { display: none; }
+.replies > span { display: grid; }
+.replies:empty { display: none; }
+.chat .more { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-size: 13px; }
+.chat .more a { color: var(--fg); }
+a.chip, .replies button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; min-height: 40px; min-width: 0; padding: 0 10px; white-space: nowrap; border-radius: 999px;
+  background: transparent; color: var(--fg); box-shadow: 0 0 0 1px var(--line) inset; font: 500 14px/1 var(--sans); text-decoration: none; border: 0; }
+a.chip:hover, .replies button:hover { text-decoration: none; background: var(--sunk); }
+a.chip svg, .replies button svg { width: 16px; height: 16px; flex-shrink: 0; }
+form.composer { display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--line); padding: 0 0 8px; }
+form.composer:focus-within { border-bottom-color: var(--accent); }
+form.composer input[type="email"] { flex: 1; min-width: 0; min-height: 40px; border: 0; border-radius: 0; background: transparent; padding: 0; font-size: 16px; }
+form.composer input[type="email"]:focus-visible { outline: none; }
+/* The send arrow stays quiet until there is an address to send to: the app icon is the page's one blue thing. */
+form.composer button.send { width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 999px; font-size: 15px; flex-shrink: 0; background: transparent; color: var(--soft); box-shadow: none; }
+form.composer:has(input:valid) button.send { background: var(--accent); color: #FFFFFF; }
+details.keeps { font-size: 13px; color: var(--muted); }
+details.keeps summary { cursor: pointer; list-style: none; width: fit-content; }
+details.keeps summary::-webkit-details-marker { display: none; }
+details.keeps summary::after { content: " ›"; }
+details.keeps[open] summary::after { content: " ⌄"; }
+details.keeps > *:not(summary) { margin-top: 8px; }
+.chat form:not(.composer) { display: grid; gap: 10px; }
+.chat form:not(.composer) button { min-height: 46px; font-size: 15px; border-radius: 999px; }
 a.gh { width: 100%; min-height: 46px; background: var(--fg); color: var(--bg); font-size: 15px; }
-.signin .right form { width: 100%; display: grid; gap: 10px; }
-.signin .right form button { min-height: 46px; font-size: 15px; }
 .or { width: 100%; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 [hidden] { display: none !important; }
 .passkey { width: 100%; display: grid; gap: 14px; }
 .passkey button { width: 100%; min-height: 46px; font-size: 15px; }
+
+/* A messenger on the web: chats on the left, the open one on the right, each scrolling on its own. */
+main.mess { flex-grow: 1; display: grid; grid-template-columns: 360px minmax(0, 1fr); height: 100vh; height: 100dvh; overflow: hidden; }
+.side { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.side .head { display: flex; align-items: center; gap: 4px; padding: 14px 12px 10px 20px; }
+.side .head .lockup { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; color: var(--fg); font: 600 16px/1 var(--display); }
+.side .head .lockup:hover { text-decoration: none; }
+.side .head .lockup .cup { width: 28px; height: 28px; border-radius: 8px; }
+.side .head form { display: contents; }
+.iconbtn, details.menu > summary { width: 38px; height: 38px; min-height: 38px; padding: 0; border-radius: 999px; display: grid; place-items: center; background: transparent; color: var(--fg); box-shadow: none; font-size: 20px; line-height: 1; cursor: pointer; }
+.iconbtn:hover, details.menu > summary:hover { background: var(--sunk); text-decoration: none; }
+details.menu { position: relative; }
+details.menu > summary { list-style: none; }
+details.menu > summary::-webkit-details-marker { display: none; }
+details.menu > nav { position: absolute; right: 0; top: 44px; z-index: 2; min-width: 180px; display: grid; padding: 6px; border-radius: 14px; background: var(--bg); box-shadow: var(--sheet); animation: rise 160ms ease-out both; }
+details.menu > nav a, details.menu > nav button { display: block; text-align: left; padding: 10px 12px; border-radius: 9px; color: var(--fg); background: transparent; box-shadow: none; font: 400 15px/1.2 var(--sans); min-height: 0; width: 100%; }
+details.menu > nav a:hover, details.menu > nav button:hover { background: var(--sunk); text-decoration: none; }
+details.menu > nav form { display: block; }
+.chats { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; min-height: 0; }
+.chats a.row { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; color: var(--fg); }
+.chats a.row:hover, .chats a.row[aria-current="page"] { background: var(--sunk); text-decoration: none; }
+.row .avatar { width: 46px; height: 46px; font-size: 18px; }
+.row .who { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.row .l1, .row .l2 { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.row .name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row time { font-size: 12px; color: var(--muted); flex-shrink: 0; }
+.row .last { flex: 1; min-width: 0; font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.new .last { color: var(--fg); font-weight: 500; }
+.row.new time { color: var(--accent); }
+.row .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #FFFFFF; font-size: 12px; font-weight: 600; display: grid; place-items: center; flex-shrink: 0; }
+.side .empty { padding: 12px 20px; font-size: 14px; color: var(--muted); }
+.pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.pane .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 36px 40px calc(48px + env(safe-area-inset-bottom)); }
+.pane .scroll > .inner { max-width: 760px; margin: 0 auto; }
+.pane .pick { display: grid; gap: 4px; margin-bottom: 28px; }
+.pane .pick h1 { font: 700 28px/1.15 var(--display); letter-spacing: -0.02em; }
+.pane .pick p { color: var(--soft); font: 600 20px/1.2 var(--display); }
+.chathead { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); min-height: 64px; }
+.chathead .avatar { width: 40px; height: 40px; }
+.chathead .who { display: grid; gap: 1px; min-width: 0; }
+.chathead .who h1 { font: 600 16px/1.2 var(--sans); }
+.chathead .who span { font-size: 13px; color: var(--muted); }
+.chathead .back { display: none; }
+/* The newest message at the bottom, and the view starts there: the list scrolls in reverse. */
+.stream { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column-reverse; padding: 16px 20px; }
+.stream .thread { margin: 0 auto; width: 100%; max-width: 760px; }
+.stream .hint { margin: auto; text-align: center; }
+.msg:last-child { animation: pop 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+/* Bubbles as in a messenger: the person's own in the one blue, the time small at the bottom. */
+.mess .msg { gap: 2px; padding: 8px 12px 6px; }
+.mess .msg time { font-size: 11px; color: var(--muted); justify-self: end; }
+.mess .msg.mine { background: var(--accent); color: #FFFFFF; }
+.mess .msg.mine time, .mess .msg.mine .m { color: rgba(255, 255, 255, 0.75); }
+.mess .msg.ask { max-width: min(92%, 520px); gap: 8px; padding: 12px 14px; }
+.mess .msg.ask .chatmore { padding: 0; }
+.mess .askacts { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13px; }
+.mess .askacts form { display: inline; }
+/* Answering a question: the question quoted above the bar, as a messenger shows the message being replied to. */
+.replyto { margin: 0 12px; padding: 8px 12px; border-left: 3px solid var(--accent); border-radius: 8px; background: var(--sunk); display: grid; gap: 2px; font-size: 13px; animation: rise 220ms ease-out both; }
+.replyto span { color: var(--accent-text); font-weight: 600; }
+.replyto q { color: var(--muted); quotes: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replyto small { color: var(--muted); font-size: 12px; }
+/* Home inside the messenger: the pane's own heading says it; the old greeting and counts would repeat it. */
+.mess .pane .scroll .ph, .mess .pane .scroll .chips { display: none; }
+form.typebar { display: flex; align-items: flex-end; gap: 6px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
+.typebar textarea { flex: 1; min-width: 0; min-height: 42px; max-height: 160px; resize: none; border: 0; border-radius: 21px; padding: 10px 16px; background: var(--sunk); color: var(--fg); font: inherit; field-sizing: content; }
+.typebar textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.typebar label.attach { width: 42px; height: 42px; border-radius: 999px; display: grid; place-items: center; cursor: pointer; font-size: 19px; flex-shrink: 0; }
+.typebar label.attach:hover { background: var(--sunk); }
+.typebar label.attach input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.typebar button.send { width: 42px; height: 42px; min-height: 42px; padding: 0; border-radius: 999px; font-size: 16px; flex-shrink: 0; }
+.typebar button.mic { width: 42px; height: 42px; min-height: 42px; font-size: 19px; background: transparent; box-shadow: none; }
+.typebar button.mic.locked { background: #FF3B30; color: #FFFFFF; transform: none; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.5); } 50% { box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); } }
+.recstatus { font-size: 13px; color: var(--muted); padding: 0 20px; min-height: 0; }
+.recstatus:empty { display: none; }
+.chatmore { padding: 0 20px 10px; font-size: 13px; color: var(--muted); }
+.chatmore summary { cursor: pointer; list-style: none; width: fit-content; }
+.chatmore summary::-webkit-details-marker { display: none; }
+.chatmore[open] > *:not(summary) { margin-top: 8px; }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes slidein { from { opacity: 0.4; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+.chats li { animation: rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.chats li:nth-child(2) { animation-delay: 40ms; } .chats li:nth-child(3) { animation-delay: 80ms; } .chats li:nth-child(4) { animation-delay: 120ms; }
+.chats li:nth-child(5) { animation-delay: 160ms; } .chats li:nth-child(n+6) { animation-delay: 200ms; }
+@media (max-width: 800px) {
+  main.mess { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 100vh; overflow: visible; }
+  main.mess .side { border-right: 0; }
+  main.mess:not(.open) .pane { border-top: 1px solid var(--line); overflow: visible; }
+  main.mess:not(.open) .pane .scroll { overflow: visible; padding: 24px 16px calc(96px + env(safe-area-inset-bottom)); }
+  main.mess:not(.open) .pane .pick { display: none; }
+  main.mess.open { height: 100vh; height: 100dvh; overflow: hidden; }
+  main.mess.open .side { display: none; }
+  main.mess.open .pane { animation: slidein 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .chathead { padding: 10px 12px; }
+  .chathead .back { display: grid; }
+  .stream { padding: 12px; }
+  .msg { max-width: 85%; }
+}
+@media (prefers-reduced-motion: reduce) { .mess *, .mess { animation: none !important; } }
 
 @media (max-width: 600px) {
   .item form.answer { margin-left: 0; }
@@ -254,16 +394,12 @@ a.gh { width: 100%; min-height: 46px; background: var(--fg); color: var(--bg); f
   .tabs { order: 3; width: 100%; }
   .tabs a { flex: 1; padding: 6px 4px; }
   .me .name { display: none; }
-  main.page { padding: 28px 16px 56px; }
+  main.page { padding: 28px 16px calc(96px + env(safe-area-inset-bottom)); }
   .ph h1 { font-size: 28px; }
   .ph .end { margin-left: 0; }
-  .split, main.signin { grid-template-columns: minmax(0, 1fr); }
+  .split { grid-template-columns: minmax(0, 1fr); }
   .acts { justify-content: flex-start; }
   .sheet { padding: 26px 20px 22px; }
-  main.signin { gap: 28px; padding: 32px 16px 48px; align-items: start; align-content: start; }
-  .signin .left .cup { display: none; }
-  .signin .right { padding: 28px 20px; }
-  .signin .left h1 { font-size: 32px; }
 }
 `;
 
@@ -374,6 +510,8 @@ export const heart = (size = 14) =>
 
 /** The cup on top of a sheet. */
 export const icon = () => html`<span class="cup lg" aria-hidden="true">${CUP(28)}</span>`;
+/** The cup at the size of a chat list's sign. */
+export const CUP_MARK = CUP(16);
 
 /** The mark on top of a result: a tick for good news, a dash for anything else. */
 export const outcome = (good: boolean) => html`<span class="ok${good ? '' : ' muted'}" aria-hidden="true">${good ? '✓' : '–'}</span>`;
@@ -445,6 +583,22 @@ export function screen(title: string, viewer: Viewer, tab: Tab, body: unknown) {
   return document(title, STYLE, header, html`<main class="page">${body}</main>`);
 }
 
+/**
+ * Home and conversations like a messenger on the web: the chats down the left, the open one (or Home's own news)
+ * on the right. On a phone, the list first; a chat opens over it, with a way back.
+ */
+export function messenger(title: string, side: unknown, pane: unknown, open: boolean) {
+  return document(
+    title,
+    STYLE,
+    '',
+    html`<main class="mess${open ? ' open' : ''}">
+      <aside class="side" aria-label="${copy.chat.chats}">${side}</aside>
+      <div class="pane">${pane}</div>
+    </main>`,
+  );
+}
+
 /** A centred sheet: approvals, codes, intros, results and errors. Without a viewer, no name in the bar. */
 export function dialog(title: string, viewer: Viewer | undefined, body: unknown) {
   const header = html`<header class="top">
@@ -455,15 +609,18 @@ export function dialog(title: string, viewer: Viewer | undefined, body: unknown)
 }
 
 /** A visitor without a session: what Klatsch is on the left, how to get in on the right. */
-export function signInScreen(title: string, body: unknown) {
-  const t = copy.signIn;
+export function signInScreen(title: string, body: unknown, sub = '') {
+  // One narrow column where every line starts at the same edge: a small sign with the name, the words, the ways in.
   return document(
     title,
     STYLE,
-    html`<header class="top"><div class="top-in">${brand('/')}</div></header>`,
+    '',
     html`<main class="signin">
-      <div class="left">${icon()}<p class="wordmark">${copy.landing.name}</p><h1>${t.headline[0]} <span>${t.headline[1]}</span></h1><p>${t.tagline}</p></div>
-      <section class="right" aria-labelledby="title"><h2 id="title">${title}</h2>${body}</section>
+      <section class="chat" aria-labelledby="title">
+        <a class="lockup" href="/"><span class="cup" aria-hidden="true">${CUP(15)}</span>${copy.layout.brand}</a>
+        <div class="words"><h1 id="title"><span class="first">${title}</span>${sub ? html` <span class="sub">${sub}</span>` : ''}</h1></div>
+        ${body}
+      </section>
     </main>`,
   );
 }
@@ -485,6 +642,12 @@ export function legalPage(page: 'privacy' | 'terms' | 'support', operator: Opera
 }
 
 /** "Sign in with Google", beside GitHub's on the sign-in page. */
+/** A quick-reply chip on the sign-in page: a short label, the full one for screen readers. */
+export const chip = (href: string, label: string, full: string, mark: unknown = '') => html`<a class="chip" href="${href}" aria-label="${full}">${mark}<span>${label}</span></a>`;
+export const GITHUB_ICON = () => GITHUB_MARK;
+/** A key in one colour, like the GitHub mark beside it (an emoji key would be the only coloured drawing in the row). */
+export const KEY_ICON = () => html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 20 3"/><path d="m16 7 3 3"/><path d="m18 5 2 2"/></svg>`;
+export const GOOGLE_ICON = () => GOOGLE_MARK;
 export const googleLink = (href: string, label: string) => html`<a class="button gh" href="${href}">${GOOGLE_MARK}<span>${label}</span></a>`;
 
 /** "Sign in with GitHub", as the dark pill of the sign-in page. */

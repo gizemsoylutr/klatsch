@@ -74,7 +74,7 @@ test.describe.serial('sign-in: a one-time login link, a session cookie, signing 
 
   test('Alice signs out; her browser is then not signed in', async () => {
     const a = people[0]!;
-    const out = await a.click(a.page.getByRole('button', { name: 'Sign out' }));
+    const out = await a.signOut();
     expect(out.status()).toBe(200);
     await expect(a.page.getByText('Signed out.')).toBeVisible();
     expect((await a.open(`${relay.base}/ui`)).status()).toBe(401);

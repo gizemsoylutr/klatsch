@@ -10,7 +10,7 @@ test('two friends try Klatsch as guests: a link, one click to join, a message, a
   const a = await person(browser, relay, 'Guest A', import.meta.filename, undefined, { member: false });
   await a.open(`${relay.base}/`);
   await a.click(a.page.getByRole('link', { name: 'Try it without an account' }).first());
-  await expect(a.page.getByRole('heading', { level: 2, name: 'Try Klatsch for 5 hours' })).toBeVisible();
+  await expect(a.page.getByRole('heading', { level: 1, name: 'Try Klatsch for 5 hours' })).toBeVisible();
   await a.shot('guest-start.png');
   await a.click(a.page.getByRole('button', { name: 'Start as a guest' }));
   await expect(a.page.getByText(/You are a guest\. This account and everything in it is deleted in/)).toBeVisible();
@@ -26,11 +26,11 @@ test('two friends try Klatsch as guests: a link, one click to join, a message, a
   await b.click(b.page.getByRole('button', { name: 'Join as a guest' }));
   await b.page.getByRole('textbox').first().fill('Hi! It works.');
   await b.click(b.page.getByRole('button', { name: /^Send/ }).first());
-  await expect(b.page.getByText('Hi! It works.')).toBeVisible();
+  await expect(b.page.locator('.thread').getByText('Hi! It works.')).toBeVisible();
   await b.shot('guest-chat.png');
 
   await a.open(`${relay.base}/ui`);
-  await expect(a.page.getByText('Hi! It works.')).toBeVisible();
+  await expect(a.page.getByRole('complementary', { name: 'Chats' }).getByText('Hi! It works.')).toBeVisible();
 
   // A page that needs an account says so instead of opening.
   const notes = await a.open(`${relay.base}/ui/notes`);

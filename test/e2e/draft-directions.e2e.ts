@@ -34,9 +34,9 @@ describe('draft directions: a word on what to say goes to your own AI with the q
   };
   const events = async () => (await aliceAgent.call('inbox')).data.events as { kind: string; how?: string; note?: string; quote?: string }[];
 
-  it('Home shows one box next to "Draft with my AI"; what Alice writes there reaches her AI with the question', async () => {
+  it('the conversation shows one box under "Draft with my AI"; what Alice writes there reaches her AI with the question', async () => {
     const id = await bobAsks('Can you pick me up on Sunday?');
-    const home = await aliceBrowser.get('/ui');
+    const home = await aliceBrowser.get('/ui/chat/bob');
     assert.match(home.html, new RegExp(`action="/ui/asks/${id}/send"[\\s\\S]*?name="how"[\\s\\S]*?Draft with my AI`));
     await aliceBrowser.post(`/ui/asks/${id}/send`, { how: '  yes,   9 is fine,\n keep it short ' });
     const question = (await events()).find((e) => e.kind === 'ask.question')!;

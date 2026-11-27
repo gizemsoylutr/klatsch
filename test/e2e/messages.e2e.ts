@@ -149,7 +149,7 @@ describe('messages: a conversation with a friend, from any chat or the Klatsch p
     assert.ok((await aliceBrowser.post('/ui/chat/eve', { text: '   ' })).status >= 400, 'nothing empty');
     const home = (await eveBrowser.get('/ui')).html;
     assert.match(home, /href="\/ui\/chat\/alice"/);
-    assert.match(home, /2 new</, 'two from Alice she has not read');
+    assert.match(home, /aria-label="2 new">2</, 'two from Alice she has not read');
     assert.match((await eveBrowser.get('/ui/circle')).html, /href="\/ui\/chat\/alice"/);
     // Eve hands it to her AI from the page too.
     const handed = await eveBrowser.post('/ui/chat/alice/agent');

@@ -87,7 +87,8 @@ test.describe.serial('layout: centered on a wide screen, no sideways scroll on a
 
   /** Centered and width-limited at 1280px (the sign-in page's two halves fill it); no sideways scroll at 390px. */
   const checkLayout = async (p: Person, name: string, width: 1280 | 390, colorScheme: string) => {
-    if (width === 1280 && name !== 'sign-in') {
+    // Home is a messenger across the whole screen (chats left, pane right): nothing to centre there.
+    if (width === 1280 && name !== 'sign-in' && name !== 'dashboard') {
       const [selector, max] = column(name);
       const box = (await p.page.locator(selector).first().boundingBox())!;
       const viewport = await p.page.evaluate<number>('document.documentElement.clientWidth');

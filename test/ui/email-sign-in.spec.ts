@@ -51,7 +51,7 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
     await expect(dana.page.getByRole('region')).toContainText('Gizem (@gizem) invites you to demo.');
     await dana.page.getByRole('textbox', { name: 'Handle' }).fill('dana');
     expect((await dana.click(dana.page.getByRole('button', { name: 'Join' }))).status()).toBe(200);
-    await expect(dana.page.getByRole('heading', { level: 1, name: /^Hi, dana\./ })).toBeVisible();
+    await expect(dana.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
     await dana.open(`${relay.base}/ui/settings`);
     await expect(dana.page.getByText('Your address is confirmed. It is also a sign-in')).toBeVisible();
   });
@@ -72,7 +72,7 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
     await desk.shot('email-code.png');
     expect((await desk.click(desk.page.getByRole('button', { name: 'Sign in', exact: true }))).status()).toBe(200);
     expect(desk.page.url()).toBe(`${relay.base}/ui`);
-    await expect(desk.page.getByRole('heading', { level: 1, name: /^Hi, dana\./ })).toBeVisible();
+    await expect(desk.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
   });
 
   test('later, in a new browser, Dana signs in by email again', async ({ browser }) => {
@@ -86,7 +86,7 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
     await again.open(link);
     expect((await again.click(again.page.getByRole('button', { name: 'Sign in as dana@example.org' }))).status()).toBe(200);
     expect(again.page.url()).toBe(`${relay.base}/ui`);
-    await expect(again.page.getByRole('heading', { level: 1, name: /^Hi, dana\./ })).toBeVisible();
+    await expect(again.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
   });
 
   /** No sideways scroll at 390px; at 1280px a sheet is centred and no wider than its design. */

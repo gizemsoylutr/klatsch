@@ -41,7 +41,7 @@ for (const viewport of [
       const [scroll, client] = await bob.page.evaluate<[number, number]>('[document.documentElement.scrollWidth, document.documentElement.clientWidth]');
       expect(scroll).toBeLessThanOrEqual(client);
       await bob.open(`${relay.base}/ui`);
-      await expect(bob.page.getByRole('heading', { level: 1, name: /Hi, Bob/ })).toHaveCount(0);
+      await expect(bob.page.getByRole('complementary', { name: 'Chats' })).toHaveCount(0);
     });
   });
 }

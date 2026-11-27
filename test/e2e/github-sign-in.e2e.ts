@@ -49,7 +49,7 @@ describe('sign in with GitHub: a new person is made only when they join by invit
   it('Dana opens an invite link without a session: the page offers Sign in with GitHub', async () => {
     const page = await signedOutBrowser(relay).go(inviteLink, { headers: { 'Sec-Fetch-Site': 'none' } });
     assert.equal(page.status, 401);
-    assert.match(page.html, /<a class="button gh" href="\/ui\/auth\/github"><svg[^]*?<\/svg><span>Sign in with GitHub<\/span><\/a>/);
+    assert.match(page.html, /<a class="chip" href="\/ui\/auth\/github" aria-label="Sign in with GitHub"><svg[^]*?<\/svg><span>GitHub<\/span><\/a>/);
     const landing = await (await fetch(new URL('/', relay.base), { headers: { Accept: 'text/html' } })).text();
     assert.match(landing, /<a class="btn primary lg" href="\/ui">Sign in with GitHub<\/a>/, 'the landing page says how this relay signs in');
     assert.doesNotMatch(page.html, /demo|Alice/, 'nothing about the invite before signing in');

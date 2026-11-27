@@ -53,7 +53,7 @@ import { PASSKEY_SCRIPT } from './passkey-script.ts';
 import { ICON_SVG, MANIFEST, PUSH_SCRIPT, SERVICE_WORKER } from './push-script.ts';
 import { RECORD_SCRIPT } from './record-script.ts';
 import { vapidFromSecret } from '../notify/push.ts';
-import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer } from './layout.ts';
+import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer, chip, GITHUB_ICON, GOOGLE_ICON, KEY_ICON, messenger, CUP_MARK } from './layout.ts';
 
 const COOKIE = 'klatsch_session';
 /** A key to the page a visitor without a session wanted, for the redirect after the login link. */
@@ -724,15 +724,6 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const nonce = formNonce(c);
     return typeof sent === 'string' && nonce && safeEqual(sent, formTokenOf(nonce)) ? null : c.text(copy.layout.badFormToken, 403);
   };
-  const emailForm = (c: Context, token = formToken(c)) => {
-    const t = copy.signIn;
-    return html`<form class="mail" method="post" action="${EMAIL_PATH}">
-        <input type="hidden" name="csrf" value="${token}" />
-        <input type="email" name="email" maxlength="254" required autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="${t.emailPlaceholder}" aria-label="${t.emailLabel}" />
-        <button class="primary">${t.email}</button>
-      </form>
-      <p>${t.emailNote}</p>`;
-  };
 
   // A new address's join step, like GitHub's: in memory behind a host-only cookie key.
   const emailJoins = shortLived<EmailJoin>();
@@ -1125,12 +1116,28 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         if (passkey) c.header('Content-Security-Policy', SCRIPT_CSP);
         return c.html(
           signInScreen(
-            open ? copy.commons.heading(open.name) : t.title,
-            html`${open ? html`<p class="lead">${copy.commons.line(open.people)}</p><p>${copy.commons.signIn}</p>` : ''}${
-              passkey ? passkeyBox(token, Boolean(github(c) || google(c) || klatsch.signInMailer)) : ''
-            }${github(c) ? html`${githubLink(GITHUB_PATH, t.github)}<p>${t.githubNote}</p><span class="or">${t.or}</span>` : ''}${google(c) ? html`${googleLink(GOOGLE_PATH, t.google)}<p>${t.googleNote}</p><span class="or">${t.or}</span>` : ''}${
-              klatsch.signInMailer ? emailForm(c, token) : ''
-            }${config.guest && !target ? html`<p><a href="/ui/guest">${copy.guest.link}</a></p>` : ''}<p>${t.loginLink}</p>${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}${open ? '' : html`<p>${t.inviteNeeded}</p>`}${isHosted(config) ? '' : html`<p>${t.help}</p>`}`,
+            open ? copy.commons.heading(open.name) : t.knock,
+            // A chat: the ways in are quick replies, the email a message to send; the fine print folds away.
+            html`${open ? html`<p class="lead">${copy.commons.line(open.people)}</p><p>${copy.commons.signIn}</p>` : ''}
+              <div class="replies" role="group" aria-label="${t.ways}">
+                ${passkey ? html`<span data-passkey-box hidden><button type="button" data-passkey="signin" data-csrf="${token}" aria-label="${copy.passkeys.signIn}">${KEY_ICON()}<span>${t.chipPasskey}</span></button></span>` : ''}
+                ${github(c) ? chip(GITHUB_PATH, t.chipGitHub, t.github, GITHUB_ICON()) : ''}
+                ${google(c) ? chip(GOOGLE_PATH, t.chipGoogle, t.google, GOOGLE_ICON()) : ''}
+              </div>
+              ${klatsch.signInMailer
+                ? html`<form class="composer" method="post" action="${EMAIL_PATH}">
+                    <input type="hidden" name="csrf" value="${token}" />
+                    <input type="email" name="email" maxlength="254" required autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="${t.composer}" aria-label="${t.emailLabel}" />
+                    <button class="primary send" aria-label="${t.email}">➤</button>
+                  </form>`
+                : ''}
+              ${passkey ? passkeyScript() : ''}
+              <div class="more">${config.guest && !target ? html`<a href="/ui/guest">${copy.guest.link}</a>` : ''}<details class="keeps"><summary>${t.keeps}</summary>
+                ${github(c) ? html`<p>${t.githubNote}</p>` : ''}${google(c) ? html`<p>${t.googleNote}</p>` : ''}${klatsch.signInMailer ? html`<p>${t.emailNote}</p>` : ''}
+                <p>${t.loginLink}</p>${open ? '' : html`<p>${t.inviteNeeded}</p>`}${isHosted(config) ? '' : html`<p>${t.help}</p>`}
+                ${klatsch.hasReviewAccounts() ? html`<p><a href="/ui/review-login">${copy.review.link}</a></p>` : ''}
+              </details></div>`,
+            open ? '' : t.whosThere,
           ),
           401,
         );
@@ -1203,12 +1210,13 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     // A device that has them re-sends its subscription from Home, so one the relay lost comes back by itself.
     const pushSync = !pushOffer && klatsch.pushSubscriptionsOf(userId).length > 0;
     if (offer || pushOffer || pushSync) c.header('Content-Security-Policy', SCRIPT_CSP);
-    return show(
-      c,
+    const conversations = klatsch.conversationsOf(userId);
+    const asks = klatsch.asksOf(userId);
+    return c.html(messenger(
       user.display_name,
-      'home',
+      chatSide(conversations, asks, c.get('csrf')),
       // On the first Home after signing in, the script opens the browser's own passkey dialog by itself, once.
-      html`${guestLeft !== undefined ? guestBanner(guestLeft, c.get('csrf')) : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
+      html`<div class="scroll"><div class="inner"><div class="pick"><h1>${copy.chat.pick}</h1><p>${copy.chat.pickLine}</p></div>${guestLeft !== undefined ? guestBanner(guestLeft, c.get('csrf')) : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
         user,
         klatsch.sipsOf(userId),
         klatsch.introsOf(userId),
@@ -1216,13 +1224,15 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         { ...klatsch.helped(userId), byAgent: klatsch.agentThanksOf(userId) },
         klatsch.sharingCircles(userId),
         config.connectedTextHours,
-        klatsch.asksOf(userId),
+        // A friend's question is in their conversation; Home keeps the ones from people who are not friends.
+        asks.filter((k) => !conversations.some((x) => x.other.handle === k.other.handle)),
         c.get('csrf'),
         klatsch.circlesOf(userId).filter((circle) => circle.pair && circle.people === 2).length,
-        klatsch.conversationsOf(userId),
+        conversations,
         guestLeft === undefined,
-      )}`,
-    );
+      )}</div></div>`,
+      false,
+    ));
   });
 
   web.post('/push/subscribe', async (c) => {
@@ -2009,7 +2019,11 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
           for (const file of files) klatsch.attach(c.get('userId'), c.req.param('id'), file);
         }),
       '/ui',
-      () => c.html(notice(copy.asks.answeredTitle, html`<p class="sub">${copy.asks.answered}</p>${homeLink}`)),
+      // Answered from the conversation: back to it, like any reply. Only a path to a conversation is followed.
+      () =>
+        typeof form.back === 'string' && /^\/ui\/chat\/[\w%.-]+$/.test(form.back)
+          ? c.redirect(`${form.back}#end`, 303)
+          : c.html(notice(copy.asks.answeredTitle, html`<p class="sub">${copy.asks.answered}</p>${homeLink}`)),
     );
   });
   // A file with one's own waiting question.
@@ -2055,7 +2069,10 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const files = !klatsch.isGuest(c.get('userId'));
     // The voice note button runs /ui/record.js, and voice notes play inline: both same-origin.
     c.header('Content-Security-Policy', CHAT_CSP);
-    return show(c, view.other.name, 'home', chatPage(view, c.get('csrf'), files));
+    const userId = c.get('userId');
+    const asks = klatsch.asksOf(userId);
+    const between = asks.filter((k) => (k.state === 'open' || k.state === 'answered') && k.other.handle === view.other.handle).sort((x, y) => x.createdAt - y.createdAt);
+    return c.html(messenger(view.other.name, chatSide(klatsch.conversationsOf(userId), asks, c.get('csrf'), view.other.handle), chatPane(view, c.get('csrf'), files, between), true));
   });
   web.post('/chat/:handle', async (c) => {
     const form = await c.req.parseBody({ all: true });
@@ -2432,14 +2449,6 @@ const day = (ts: number) => new Date(ts).toISOString().slice(0, 10);
  */
 const passkeyScript = () => html`<p id="passkey-error" class="flag" hidden>${copy.passkeys.error}</p><script src="/ui/passkey.js" defer></script>`;
 
-/** "Sign in with a passkey" at the top of the sign-in page, and "or" before the other ways when there are any. */
-function passkeyBox(csrf: string, or: boolean) {
-  return html`<div class="passkey" data-passkey-box hidden>
-      <button type="button" data-passkey="signin" data-csrf="${csrf}">${copy.passkeys.signIn}</button>
-      ${or ? html`<span class="or">${copy.signIn.or}</span>` : ''}
-    </div>
-    ${passkeyScript()}`;
-}
 const until = (ts: number) => `${new Date(ts).toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 
 /** A name with the `@handle` beside it in grey. */
@@ -2501,17 +2510,84 @@ function when(at: number): string {
   return today ? d.toISOString().slice(11, 16) + ' UTC' : d.toISOString().slice(0, 10);
 }
 
-/** `files`: false for a guest, who sends no files, so the form has no file field. */
-function chatPage(view: ConversationView, csrf: string, files = true) {
+
+/** A time in a chat list: the hour today, the day this week, else the date. */
+function shortWhen(at: number): string {
+  const d = new Date(at);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toISOString().slice(11, 16);
+  if (now.getTime() - at < 6 * DAY_MS) return d.toUTCString().slice(0, 3);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The left side of the messenger: the sign, "add a friend", a menu for the other pages, and the chats, newest
+ * first. A friend's waiting question shows as the chat's last line.
+ */
+function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string) {
   const t = copy.chat;
+  const nav = copy.layout.nav;
+  const asking = new Map(asks.filter((k) => k.role === 'helper' && k.state === 'open').map((k) => [k.other.handle, k.question]));
+  return html`<div class="head">
+      <a class="lockup" href="/ui"><span class="cup" aria-hidden="true">${CUP_MARK}</span>${copy.layout.brand}</a>
+      <form method="post" action="/ui/friends/invite"><input type="hidden" name="csrf" value="${csrf}" /><button class="iconbtn" aria-label="${copy.circle.addFriend}" title="${copy.circle.addFriend}">＋</button></form>
+      <details class="menu"><summary aria-label="${t.menu}" title="${t.menu}">⋯</summary>
+        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${nav.circle}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/device">${copy.chat.enterCode}</a>
+          <form method="post" action="/ui/logout"><input type="hidden" name="csrf" value="${csrf}" /><button>${copy.dashboard.signOut}</button></form></nav>
+      </details>
+    </div>
+    ${conversations.length
+      ? html`<ul class="chats">${conversations.map((x) => {
+          const ask = asking.get(x.other.handle);
+          const last = ask ? `${t.asksYou} ${ask}` : x.last ? `${x.last.mine ? `${t.you}: ` : ''}${x.last.text}` : `@${x.other.handle}`;
+          const fresh = x.unread > 0 || Boolean(ask);
+          return html`<li><a class="row${fresh ? ' new' : ''}" href="/ui/chat/${encodeURIComponent(x.other.handle)}"${current === x.other.handle ? html` aria-current="page"` : ''}>
+            ${avatar(x.other.name, { blue: true })}
+            <span class="who"><span class="l1"><span class="name">${x.other.name}</span>${x.last ? html`<time>${shortWhen(x.last.at)}</time>` : ''}</span>
+              <span class="l2"><span class="last">${last}</span>${x.unread ? html`<span class="badge" aria-label="${t.unread(x.unread)}">${x.unread}</span>` : ''}</span></span>
+          </a></li>`;
+        })}</ul>`
+      : html`<p class="empty">${t.noChats}</p>`}`;
+}
+
+/**
+ * A direct question between the two, in their conversation: the friend's waiting question with the answer box (and
+ * "Draft with my AI" folded below it), or the person's own question waiting for an answer.
+ */
+function askBubble(k: AskView, csrf: string) {
+  const a = copy.asks;
+  // Answered: the question and its answer as two bubbles, each on its own side, with what came of it.
+  if (k.state === 'answered') {
+    const mineAsked = k.role === 'asker';
+    return html`<li class="msg ask${mineAsked ? ' mine' : ''}"><span class="m">${mineAsked ? a.fromYou(k.other.name) : a.toYou(k.other.name)}</span><p>${k.question}</p></li>
+      <li class="msg ask${mineAsked ? '' : ' mine'}"><span class="m">${mineAsked ? a.answerLabel : a.youAnswered}</span><p>${k.answer ?? ''}</p>${mineAsked ? html`<span class="m">${a.answerSent}</span>` : ''}</li>`;
+  }
+  if (k.role === 'asker') return html`<li class="msg mine ask"><span class="m">${a.waiting}</span><p>${k.question}</p></li>`;
+  // The answer is written in the bar below, like a reply in a messenger; the bubble keeps the question and the ways out.
+  return html`<li class="msg ask">
+    <span class="m">${a.toYou(k.other.name)}</span>
+    <p>${k.question}</p>
+    <div class="askacts">${button(`/ui/asks/${k.id}/decline`, a.decline, csrf, 'link')}
+      <details class="chatmore"><summary>${copy.chat.draftMore}</summary>${howForm(`/ui/asks/${k.id}/send`, a.draft, a.how, a.howPlaceholder, csrf, 'answer')}</details></div>
+  </li>`;
+}
+
+/** The open conversation on the right: who, the messages (the newest at the bottom), and the bar to write in. */
+function chatPane(view: ConversationView, csrf: string, files = true, asks: AskView[] = []) {
+  const t = copy.chat;
+  // The friend's waiting question, if any: the bar below answers it until it is answered or declined.
+  const answering = asks.find((k) => k.role === 'helper' && k.state === 'open');
   const handle = encodeURIComponent(view.other.handle);
-  return html`<div class="ph"><h1>${view.other.name} <span>@${view.other.handle}</span></h1><a class="end" href="/ui">${copy.layout.home}</a></div>
-    <section class="sec">
+  return html`<header class="chathead">
+      <a class="iconbtn back" href="/ui" aria-label="${t.back}">‹</a>
+      ${avatar(view.other.name, { blue: true })}
+      <div class="who"><h1>${view.other.name}</h1><span>@${view.other.handle}</span></div>
+    </header>
+    <div class="stream">
       ${view.messages.length
         ? html`<ol class="thread" aria-label="${t.heading}">
             ${view.messages.map(
               (m) => html`<li class="msg${m.mine ? ' mine' : ''}">
-                <span class="m">${m.mine ? t.you : view.other.name} · ${when(m.at)}</span>
                 <p>${m.text}</p>
                 ${m.files.length
                   ? html`<span class="files">${m.files.map((f) =>
@@ -2520,51 +2596,39 @@ function chatPage(view: ConversationView, csrf: string, files = true) {
                         : html`<a href="/ui/attachments/${f.id}">📎 ${f.name}</a> `,
                     )}</span>`
                   : ''}
+                <time datetime="${new Date(m.at).toISOString()}">${shortWhen(m.at)}</time>
               </li>`,
             )}
+            ${asks.map((k) => askBubble(k, csrf))}
           </ol>`
-        : html`<p class="hint">${t.empty(view.other.name)}</p>`}
-      <form id="end" class="reply" method="post" action="/ui/chat/${handle}" enctype="multipart/form-data">
-        <input type="hidden" name="csrf" value="${csrf}" />
-        <label for="text">${t.write}</label>
-        <textarea id="text" name="text" maxlength="2000" required placeholder="${t.placeholder}"></textarea>
-        ${files
-          ? html`<label for="file" class="m">${t.attachLabel}</label>
-              <input id="file" type="file" name="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" />`
-          : ''}
-        <div class="acts">${files
-          ? html`<p class="m" data-record-status aria-live="polite"></p><button type="button" class="mic" data-record data-action="/ui/chat/${handle}" data-csrf="${csrf}"
-              data-hint="${t.recordHint}" data-recording="${t.recording}" data-sending="${t.recordSending}" data-cancelled="${t.recordCancelled}"
-              data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">🎤</button>`
-          : ''}<button class="primary">${t.send}</button></div>
-      </form>${files ? html`<script src="/ui/record.js" defer></script>` : ''}
-      ${view.messages.some((m) => !m.mine)
-        ? html`${howForm(`/ui/chat/${handle}/agent`, t.toAgent, t.how, t.howPlaceholder, csrf)}<p class="hint">${t.toAgentNote}</p>`
+        : asks.length
+          ? html`<ol class="thread" aria-label="${t.heading}">${asks.map((k) => askBubble(k, csrf))}</ol>`
+          : html`<p class="hint">${t.empty(view.other.name)}</p>`}
+    </div>
+    ${view.messages.some((m) => !m.mine)
+      ? html`<details class="chatmore"><summary>${t.draftMore}</summary>${howForm(`/ui/chat/${handle}/agent`, t.toAgent, t.how, t.howPlaceholder, csrf)}<p>${t.toAgentNote}</p></details>`
+      : ''}
+    ${files && !answering ? html`<p class="recstatus" data-record-status aria-live="polite"></p>` : ''}
+    ${answering ? html`<div class="replyto"><span>↩ ${t.answering(view.other.name)}</span><q>${answering.question}</q><small>${copy.asks.answerGoes(view.other.handle)}</small></div>` : ''}
+    <form id="end" class="typebar" method="post" action="${answering ? `/ui/asks/${answering.id}/answer` : `/ui/chat/${handle}`}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="${csrf}" />
+      ${answering ? html`<input type="hidden" name="back" value="/ui/chat/${handle}" />` : ''}
+      ${files
+        ? html`<label class="attach" title="${t.attach}">📎<input id="file" type="file" name="file" multiple aria-label="${t.attachLabel}" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" /></label>`
         : ''}
-      <p class="hint">${t.note(view.other.name)}</p>
-    </section>`;
+      ${answering
+        ? html`<textarea id="text" name="answer" maxlength="500" required rows="1" placeholder="${copy.asks.yourAnswer}" aria-label="${copy.asks.yourAnswer}"></textarea>`
+        : html`<textarea id="text" name="text" maxlength="2000" required rows="1" placeholder="${t.typeHere}" aria-label="${t.write}"></textarea>`}
+      ${files && !answering
+        ? html`<button type="button" class="mic" data-record data-action="/ui/chat/${handle}" data-csrf="${csrf}"
+            data-hint="${t.recordHint}" data-recording="${t.recording}" data-locked="${t.recordLocked}" data-sending="${t.recordSending}" data-cancelled="${t.recordCancelled}"
+            data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">🎤</button>`
+        : ''}
+      ${files && !answering ? html`<button type="button" class="iconbtn reccancel" data-record-cancel hidden aria-label="${t.recordCancel}" title="${t.recordCancel}">✕</button>` : ''}
+      <button class="primary send" aria-label="${answering ? copy.asks.sendAnswer : t.send}">➤</button>
+    </form><script src="/ui/record.js" defer></script>`;
 }
 
-/** Home's list of conversations: newest first, the friend's unread count, the last line. */
-function messagesSection(conversations: ConversationSummary[]) {
-  const t = copy.chat;
-  if (!conversations.length) return '';
-  return html`<section class="sec">
-    <h2>${t.heading} <em>${conversations.reduce((n, x) => n + x.unread, 0)}</em></h2>
-    <ul class="list">
-      ${conversations.map(
-        (x) => html`<li class="item">
-          ${avatar(x.other.name, { blue: true })}
-          <div class="main">
-            <span class="t"><a href="/ui/chat/${encodeURIComponent(x.other.handle)}">${x.other.name}</a> <span class="m">@${x.other.handle}</span>${x.unread ? html` <span class="pill open">${t.unread(x.unread)}</span>` : ''}</span>
-            ${x.last ? html`<span class="m">${x.last.mine ? `${t.you}: ` : ''}${x.last.text.length > 120 ? `${x.last.text.slice(0, 120)}…` : x.last.text}</span>` : ''}
-          </div>
-          <div class="acts"><a class="btn ${x.unread ? 'primary' : 'quiet'}" href="/ui/chat/${encodeURIComponent(x.other.handle)}">${t.open}</a></div>
-        </li>`,
-      )}
-    </ul>
-  </section>`;
-}
 
 function circlePage(userId: string, allCircles: CircleView[], base: string, csrf: string) {
   const t = copy.circle;
@@ -3033,7 +3097,6 @@ function dashboard(
           : ''
       }
     </ul>
-    ${messagesSection(conversations)}
     ${helped.total
       ? html`<div class="helped">
           <span class="heart" aria-hidden="true">${heart(16)}</span>
@@ -3115,7 +3178,7 @@ function dashboard(
             ${waiting.length ? html`<p class="hint">${copy.incomingIntro.note} <strong>${copy.consent.allowAlways}:</strong> ${copy.consent.allowAlwaysNote}</p>` : ''}
             ${drafts.length ? html`<p class="hint">${t.draftsNote}</p>` : ''}`
         : html`<p class="hint">${t.needsNone}</p>`}
-    </section>` : asks.length ? '' : html`<section class="sec"><p class="hint">${t.friendsNone}</p></section>`}
+    </section>` : asks.length || friends ? '' : html`<section class="sec"><p class="hint">${t.friendsNone}</p></section>`}
 
     ${notes.length
       ? html`<section class="sec">

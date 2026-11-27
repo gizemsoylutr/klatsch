@@ -259,11 +259,11 @@ describe('Home: what needs the person first', () => {
     assert.match(await (await t.human(t.alice)).page(), /<h1>Hi, Alice\. <span>Nothing needs you\.<\/span><\/h1>[\s\S]*Nothing waits for you\./);
   });
 
-  it('has Settings as a tab, and Sign out next to the name', async () => {
+  it('Home is a messenger: the other pages and Sign out in its menu; Settings keeps its tab', async () => {
     const t = setup();
     const page = await (await t.human(t.alice)).page();
-    assert.match(page, /<nav class="tabs" aria-label="Main"><a href="\/ui" aria-current="page">Home<\/a><a href="\/ui\/notes">Notes<\/a><a href="\/ui\/circle">Circle<\/a><a href="\/ui\/tokens">Tokens<\/a><a href="\/ui\/settings">Settings<\/a><\/nav>/);
-    assert.match(page, /<div class="me">[\s\S]*<span class="name">Alice<\/span><form method="post" action="\/ui\/logout">[\s\S]*Sign out<\/button><\/form><\/div>/);
+    assert.match(page, /<details class="menu">[\s\S]*<nav aria-label="Main"><a href="\/ui\/notes">Notes<\/a><a href="\/ui\/circle">Circle<\/a><a href="\/ui\/tokens">Tokens<\/a><a href="\/ui\/settings">Settings<\/a>/);
+    assert.match(page, /<form method="post" action="\/ui\/logout">[\s\S]*?Sign out<\/button><\/form>/);
     assert.match(await (await t.human(t.alice)).settings(), /<a href="\/ui\/settings" aria-current="page">Settings<\/a>/);
   });
 });

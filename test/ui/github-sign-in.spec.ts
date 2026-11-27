@@ -32,14 +32,14 @@ test.describe.serial('sign in with GitHub: join by invite, connect and disconnec
     const dana = await person(browser, relay, 'Dana', import.meta.filename);
     people.push(dana);
     expect((await dana.open(inviteLink)).status()).toBe(401);
-    await expect(dana.page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect(dana.page.getByRole('heading', { name: /Knock knock\./ })).toBeVisible();
     await dana.shot('github-sign-in.png');
     github.signIn({ id: 4242, login: 'dana', name: 'Dana Kowalski', emails: [{ email: 'dana@example.org', primary: true, verified: true }] });
     expect((await dana.click(dana.page.getByRole('link', { name: 'Sign in with GitHub' }))).status()).toBe(200);
     await expect(dana.page.getByRole('region')).toContainText('Alice (@alice) invites you to demo.');
     await expect(dana.page.getByRole('textbox', { name: 'Handle' })).toHaveCount(0);
     expect((await dana.click(dana.page.getByRole('button', { name: 'Join' }))).status()).toBe(200);
-    await expect(dana.page.getByRole('heading', { level: 1, name: 'Hi, Dana Kowalski' })).toBeVisible();
+    await expect(dana.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
   });
 
   test('Alice, signed in by login link, clicks "Connect GitHub", continues to GitHub, confirms, and later clicks Disconnect', async ({ browser }) => {
@@ -107,7 +107,7 @@ test.describe.serial('sign in with GitHub: join by invite, connect and disconnec
         await checkLayout(p, 'join-pick-handle', width, colorScheme);
         await p.page.getByRole('textbox', { name: 'Handle' }).fill(`alice-${id}`);
         expect((await p.click(p.page.getByRole('button', { name: 'Join' }))).status()).toBe(200);
-        await expect(p.page.getByRole('heading', { level: 1, name: 'Hi, Another Alice' })).toBeVisible();
+        await expect(p.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
         await p.open(`${relay.base}/ui/settings`);
         await expect(p.page.getByText('Connected to @Alice: you can sign in with GitHub.')).toBeVisible();
         await checkLayout(p, 'settings-github', width, colorScheme);

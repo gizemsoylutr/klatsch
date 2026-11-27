@@ -71,7 +71,7 @@ describe('passkeys', () => {
     const page = await local.request('/ui');
     assert.equal(page.status, 401);
     assert.match(page.text, /data-passkey="signin"/);
-    assert.match(page.text, /<div class="passkey" data-passkey-box hidden>/, 'hidden until the script finds passkeys work');
+    assert.match(page.text, /<span data-passkey-box hidden><button type="button" data-passkey="signin"/, 'hidden until the script finds passkeys work');
     assert.match(page.text, /<script src="\/ui\/passkey\.js" defer><\/script>/);
     assert.doesNotMatch(page.text, /<script>|onclick=/, 'no inline script');
     assert.equal(page.csp, SCRIPT_CSP);

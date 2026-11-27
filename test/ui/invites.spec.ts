@@ -30,7 +30,7 @@ test.describe.serial('invites: Alice invites Carol, Carol joins, Alice removes h
   });
 
   test('Alice opens her circles from the dashboard and clicks "Invite someone"; the link is shown once', async () => {
-    await alice.click(alice.page.getByRole('navigation').getByRole('link', { name: 'Circle' }));
+    await alice.goTo('Circle');
     await expect(alice.page.getByRole('heading', { name: 'demo · 2 people' })).toBeVisible();
     const shown = await alice.click(alice.page.getByRole('button', { name: 'Invite someone' }));
     expect(shown.status()).toBe(200);

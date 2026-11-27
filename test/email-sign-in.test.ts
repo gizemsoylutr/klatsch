@@ -83,9 +83,9 @@ describe('sign in by email', () => {
     const v = visitor(t);
     const page = await v.request('/ui');
     assert.equal(page.status, 401);
-    assert.match(page.html, /<form class="mail" method="post" action="\/ui\/auth\/email">/);
+    assert.match(page.html, /<form class="composer" method="post" action="\/ui\/auth\/email">/);
     assert.match(page.html, /<input type="email" name="email"[^>]*aria-label="Your email address"/);
-    assert.match(page.html, /<button class="primary">Email me a sign-in link<\/button>/);
+    assert.match(page.html, /<button class="primary send" aria-label="Email me a sign-in link">/);
     assert.ok(v.jar.has('klatsch_form'));
   });
 

@@ -10,7 +10,7 @@ test('Alice signs out her other browser from Settings', async ({ browser }) => {
     relay.klatsch.ensureCircle('demo', a);
     const laptop = await person(browser, relay, 'Alice', import.meta.filename, relay.loginLink(a));
     const phone = await person(browser, relay, 'Alice', import.meta.filename, relay.loginLink(a));
-    await laptop.click(laptop.page.getByRole('navigation').getByRole('link', { name: 'Settings' }));
+    await laptop.goTo('Settings');
     await expect(laptop.page.getByText('This browser and 1 other. A sign-in lasts 30 days from its last use, 90 at most.')).toBeVisible();
     await laptop.shot('sessions-settings.png');
     await laptop.click(laptop.page.getByRole('button', { name: 'Sign out everywhere else' }));

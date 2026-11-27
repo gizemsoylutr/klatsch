@@ -25,7 +25,7 @@ test.describe.serial('email: save an address, confirm it from the mailed link', 
   });
 
   test('Alice opens the Settings tab, types her address and clicks "Save address"; it is not confirmed yet', async () => {
-    await alice.click(alice.page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }));
+    await alice.goTo('Settings');
     expect(alice.page.url()).toBe(`${relay.base}/ui/settings`);
     await alice.page.getByRole('textbox', { name: 'Your email address' }).fill(ADDRESS);
     const saved = await alice.click(alice.page.getByRole('button', { name: 'Save address' }));

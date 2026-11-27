@@ -34,7 +34,7 @@ test.describe.serial('sign in with Google: join by invite, connect and disconnec
     expect((await dana.click(dana.page.getByRole('link', { name: 'Sign in with Google' }))).status()).toBe(200);
     await expect(dana.page.getByRole('region')).toContainText('Alice (@alice) invites you to demo.');
     expect((await dana.click(dana.page.getByRole('button', { name: 'Join' }))).status()).toBe(200);
-    await expect(dana.page.getByRole('heading', { level: 1, name: 'Hi, Dana Kowalski' })).toBeVisible();
+    await expect(dana.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
   });
 
   test('Alice clicks "Connect Google", continues, confirms, and later clicks Disconnect', async ({ browser }) => {

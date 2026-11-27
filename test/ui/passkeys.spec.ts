@@ -33,7 +33,7 @@ test.describe.serial('passkeys: add, sign in, remove', () => {
   });
 
   test('Settings shows "Add a passkey"; Alice adds one and sees it listed', async () => {
-    await alice.click(alice.page.getByRole('navigation').getByRole('link', { name: 'Settings' }));
+    await alice.goTo('Settings');
     await expect(alice.page.getByText('Sign in with Face ID, Touch ID or your phone. Klatsch stores only a public key.')).toBeVisible();
     await expect(alice.page.getByText('No passkeys yet.')).toBeVisible();
     const add = alice.page.getByRole('button', { name: 'Add a passkey' });
@@ -45,17 +45,17 @@ test.describe.serial('passkeys: add, sign in, remove', () => {
   });
 
   test('Alice signs out and signs back in with the passkey', async () => {
-    await alice.click(alice.page.locator('.me').getByRole('button', { name: 'Sign out' }));
+    await alice.signOut();
     await alice.open(`${base}/ui`);
     const signIn = alice.page.getByRole('button', { name: 'Sign in with a passkey' });
     await expect(signIn).toBeVisible();
     await alice.shot('passkeys-sign-in.png');
     await Promise.all([alice.page.waitForURL(`${base}/ui`), signIn.click()]);
-    await expect(alice.page.getByRole('heading', { level: 1, name: /^Hi, Alice\. / })).toBeVisible();
+    await expect(alice.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();
   });
 
   test('Alice removes the passkey on Settings', async () => {
-    await alice.click(alice.page.getByRole('navigation').getByRole('link', { name: 'Settings' }));
+    await alice.goTo('Settings');
     await expect(alice.page.getByText(/last used \d{4}-\d{2}-\d{2}/)).toBeVisible();
     await alice.click(alice.page.locator('#passkeys').getByRole('button', { name: 'Remove' }));
     await alice.open(`${base}/ui/settings`);

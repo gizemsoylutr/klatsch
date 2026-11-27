@@ -84,6 +84,12 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
     await chat.close();
   });
 
+  it('a message of several lines, as a form sends it (CRLF), goes as written', async () => {
+    const sent = await aliceBrowser.post('/ui/chat/eve', { text: 'First line\r\nsecond line' });
+    assert.ok(sent.status < 400, sent.html);
+    assert.equal(relay.klatsch.conversation(eve, '@alice').messages.at(-1)!.text, 'First line\nsecond line');
+  });
+
   it('a guest has no microphone button (guests send no files)', async () => {
     const a = relay.klatsch.startGuest();
     const link = relay.klatsch.friendCircle(a);
@@ -92,6 +98,7 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
     const guest = await browser(relay, relay.loginLink(a));
     const page = await guest.get(`/ui/chat/${relay.klatsch.user(b).handle}`);
     assert.equal(page.status, 200);
-    assert.doesNotMatch(page.html, /data-record|record\.js/);
+    // The page's script still runs (Enter sends), but there is no microphone.
+    assert.doesNotMatch(page.html, /data-record[ >]/);
   });
 });
