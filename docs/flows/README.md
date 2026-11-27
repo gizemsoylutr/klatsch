@@ -20,6 +20,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | friends: a link, a question about anything, an answer typed by hand that reaches the agent that asked | 8 | [friends.drawio](friends.drawio) |
 | sign in with GitHub: a new person is made only when they join by invite, connecting GitHub needs a confirmation, and the callback refuses what it should | 21 | [github-sign-in.drawio](github-sign-in.drawio) |
 | sign in with Google: made only by joining, found by id only, verified addresses only | 14 | [google-sign-in.drawio](google-sign-in.drawio) |
+| guest mode is off unless the operator turns it on | 9 | [guest.drawio](guest.drawio) |
 | hosted connect: token from the Tokens page, connect with the CLI, agent calls the relay | 5 | [hosted-connect.drawio](hosted-connect.drawio) |
 | invites and removal: the owner invites Carol, then removes her | 13 | [invites-and-removal.drawio](invites-and-removal.drawio) |
 | a 2025-06-18 client without dialogs or tasks (Codex by default) | 5 | [legacy-client.drawio](legacy-client.drawio) |
@@ -35,7 +36,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | quote hand-off: Alice sends Bob's sip to her own agent | 7 | [quote-handoff.drawio](quote-handoff.drawio) |
 | request intro: find matches first, then ask for an intro to one | 6 | [request-intro.drawio](request-intro.drawio) |
 | return after sign-in: an approval opened signed out is decided after the login link | 3 | [return-after-sign-in.drawio](return-after-sign-in.drawio) |
-| review account: a password for one account, and a demo friend for the whole round trip | 9 | [review.drawio](review.drawio) |
+| review account: a password for one account, and a demo friend for the whole round trip | 10 | [review.drawio](review.drawio) |
 | semantic matching: different tags, the same problem | 7 | [semantic-matching.drawio](semantic-matching.drawio) |
 | sessions: Alice signs in on two browsers and signs out the other one from Settings | 2 | [sessions.drawio](sessions.drawio) |
 | share and intro: Alice asks, Bob accepts, names are exchanged in the browsers only | 8 | [share-and-intro.drawio](share-and-intro.drawio) |
