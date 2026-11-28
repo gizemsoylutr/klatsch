@@ -39,6 +39,7 @@ export const ROOM = {
   announceOnly: 'Only hosts write in an announcements room.',
   slow: (seconds: number) => `Slow mode: one message every ${seconds} seconds here.`,
   newMemberLinks: 'New here: links can be shared after your first day in this circle.',
+  newMemberFiles: 'New here: files can be shared after your first day in this circle.',
   tooMany: 'You wrote 300 messages in rooms today. Try again tomorrow.',
   cannotTimeout: 'That is not possible for this person.',
   rulesTooLong: 'Rules are at most 2000 characters.',

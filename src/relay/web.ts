@@ -2369,9 +2369,20 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     }
   });
   web.post('/c/:id/r/:room', async (c) => {
-    const text = (await c.req.parseBody()).text;
+    const form = await c.req.parseBody({ all: true });
+    const text = typeof form.text === 'string' ? form.text : '';
+    const files = await formFiles(form);
     const back = `/ui/c/${c.req.param('id')}/r/${c.req.param('room')}`;
-    return attempt(c, () => void klatsch.postRoomMessage(c.get('userId'), c.req.param('room'), typeof text === 'string' ? text : ''), back, () => c.redirect(`${back}#end`, 303));
+    return attempt(
+      c,
+      () =>
+        transaction(db, () => {
+          const id = klatsch.postRoomMessage(c.get('userId'), c.req.param('room'), text, files.length ? (form.voice === '1' ? 'voice' : 'file') : undefined);
+          for (const file of files) klatsch.attachToRoomMessage(c.get('userId'), id, file);
+        }),
+      back,
+      () => c.redirect(`${back}#end`, 303),
+    );
   });
   web.post('/c/:id/rules', async (c) => {
     const room = (await c.req.parseBody()).back;
@@ -2845,6 +2856,7 @@ function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[
               ${m.deleted ? '' : roomMenu(m, space, csrf)}
               ${m.mine ? '' : html`<span class="m from">${m.from.name}</span>`}
               <p>${m.deleted ? html`${ic('ban', 15)} ${copy.chat.deleted}` : m.text}</p>
+              ${fileLinks(m.files)}
               <time datetime="${new Date(m.at).toISOString()}">${shortWhen(m.at)}</time>
             </li>`,
           )}</ol>`
@@ -2856,13 +2868,42 @@ function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[
           <p class="t">${t.rulesTitle}</p><p class="rules">${space.rules}</p><button class="primary">${t.accept}</button>
         </form>`
       : canWrite
-        ? html`<form id="end" class="typebar" method="post" action="/ui/c/${space.id}/r/${roomId}">
+        ? html`<p class="recstatus" data-record-status aria-live="polite"></p>
+          <form id="end" class="typebar" method="post" action="/ui/c/${space.id}/r/${roomId}" enctype="multipart/form-data">
             <input type="hidden" name="csrf" value="${csrf}" />
+            ${typebarFiles()}
             <textarea id="text" name="text" maxlength="2000" required rows="1" placeholder="${t.writeIn(room.name)}" aria-label="${t.writeIn(room.name)}"></textarea>
+            ${typebarVoice(`/ui/c/${space.id}/r/${roomId}`, csrf)}
             <button class="primary send" aria-label="${copy.chat.send}">${ic('send', 18)}</button>
           </form>`
         : html`<p class="cannot">${space.timeoutUntil ? ROOM.timedOut(space.timeoutUntil) : ROOM.announceOnly}</p>`}
     <script src="/ui/record.js" defer></script>`;
+}
+
+/** Files under a message: voice notes play where they are, other files open. */
+function fileLinks(files: { id: string; name: string; mime: string }[]) {
+  return files.length
+    ? html`<span class="files">${files.map((f) =>
+        f.mime.startsWith('audio/')
+          ? html`<audio controls preload="metadata" src="/ui/attachments/${f.id}" aria-label="${f.name}"></audio>`
+          : html`<a href="/ui/attachments/${f.id}">${ic('clip', 15)} ${f.name}</a> `,
+      )}</span>`
+    : '';
+}
+
+/** The bar's paperclip: photos, PDFs, voice notes, as files. */
+function typebarFiles() {
+  const t = copy.chat;
+  return html`<label class="attach" title="${t.attach}">${ic('clip')}<input id="file" type="file" name="file" multiple aria-label="${t.attachLabel}" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" /></label>`;
+}
+
+/** The bar's microphone (hold, or tap for hands-free) and the cancel while recording; posts to `action`. */
+function typebarVoice(action: string, csrf: string) {
+  const t = copy.chat;
+  return html`<button type="button" class="mic" data-record data-action="${action}" data-csrf="${csrf}"
+      data-hint="${t.recordHint}" data-recording="${t.recording}" data-locked="${t.recordLocked}" data-sending="${t.recordSending}" data-cancelled="${t.recordCancelled}"
+      data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">${ic('mic')}</button>
+    <button type="button" class="iconbtn reccancel" data-record-cancel hidden aria-label="${t.recordCancel}" title="${t.recordCancel}">${ic('close')}</button>`;
 }
 
 /** A room message's menu: report it (someone else's), delete it (one's own, or any as a host). */

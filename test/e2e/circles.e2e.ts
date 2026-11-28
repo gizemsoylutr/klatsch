@@ -106,6 +106,29 @@ describe('circles: rooms, hosts, rules and reports', () => {
     assert.ok((await carolB.post(`/ui/rm/${relay.klatsch.postRoomMessage(bob, general, 'mine')}/delete`)).status >= 400, 'not hers to delete');
   });
 
+  it('files and voice notes in a room: for the circle members, not on a new member’s first day', async () => {
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 73, 72, 68, 82, 1, 2, 3, 4]);
+    const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, ...Array(60).fill(3)]);
+    assert.equal((await bobB.upload(`/ui/c/${circle}/r/${general}`, [{ name: 'map.png', bytes: PNG, type: 'image/png' }], { text: 'The map' })).status, 303);
+    assert.equal((await bobB.upload(`/ui/c/${circle}/r/${general}`, [{ name: 'voice-note.webm', bytes: WEBM, type: 'audio/webm' }], { text: '', voice: '1' })).status, 303);
+    const messages = relay.klatsch.roomMessages(carol, general);
+    const voice = messages.at(-1)!;
+    assert.equal(voice.text, 'Voice note');
+    assert.equal(voice.files[0]!.mime, 'audio/webm');
+    const page = (await carolB.get(`/ui/c/${circle}/r/${general}`)).html;
+    assert.match(page, new RegExp(`<audio controls preload="metadata" src="/ui/attachments/${voice.files[0]!.id}"`));
+    assert.match(page, /action="\/ui\/c\/[^"]+\/r\/[^"]+" enctype="multipart\/form-data"[\s\S]*?data-record data-action/);
+    const photo = messages.at(-2)!.files[0]!.id;
+    assert.equal((await carolB.fetchRaw(`/ui/attachments/${photo}`)).status, 200);
+    assert.equal((await frankB.fetchRaw(`/ui/attachments/${photo}`)).status, 404, 'not for people outside the circle');
+    // A brand-new member: no files on the first day.
+    const dan = relay.klatsch.ensureUser('dan', 'Dan');
+    relay.klatsch.addMember(circle, dan, gizem);
+    relay.klatsch.acceptRules(dan, circle);
+    const danB = await browser(relay, relay.loginLink(dan));
+    assert.match((await danB.upload(`/ui/c/${circle}/r/${general}`, [{ name: 'map.png', bytes: PNG, type: 'image/png' }], { text: 'Hi' })).html, /files can be shared after your first day/);
+  });
+
   it('nobody outside a circle sees into it; guests start none; friendships stay in Chats', async () => {
     assert.equal((await frankB.get(`/ui/c/${circle}/r/${general}`)).status, 404);
     assert.ok((await frankB.post(`/ui/c/${circle}/r/${general}`, { text: 'Hi' })).status >= 400);

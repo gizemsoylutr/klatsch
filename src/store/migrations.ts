@@ -818,4 +818,20 @@ export const migrations: string[] = [
     UNIQUE (message_id, reporter_id)
   );
   `,
+  // Files and voice notes in rooms: as with messages between friends, sealed, for the circle's members, 14 days.
+  `
+  CREATE TABLE room_files (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES room_messages(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+  CREATE INDEX room_files_by_message ON room_files (message_id);
+  CREATE INDEX room_files_by_user ON room_files (user_id, created_at);
+  `,
 ];

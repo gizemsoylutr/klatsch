@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ATTACH, ASK, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ROOM, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, FILE_ONLY, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ROOM, VOICE_NOTE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -243,6 +243,7 @@ export interface RoomMessageView {
   text: string;
   at: number;
   deleted: boolean;
+  files: { id: string; name: string; mime: string; size: number }[];
 }
 export interface RoomReportView {
   id: string;
@@ -1844,6 +1845,7 @@ export class Klatsch {
   openAttachment(userId: string, id: string): { name: string; mime: string; bytes: Buffer } {
     this.dropExpiredAttachments();
     if (id.startsWith('mf_')) return this.openMessageFile(userId, id);
+    if (id.startsWith('rf_')) return this.openRoomFile(userId, id);
     const row = this.db.prepare('SELECT ask_id, name, mime, data FROM attachments WHERE id = ? AND expires_at > ?').get(id, Date.now()) as
       | { ask_id: string; name: string; mime: string; data: Uint8Array }
       | undefined;
@@ -1871,9 +1873,46 @@ export class Klatsch {
     return { name: row.name, mime: row.mime, bytes };
   }
 
+  /** A file in a room, for the members of its circle; one answer for everything else. */
+  private openRoomFile(userId: string, id: string): { name: string; mime: string; bytes: Buffer } {
+    const row = this.db
+      .prepare('SELECT f.name, f.mime, f.data, m.id AS message_id, r.circle_id FROM room_files f JOIN room_messages m ON m.id = f.message_id JOIN rooms r ON r.id = m.room_id WHERE f.id = ? AND f.expires_at > ? AND m.deleted_at IS NULL')
+      .get(id, Date.now()) as { name: string; mime: string; data: Uint8Array; message_id: string; circle_id: string } | undefined;
+    if (!row || !this.memberRole(userId, row.circle_id)) throw new KlatschError('not-found', ATTACH.gone);
+    const bytes = openBytes(this.db, row.data);
+    if (!bytes) throw new KlatschError('not-found', ATTACH.gone);
+    this.audit(userId, 'web', 'attach.open', row.message_id);
+    return { name: row.name, mime: row.mime, bytes };
+  }
+
+  /**
+   * A file with a room message, by its writer, just after writing it. Its type is read from its bytes; at most
+   * three, and the day's limit counts with every other file. A new member's first day: none.
+   */
+  attachToRoomMessage(userId: string, messageId: string, file: { name: string; bytes: Uint8Array }): void {
+    const row = this.db.prepare('SELECT m.sender_id, m.created_at, r.circle_id FROM room_messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = ? AND m.deleted_at IS NULL').get(messageId) as
+      | { sender_id: string; created_at: number; circle_id: string }
+      | undefined;
+    if (!row || row.sender_id !== userId || row.created_at < Date.now() - 10 * 60 * 1000) throw new KlatschError('forbidden', ATTACH.notNow);
+    const joined = (this.db.prepare('SELECT created_at FROM memberships WHERE circle_id = ? AND user_id = ?').get(row.circle_id, userId) as { created_at: number } | undefined)?.created_at ?? 0;
+    if (!this.isHost(userId, row.circle_id) && Date.now() - joined < NEW_MEMBER_MS) throw new KlatschError('forbidden', ROOM.newMemberFiles);
+    const bytes = Buffer.from(file.bytes);
+    if (bytes.length > ATTACHMENT_MAX_BYTES) throw new KlatschError('invalid', ATTACH.tooBig);
+    const kind = sniff(bytes);
+    if (!kind) throw new KlatschError('invalid', ATTACH.wrongType);
+    const count = this.db.prepare('SELECT count(*) AS n FROM room_files WHERE message_id = ?').get(messageId) as { n: number };
+    if (count.n >= ATTACHMENTS_PER_SIDE) throw new KlatschError('forbidden', ATTACH.tooMany);
+    if (this.bytesToday(userId) + bytes.length > ATTACHMENT_BYTES_PER_DAY) throw new KlatschError('forbidden', ATTACH.dayLimit);
+    this.db
+      .prepare('INSERT INTO room_files (id, message_id, user_id, name, mime, size, data, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(newId('rf'), messageId, userId, sealText(this.db, cleanName(file.name, kind)), kind.mime, bytes.length, sealBytes(this.db, bytes), Date.now(), Date.now() + ATTACHMENT_DAYS * DAY);
+    this.audit(userId, 'web', 'room.attach', messageId);
+  }
+
   private dropExpiredAttachments(): void {
     this.db.prepare('DELETE FROM attachments WHERE expires_at <= ?').run(Date.now());
     this.db.prepare('DELETE FROM message_files WHERE expires_at <= ?').run(Date.now());
+    this.db.prepare('DELETE FROM room_files WHERE expires_at <= ?').run(Date.now());
   }
 
   // ---------- messages between friends ----------
@@ -1969,7 +2008,8 @@ export class Klatsch {
     const since = Date.now() - DAY;
     const a = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM attachments WHERE user_id = ? AND created_at > ?').get(userId, since) as { n: number };
     const b = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM message_files WHERE user_id = ? AND created_at > ?').get(userId, since) as { n: number };
-    return a.n + b.n;
+    const r = this.db.prepare('SELECT coalesce(sum(size), 0) AS n FROM room_files WHERE user_id = ? AND created_at > ?').get(userId, since) as { n: number };
+    return a.n + b.n + r.n;
   }
 
   /**
@@ -2233,6 +2273,9 @@ export class Klatsch {
       text: r.deleted_at ? '' : r.body,
       at: r.created_at,
       deleted: r.deleted_at !== null,
+      files: r.deleted_at
+        ? []
+        : (this.db.prepare('SELECT id, name, mime, size FROM room_files WHERE message_id = ? AND expires_at > ? ORDER BY created_at').all(r.id, Date.now()) as { id: string; name: string; mime: string; size: number }[]),
     }));
   }
 
@@ -2241,10 +2284,11 @@ export class Klatsch {
    * announcements room for anyone but hosts, faster than the room's slow mode, a link in a new member's first day,
    * hidden characters, too long, or too many in a day.
    */
-  postRoomMessage(userId: string, roomId: string, typed: string): string {
+  postRoomMessage(userId: string, roomId: string, typed: string, alone?: 'voice' | 'file'): string {
     const room = this.roomRow(userId, roomId);
     const space = this.space(userId, room.circle_id);
-    const text = typed.replace(/\r\n?/g, '\n').trim();
+    // A voice note or a file alone says what it is.
+    const text = typed.replace(/\r\n?/g, '\n').trim() || (alone === 'voice' ? VOICE_NOTE : alone === 'file' ? FILE_ONLY : '');
     if (!text) throw new KlatschError('invalid', MESSAGE.empty);
     if (text.length > ROOM_MESSAGE_MAX) throw new KlatschError('invalid', MESSAGE.tooLong);
     refuseHidden(text);
@@ -2276,6 +2320,7 @@ export class Klatsch {
     this.spaceRow(userId, row.circle_id);
     if (row.sender_id !== userId && !this.isHost(userId, row.circle_id)) throw new KlatschError('forbidden', ROOM.hostsOnly);
     transaction(this.db, () => {
+      this.db.prepare('DELETE FROM room_files WHERE message_id = ?').run(messageId);
       this.db.prepare('UPDATE room_messages SET body = ?, deleted_at = ?, deleted_by = ? WHERE id = ?').run(sealText(this.db, ''), Date.now(), userId, messageId);
       this.db.prepare('UPDATE room_reports SET resolved_at = ?, resolved_by = ? WHERE message_id = ? AND resolved_at IS NULL').run(Date.now(), userId, messageId);
       this.audit(userId, 'web', row.sender_id === userId ? 'room.delete' : 'room.moderate.delete', messageId);
@@ -2402,6 +2447,7 @@ export class Klatsch {
     if (!this.db.prepare('SELECT 1 FROM room_messages WHERE created_at < ? LIMIT 1').get(old)) return;
     transaction(this.db, () => {
       this.db.prepare('DELETE FROM room_reports WHERE message_id IN (SELECT id FROM room_messages WHERE created_at < ?)').run(old);
+      this.db.prepare('DELETE FROM room_files WHERE message_id IN (SELECT id FROM room_messages WHERE created_at < ?)').run(old);
       this.db.prepare('DELETE FROM room_messages WHERE created_at < ?').run(old);
     });
   }
