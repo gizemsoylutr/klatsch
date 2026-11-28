@@ -110,7 +110,7 @@ test.describe.serial('layout: centered on a wide screen, no sideways scroll on a
         const visitor = await person(browser, relay, 'Visitor', import.meta.filename, undefined, { colorScheme, viewport: { width, height: width === 1280 ? 900 : 844 } });
         people.push(visitor);
         expect((await visitor.open(`${relay.base}/ui`)).status()).toBe(401);
-        await expect(visitor.page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
+        await expect(visitor.page.getByRole('link', { name: 'Continue with GitHub' })).toBeVisible();
         await checkLayout(visitor, 'sign-in', width, colorScheme);
         const p = await person(browser, relay, 'Bob', import.meta.filename, relay.loginLink(bob), { colorScheme, viewport: { width, height: width === 1280 ? 900 : 844 } });
         people.push(p);

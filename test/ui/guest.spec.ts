@@ -15,8 +15,9 @@ test('two friends try Klatsch as guests: a link, one click to join, a message, a
   await a.click(a.page.getByRole('button', { name: 'Start as a guest' }));
   await expect(a.page.getByText(/You are a guest\. This account and everything in it is deleted in/)).toBeVisible();
   await expect(a.page.getByRole('heading', { name: 'Try it with a friend' })).toBeVisible();
+  await expect(a.page.getByRole('region', { name: 'Start here' }).getByRole('button', { name: 'Make a link' })).toBeVisible();
   await a.shot('guest-home.png');
-  await a.click(a.page.getByRole('button', { name: 'Add a friend' }).first());
+  await a.click(a.page.getByRole('button', { name: 'Make a link' }));
   const link = (await a.page.locator('code.cmd').first().textContent())!.trim();
 
   const b = await person(browser, relay, 'Guest B', import.meta.filename, undefined, { member: false });
@@ -31,6 +32,17 @@ test('two friends try Klatsch as guests: a link, one click to join, a message, a
 
   await a.open(`${relay.base}/ui`);
   await expect(a.page.getByRole('complementary', { name: 'Chats' }).getByText('Hi! It works.')).toBeVisible();
+  // Start here: the friend is in; saying hi and an AI are still to do. Then the sample circle, from the Circles tab.
+  const steps = a.page.getByRole('region', { name: 'Start here' });
+  await expect(steps.locator('li.done')).toHaveCount(1);
+  await expect(steps.getByRole('link', { name: 'Open the chat' })).toBeVisible();
+  await a.shot('guest-steps.png');
+  await a.click(a.page.getByRole('link', { name: 'Circles' }));
+  await expect(a.page.getByRole('heading', { level: 1, name: 'Weekend crew' })).toBeVisible();
+  await expect(a.page.getByText('Who is in for the market on Saturday?')).toBeVisible();
+  await a.shot('guest-sample.png');
+  await a.click(a.page.getByRole('link', { name: 'Ask around' }));
+  await expect(a.page.getByText('Brunch on Sunday, where?')).toBeVisible();
 
   // A page that needs an account says so instead of opening.
   const notes = await a.open(`${relay.base}/ui/notes`);

@@ -39,7 +39,8 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
     const dana = await person(browser, relay, 'Dana', import.meta.filename);
     people.push(dana);
     expect((await dana.open(createInvite(relay.db, relay.secret, circle, gizem, relay.base).link)).status()).toBe(401);
-    await expect(dana.page.getByRole('link', { name: 'Sign in with GitHub' })).toBeVisible();
+    await expect(dana.page.getByRole('link', { name: 'Continue with GitHub' })).toBeVisible();
+    await dana.page.getByText('Continue with Email').click();
     await dana.page.getByRole('textbox', { name: 'Your email address' }).fill('dana@example.org');
     await dana.shot('email-sign-in.png');
     const before = relay.mails.length;
@@ -63,6 +64,7 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
     const desk = await person(browser, relay, 'Dana', import.meta.filename);
     people.push(desk);
     expect((await desk.open(`${relay.base}/ui`)).status()).toBe(401);
+    await desk.page.getByText('Continue with Email').click();
     await desk.page.getByRole('textbox', { name: 'Your email address' }).fill('dana@example.org');
     const before = relay.mails.length;
     await desk.click(desk.page.getByRole('button', { name: 'Email me a sign-in link' }));
@@ -79,6 +81,7 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
     const again = await person(browser, relay, 'Dana', import.meta.filename);
     people.push(again);
     expect((await again.open(`${relay.base}/ui`)).status()).toBe(401);
+    await again.page.getByText('Continue with Email').click();
     await again.page.getByRole('textbox', { name: 'Your email address' }).fill('Dana@Example.org');
     const before = relay.mails.length;
     await again.click(again.page.getByRole('button', { name: 'Email me a sign-in link' }));
@@ -113,7 +116,8 @@ test.describe.serial('sign in by email: join by invite with a mailed link, sign 
         people.push(p);
         expect((await p.open(createInvite(relay.db, relay.secret, circle, gizem, relay.base).link)).status()).toBe(401);
         await checkLayout(p, 'email-sign-in-page', width, colorScheme);
-        await p.page.getByRole('textbox', { name: 'Your email address' }).fill(address);
+        await p.page.getByText('Continue with Email').click();
+    await p.page.getByRole('textbox', { name: 'Your email address' }).fill(address);
         const before = relay.mails.length;
         await p.click(p.page.getByRole('button', { name: 'Email me a sign-in link' }));
         await expect(p.page.getByRole('textbox', { name: 'Sign-in code' })).toBeVisible();

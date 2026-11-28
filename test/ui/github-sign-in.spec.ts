@@ -35,7 +35,7 @@ test.describe.serial('sign in with GitHub: join by invite, connect and disconnec
     await expect(dana.page.getByRole('heading', { name: /Knock knock\./ })).toBeVisible();
     await dana.shot('github-sign-in.png');
     github.signIn({ id: 4242, login: 'dana', name: 'Dana Kowalski', emails: [{ email: 'dana@example.org', primary: true, verified: true }] });
-    expect((await dana.click(dana.page.getByRole('link', { name: 'Sign in with GitHub' }))).status()).toBe(200);
+    expect((await dana.click(dana.page.getByRole('link', { name: 'Continue with GitHub' }))).status()).toBe(200);
     await expect(dana.page.getByRole('region')).toContainText('Alice (@alice) invites you to demo.');
     await expect(dana.page.getByRole('textbox', { name: 'Handle' })).toHaveCount(0);
     expect((await dana.click(dana.page.getByRole('button', { name: 'Join' }))).status()).toBe(200);
@@ -98,11 +98,11 @@ test.describe.serial('sign in with GitHub: join by invite, connect and disconnec
         await checkLayout(p, 'sign-in', width, colorScheme);
         // Her GitHub login is a handle someone here already has; without an invite, nobody is made.
         github.signIn({ id, login: 'Alice', name: 'Another Alice', emails: [] });
-        expect((await p.click(p.page.getByRole('link', { name: 'Sign in with GitHub' }))).status()).toBe(200);
+        expect((await p.click(p.page.getByRole('link', { name: 'Continue with GitHub' }))).status()).toBe(200);
         await expect(p.page.getByRole('heading', { name: 'You need an invite' })).toBeVisible();
         await checkLayout(p, 'needs-invite', width, colorScheme);
         expect((await p.open(createInvite(relay.db, relay.secret, circle, alice, relay.base).link)).status()).toBe(401);
-        expect((await p.click(p.page.getByRole('link', { name: 'Sign in with GitHub' }))).status()).toBe(200);
+        expect((await p.click(p.page.getByRole('link', { name: 'Continue with GitHub' }))).status()).toBe(200);
         await expect(p.page.getByText('The handle @alice is taken here, or is not one Klatsch accepts. Pick another.')).toBeVisible();
         await checkLayout(p, 'join-pick-handle', width, colorScheme);
         await p.page.getByRole('textbox', { name: 'Handle' }).fill(`alice-${id}`);

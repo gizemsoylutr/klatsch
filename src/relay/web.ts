@@ -59,7 +59,7 @@ import { PASSKEY_SCRIPT } from './passkey-script.ts';
 import { ICON_SVG, MANIFEST, PUSH_SCRIPT, SERVICE_WORKER } from './push-script.ts';
 import { RECORD_SCRIPT } from './record-script.ts';
 import { vapidFromSecret } from '../notify/push.ts';
-import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer, chip, GITHUB_ICON, GOOGLE_ICON, KEY_ICON, messenger, CUP_MARK, ic, type IconName } from './layout.ts';
+import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer, chip, way, GITHUB_ICON, GOOGLE_ICON, KEY_ICON, messenger, CUP_MARK, ic, type IconName } from './layout.ts';
 
 const COOKIE = 'klatsch_session';
 /** A key to the page a visitor without a session wanted, for the redirect after the login link. */
@@ -1134,17 +1134,21 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
             open ? copy.commons.heading(open.name) : t.knock,
             // A chat: the ways in are quick replies, the email a message to send; the fine print folds away.
             html`${open ? html`<p class="lead">${copy.commons.line(open.people)}</p><p>${copy.commons.signIn}</p>` : ''}
-              <div class="replies" role="group" aria-label="${t.ways}">
-                ${passkey ? html`<span data-passkey-box hidden><button type="button" data-passkey="signin" data-csrf="${token}" aria-label="${copy.passkeys.signIn}">${KEY_ICON()}<span>${t.chipPasskey}</span></button></span>` : ''}
-                ${github(c) ? chip(GITHUB_PATH, t.chipGitHub, t.github, GITHUB_ICON()) : ''}
-                ${google(c) ? chip(GOOGLE_PATH, t.chipGoogle, t.google, GOOGLE_ICON()) : ''}
+              <div class="ways" role="group" aria-label="${t.ways}">
+                ${google(c) ? way(GOOGLE_PATH, t.google, GOOGLE_ICON()) : ''}
+                ${github(c) ? way(GITHUB_PATH, t.github, GITHUB_ICON()) : ''}
+                ${passkey ? html`<span data-passkey-box hidden><button type="button" class="way" data-passkey="signin" data-csrf="${token}">${KEY_ICON()}<span>${t.chipPasskey}</span></button></span>` : ''}
               </div>
               ${klatsch.signInMailer
-                ? html`<form class="composer" method="post" action="${EMAIL_PATH}">
-                    <input type="hidden" name="csrf" value="${token}" />
-                    <input type="email" name="email" maxlength="254" required autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="${t.composer}" aria-label="${t.emailLabel}" />
-                    <button class="primary send" aria-label="${t.email}">${ic('send', 18)}</button>
-                  </form>`
+                ? (() => {
+                    const form = html`<form class="composer" method="post" action="${EMAIL_PATH}">
+                      <input type="hidden" name="csrf" value="${token}" />
+                      <input type="email" name="email" maxlength="254" required autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="${t.composer}" aria-label="${t.emailLabel}" />
+                      <button class="primary send" aria-label="${t.email}">${ic('send', 18)}</button>
+                    </form>`;
+                    // With other ways in, email is the quiet link under them (as on most sign-in pages); alone, it is open.
+                    return github(c) || google(c) || passkey ? html`<details class="mailway"><summary>${t.continueEmail} <span aria-hidden="true">→</span></summary>${form}</details>` : form;
+                  })()
                 : ''}
               ${passkey ? passkeyScript() : ''}
               <div class="more">${config.guest && !target ? html`<a href="/ui/guest">${copy.guest.link}</a>` : ''}<details class="keeps"><summary>${t.keeps}</summary>
@@ -1165,6 +1169,8 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     c.set('csrf', found.csrf);
     c.set('session', session);
     // A guest reaches only the pages it can use; everything else (adding a sign-in, friends, circles, files) says so.
+    // A guest's Circles tab: the sample circle, since circles of one's own need an account.
+    if (klatsch.isGuest(found.userId) && c.req.method === 'GET' && c.req.path === '/ui/circles') return c.redirect('/ui/sample', 303);
     if (klatsch.isGuest(found.userId) && !guestMay(c.req.method, c.req.path)) {
       return c.html(notice(copy.guest.notHere, html`<p class="sub">${copy.guest.notHereLine}</p>${homeLink}`), 403);
     }
@@ -1197,7 +1203,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
         'home',
         html`${guestBanner(guestAt, c.get('csrf'))}
           <div class="ph"><h1>${copy.guest.noFriendTitle}</h1></div>
-          <section class="sec"><p class="hint">${copy.guest.noFriend}</p><p class="hint">${button('/ui/friends/invite', copy.circle.addFriend, c.get('csrf'), 'primary')}</p></section>`,
+          ${guestStart(userId, c.get('csrf'))}`,
       );
     }
     // Signed in, but circles grow by invite only: nothing to show until one is accepted.
@@ -1231,7 +1237,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       user.display_name,
       chatSide(conversations, asks, c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto'),
       // On the first Home after signing in, the script opens the browser's own passkey dialog by itself, once.
-      html`<div class="scroll"><div class="inner dash"><div class="pick"><h1>${copy.chat.pick}</h1><p>${copy.chat.pickLine}</p></div>${guestLeft !== undefined ? guestBanner(guestLeft, c.get('csrf')) : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
+      html`<div class="scroll"><div class="inner dash"><div class="pick"><h1>${copy.chat.pick}</h1><p>${copy.chat.pickLine}</p></div>${guestLeft !== undefined ? html`${guestBanner(guestLeft, c.get('csrf'))}${guestStart(userId, c.get('csrf'))}` : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
         user,
         klatsch.sipsOf(userId),
         klatsch.introsOf(userId),
@@ -2092,7 +2098,8 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p>${homeLink}`), 404);
       throw error;
     }
-    const files = !klatsch.isGuest(c.get('userId'));
+    // Guests record voice notes; files need an account.
+    const files: 'all' | 'voice' = klatsch.isGuest(c.get('userId')) ? 'voice' : 'all';
     // The voice note button runs /ui/record.js, and voice notes play inline: both same-origin.
     c.header('Content-Security-Policy', CHAT_CSP);
     const userId = c.get('userId');
@@ -2325,12 +2332,29 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   /** Home and Settings for a guest: how long it has left, and the way out to a real account. */
   const guestBanner = (expiresAt: number, csrf: string) =>
     html`<section class="offer" aria-label="${copy.guest.end}"><p>${copy.guest.banner(copy.guest.left(expiresAt - Date.now()))}</p><p class="sub">${copy.guest.upgrade}</p>${button('/ui/guest/end', copy.guest.end, csrf, 'primary')}</section>`;
+  /** A guest's first steps on Home: bring a friend, say hi, ask from an AI; each ticks itself off. Then a sample circle. */
+  const guestStart = (userId: string, csrf: string) => {
+    const t = copy.guest;
+    const done = klatsch.guestSteps(userId);
+    const friend = klatsch.conversationsOf(userId)[0]?.other.handle;
+    const step = (n: number, ok: boolean, go: unknown) => {
+      const s = t.steps[n]!;
+      return html`<li class="${ok ? 'done' : ''}"><span class="num" aria-hidden="true">${ok ? ic('check', 14) : n + 1}</span>
+        <div><p class="t">${s.title}${ok ? html` <span class="sr">${t.stepDone}</span>` : ''}</p><p class="m">${s.line}</p></div>${ok ? '' : go}</li>`;
+    };
+    return html`<section class="steps" aria-labelledby="steps-title"><h2 id="steps-title">${t.stepsTitle}</h2><ol>
+        ${step(0, done.friend, button('/ui/friends/invite', t.steps[0]!.go, csrf, 'primary'))}
+        ${step(1, done.message, friend ? html`<a class="button" href="/ui/chat/${encodeURIComponent(friend)}">${t.steps[1]!.go}</a>` : '')}
+        ${step(2, done.ai, html`<a class="button" href="/ui/tokens">${t.steps[2]!.go}</a>`)}
+      </ol><p class="sample"><a href="/ui/sample">${ic('users', 15)} ${t.sampleLink} →</a></p></section>`;
+  };
 
   // ---------- circles as communities: the Circles tab, rooms, hosts, rules, reports ----------
 
   const circlesSide = (c: Context<Env>, current?: string) => {
     const userId = c.get('userId');
-    return chatSide(klatsch.conversationsOf(userId), klatsch.asksOf(userId), c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto', { spaces: klatsch.spacesOf(userId), current });
+    const guest = klatsch.isGuest(userId);
+    return chatSide(klatsch.conversationsOf(userId), klatsch.asksOf(userId), c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto', { spaces: guest ? [] : klatsch.spacesOf(userId), current, guest });
   };
   /** What waits for a circle's hosts: reports and requests to join. */
   const waitingFor = (userId: string, space: CircleSpace): Waiting =>
@@ -2460,6 +2484,39 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.post('/a/:id/solve', (c) => toAnswer(c, (u, id) => klatsch.solveWith(u, id)));
   web.post('/a/:id/helped', (c) => toAnswer(c, (u, id) => klatsch.helpedToo(u, id)));
   web.post('/a/:id/delete', (c) => toAnswer(c, (u, id) => klatsch.deleteAnswer(u, id)));
+
+  // A sample circle to look around in (rooms, Ask around, Picks), read-only, for guests and anyone curious. No data.
+  web.get('/sample', (c) => {
+    const t = copy.guest;
+    const tab = ['general', 'announcements', 'ask'].includes(c.req.query('room') ?? '') ? c.req.query('room')! : 'general';
+    const ago = (min: number) => Date.now() - min * 60_000;
+    const tabs = html`<nav class="roomtabs" aria-label="${copy.circles.rooms}">
+      <a href="/ui/sample?room=ask"${tab === 'ask' ? html` aria-current="page"` : ''}>${ic('reply', 13)} ${copy.askAround.tab}</a>
+      <a href="/ui/sample?room=general"${tab === 'general' ? html` aria-current="page"` : ''}># ${t.sampleRooms.general}</a>
+      <a href="/ui/sample?room=announcements"${tab === 'announcements' ? html` aria-current="page"` : ''}>${ic('pin', 13)} ${t.sampleRooms.announcements}</a>
+    </nav>`;
+    const msgs = (list: [string, string, number][]) =>
+      html`<ol class="thread">${list.map(([from, text, min]) => html`<li class="msg"><span class="m from">${from}</span><p>${withMentions(text, '')}</p><time>${shortWhen(ago(min))}</time></li>`)}</ol>`;
+    const body =
+      tab === 'ask'
+        ? html`<div class="scroll"><div class="inner asklist">
+            <div class="askbar"><nav class="filters" aria-label="${copy.askAround.filter}"><a aria-current="page">${copy.askAround.all}</a><a>${copy.askAround.open}</a><a>${copy.askAround.answered}</a><a>${copy.askAround.picks}</a></nav></div>
+            <ul class="questions">${SAMPLE_QUESTIONS.map(
+              ([q, who, n, solved, picked, min]) =>
+                html`<li><a><span class="qt">${q}</span><span class="m">${who} · ${copy.askAround.answers(n)}${solved ? html` · <b class="solvedtag">${copy.askAround.solvedTag}</b>` : ''}${picked ? html` · ${ic('star', 12)} ${copy.askAround.picked}` : ''} · ${shortWhen(ago(min))}</span></a></li>`,
+            )}</ul></div></div>`
+        : html`<div class="stream">${tab === 'general' ? msgs(SAMPLE_GENERAL) : msgs(SAMPLE_ANNOUNCEMENTS)}</div>`;
+    return c.html(
+      messenger(
+        t.sampleTitle,
+        circlesSide(c),
+        html`<header class="chathead"><a class="iconbtn back" href="/ui" aria-label="${copy.circles.back}">${ic('back')}</a>${avatar(t.sampleTitle)}
+            <div class="who"><h1>${t.sampleTitle}</h1><span>${t.sampleSub}</span></div></header>
+          ${tabs}<p class="samplenote">${t.sampleNote}</p>${body}`,
+        true,
+      ),
+    );
+  });
 
   // Explore: circles their owners listed; asking to join; the owner's listing; hosts deciding; Picks.
   web.get('/explore', (c) => {
@@ -2635,6 +2692,25 @@ function notice(title: string, body: unknown, muted = true) {
 
 const homeLink = html`<p><a href="/ui">${copy.layout.home}</a></p>`;
 
+/** The sample circle's words: made up, the same for everyone. [who, what, minutes ago] */
+const SAMPLE_GENERAL: [string, string, number][] = [
+  ['Seda', 'Morning! Who is in for the market on Saturday?', 180],
+  ['Bob', 'Me. 10 at the fountain?', 172],
+  ['Carol', '@seda count me in, I bring the big bag.', 160],
+  ['Dan', 'Can’t make it, have fun! Save me a croissant.', 95],
+  ['Seda', 'Deal. Pictures in #general after.', 90],
+];
+const SAMPLE_ANNOUNCEMENTS: [string, string, number][] = [
+  ['Seda', 'Welcome to Weekend crew! Plans go in #general, questions in Ask around.', 4000],
+  ['Seda', 'Saturday: market at 10, lunch at Café Lotte at 12:30.', 200],
+];
+/** [question, asked by, answers, solved, picked, minutes ago] */
+const SAMPLE_QUESTIONS: [string, string, number, boolean, boolean, number][] = [
+  ['Brunch on Sunday, where?', 'Bob', 3, true, true, 300],
+  ['Who has a ladder I can borrow?', 'Carol', 1, false, false, 120],
+  ['Good bike shop near the park?', 'Dan', 2, true, false, 2900],
+];
+
 /** What waits for a circle's hosts, shown in its head. */
 type Waiting = { reports: number; requests: number };
 
@@ -2656,7 +2732,7 @@ function howForm(action: string, label: string, how: string, placeholder: string
  * email, passkeys, GitHub or Google, circles, files, intros, notes, deleting by handle.
  */
 const GUEST_PAGES: Record<string, RegExp[]> = {
-  GET: [/^\/ui\/?$/, /^\/ui\/chat\/[^/]+$/, /^\/ui\/settings$/, /^\/ui\/tokens$/, /^\/ui\/connect$/, /^\/ui\/device$/, /^\/ui\/approvals\/[^/]+$/, /^\/ui\/oauth\/authorize$/, /^\/ui\/circle$/, /^\/ui\/invite\/[^/]+$/, /^\/ui\/starred$/],
+  GET: [/^\/ui\/?$/, /^\/ui\/chat\/[^/]+$/, /^\/ui\/settings$/, /^\/ui\/tokens$/, /^\/ui\/connect$/, /^\/ui\/device$/, /^\/ui\/approvals\/[^/]+$/, /^\/ui\/oauth\/authorize$/, /^\/ui\/circle$/, /^\/ui\/invite\/[^/]+$/, /^\/ui\/starred$/, /^\/ui\/attachments\/[^/]+$/, /^\/ui\/sample(\/.*)?$/],
   POST: [
     /^\/ui\/chat\/[^/]+(\/agent)?$/,
     /^\/ui\/friends\/(invite|[^/]+\/end)$/,
@@ -2845,7 +2921,7 @@ function shortWhen(at: number): string {
  * The left side of the messenger: the sign, "add a friend", a menu for the other pages, and the chats, newest
  * first. A friend's waiting question shows as the chat's last line.
  */
-function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string, theme = 'auto', circles?: { spaces: (CircleSpace & { unread: number })[]; current?: string }) {
+function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string, theme = 'auto', circles?: { spaces: (CircleSpace & { unread: number })[]; current?: string; guest?: boolean }) {
   const t = copy.chat;
   const nav = copy.layout.nav;
   const asking = new Map(asks.filter((k) => k.role === 'helper' && k.state === 'open').map((k) => [k.other.handle, k.question]));
@@ -2864,7 +2940,11 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
       <a href="/ui"${circles ? '' : html` aria-current="page"`}>${t.chats}${(() => { const n = conversations.reduce((a, x) => a + x.unread, 0); return n ? html` <span class="badge">${n}</span>` : ''; })()}</a>
       <a href="/ui/circles"${circles ? html` aria-current="page"` : ''}>${copy.circles.tab}</a>
     </nav>
-    ${circles
+    ${circles?.guest
+      ? html`<ul class="chats"><li><a class="row" href="/ui/sample" aria-current="page">${avatar(copy.guest.sampleTitle)}
+          <span class="who"><span class="l1"><span class="name">${copy.guest.sampleTitle}</span></span><span class="l2"><span class="last">${copy.guest.sampleSub}</span></span></span></a></li></ul>
+          <p class="sidenote">${copy.guest.sampleNote}</p>`
+      : circles
       ? html`<a class="peoplelink" href="/ui/explore">${ic('search', 16)} ${copy.explore.title}</a><a class="peoplelink" href="/ui/circle">${ic('plus', 16)} ${copy.circle.title}</a>${circleList(circles.spaces, csrf, circles.current)}`
       : conversations.length
       ? html`<ul class="chats">${conversations.map((x) => {
@@ -3183,7 +3263,7 @@ function reportsPane(space: CircleSpace, reports: RoomReportView[], csrf: string
 }
 
 /** The open conversation on the right: who, the messages (the newest at the bottom), and the bar to write in. */
-function chatPane(view: ConversationView, csrf: string, files = true, asks: AskView[] = []) {
+function chatPane(view: ConversationView, csrf: string, files: 'all' | 'voice' | 'none' = 'all', asks: AskView[] = []) {
   const t = copy.chat;
   // The friend's waiting question, if any: the bar below answers it until it is answered or declined.
   const answering = asks.find((k) => k.role === 'helper' && k.state === 'open');
@@ -3220,23 +3300,23 @@ function chatPane(view: ConversationView, csrf: string, files = true, asks: AskV
     ${view.messages.some((m) => !m.mine)
       ? html`<details class="chatmore"><summary>${t.draftMore}</summary>${howForm(`/ui/chat/${handle}/agent`, t.toAgent, t.how, t.howPlaceholder, csrf)}<p>${t.toAgentNote}</p></details>`
       : ''}
-    ${files && !answering ? html`<p class="recstatus" data-record-status aria-live="polite"></p>` : ''}
+    ${files !== 'none' && !answering ? html`<p class="recstatus" data-record-status aria-live="polite"></p>` : ''}
     ${answering ? html`<div class="replyto"><span>${ic('reply', 15)} ${t.answering(view.other.name)}</span><q>${answering.question}</q><small>${copy.asks.answerGoes(view.other.handle)}</small></div>` : ''}
     <form id="end" class="typebar" method="post" action="${answering ? `/ui/asks/${answering.id}/answer` : `/ui/chat/${handle}`}" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="${csrf}" />
       ${answering ? html`<input type="hidden" name="back" value="/ui/chat/${handle}" />` : ''}
-      ${files
+      ${files === 'all'
         ? html`<label class="attach" title="${t.attach}">${ic('clip')}<input id="file" type="file" name="file" multiple aria-label="${t.attachLabel}" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" /></label>`
         : ''}
       ${answering
         ? html`<textarea id="text" name="answer" maxlength="500" required rows="1" placeholder="${copy.asks.yourAnswer}" aria-label="${copy.asks.yourAnswer}"></textarea>`
         : html`<textarea id="text" name="text" maxlength="2000" required rows="1" placeholder="${t.typeHere}" aria-label="${t.write}"></textarea>`}
-      ${files && !answering
+      ${files !== 'none' && !answering
         ? html`<button type="button" class="mic" data-record data-action="/ui/chat/${handle}" data-csrf="${csrf}"
             data-hint="${t.recordHint}" data-recording="${t.recording}" data-locked="${t.recordLocked}" data-sending="${t.recordSending}" data-cancelled="${t.recordCancelled}"
             data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">${ic('mic')}</button>`
         : ''}
-      ${files && !answering ? html`<button type="button" class="iconbtn reccancel" data-record-cancel hidden aria-label="${t.recordCancel}" title="${t.recordCancel}">${ic('close')}</button>` : ''}
+      ${files !== 'none' && !answering ? html`<button type="button" class="iconbtn reccancel" data-record-cancel hidden aria-label="${t.recordCancel}" title="${t.recordCancel}">${ic('close')}</button>` : ''}
       <button class="primary send" aria-label="${answering ? copy.asks.sendAnswer : t.send}">${ic('send', 18)}</button>
     </form><script src="/ui/record.js" defer></script>`;
 }

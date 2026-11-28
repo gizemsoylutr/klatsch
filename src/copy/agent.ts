@@ -115,6 +115,7 @@ export const GUEST = {
   linkFromGuest: 'This link is from a guest. Open it signed out, in a private window, to join as a guest.',
   links: 'A guest makes at most 3 friend links.',
   noFiles: 'Files need an account. Sign in to send photos, PDFs or voice notes.',
+  voiceOnly: 'As a guest you can send voice notes. Photos and documents need an account.',
   noAccount: 'Guests cannot add a sign-in. Sign in with an account instead; the guest goes after its hours.',
   messages: 'A guest sends at most 30 messages. Sign in to keep going.',
   asks: 'A guest asks at most 5 questions. Sign in to keep going.',

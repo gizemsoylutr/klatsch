@@ -31,7 +31,7 @@ test.describe.serial('sign in with Google: join by invite, connect and disconnec
     expect((await dana.open(createInvite(relay.db, relay.secret, circle, alice, relay.base).link)).status()).toBe(401);
     await dana.shot('google-sign-in.png');
     google.signIn({ sub: '42', email: 'dana@example.org', email_verified: true, name: 'Dana Kowalski' });
-    expect((await dana.click(dana.page.getByRole('link', { name: 'Sign in with Google' }))).status()).toBe(200);
+    expect((await dana.click(dana.page.getByRole('link', { name: 'Continue with Google' }))).status()).toBe(200);
     await expect(dana.page.getByRole('region')).toContainText('Alice (@alice) invites you to demo.');
     expect((await dana.click(dana.page.getByRole('button', { name: 'Join' }))).status()).toBe(200);
     await expect(dana.page.getByRole('complementary', { name: 'Chats' })).toBeVisible();

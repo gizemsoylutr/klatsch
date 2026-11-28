@@ -131,7 +131,7 @@ describe('with a GitHub OAuth App', () => {
   it('offers GitHub only on the public origin: in local mode not on localhost, where GitHub would not send anyone back', async () => {
     const t = setup({ config: { github: github.app(BASE) } });
     const signIn = await (await t.app.request(`${BASE}/ui`)).text();
-    assert.match(signIn, /Sign in with GitHub/);
+    assert.match(signIn, /Continue with GitHub/);
     assert.match(signIn, /Ask for a new login link in the terminal where Klatsch runs/, 'a local relay keeps the terminal hint');
     const local = 'http://localhost:7417';
     assert.doesNotMatch(await (await t.app.request(`${local}/ui`)).text(), /GitHub/);

@@ -1,6 +1,6 @@
 // Guest mode ("Try it without an account"): one click gives a guest for a few hours. It invites a friend by link,
 // who joins as a guest with one click, and the two write to each other. Guests and accounts never meet (no links
-// either way, no other memberships), a guest adds no sign-in and sends no files, and it goes with everything in it
+// either way, no other memberships), a guest adds no sign-in and sends voice notes but no other files, and it goes with everything in it
 // when its hours are up. A chat app (ChatGPT, Claude) can connect as a guest, and its token goes with it.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
@@ -88,9 +88,11 @@ describe('guest mode: a few hours with a friend who is a guest too, and nobody e
     const before = (relay.db.prepare('SELECT count(*) AS n FROM users WHERE guest_expires_at IS NOT NULL').get() as { n: number }).n;
     assert.equal((await late.post('/ui/guest', { invite: inviteToken(link) })).status, 410);
     assert.equal((relay.db.prepare('SELECT count(*) AS n FROM users WHERE guest_expires_at IS NOT NULL').get() as { n: number }).n, before);
-    // No file fields anywhere a guest writes, and Settings is only the way out.
+    // No file fields anywhere a guest writes (a microphone for voice notes, yes), and Settings is only the way out.
     assert.doesNotMatch((await first.go('/ui')).html, /type="file"/);
-    assert.doesNotMatch((await first.go(`/ui/chat/${relay.klatsch.user(b).handle}`)).html, /type="file"/);
+    const chatPage = (await first.go(`/ui/chat/${relay.klatsch.user(b).handle}`)).html;
+    assert.doesNotMatch(chatPage, /type="file"/);
+    assert.match(chatPage, /class="mic" data-record/);
     const settings = await first.go('/ui/settings');
     assert.match(settings.html, /End guest session/);
     assert.doesNotMatch(settings.html, /action="\/ui\/(email|auth\/github\/connect|auth\/google\/connect|settings\/delete)"/);
@@ -130,15 +132,54 @@ describe('guest mode: a few hours with a friend who is a guest too, and nobody e
     assert.equal((await aliceAgent.call('ask_person', { handle: aHandle, question: 'Hello?' })).isError, true);
     assert.equal((await aliceAgent.call('send_message', { handle: aHandle, text: 'Hello?' })).isError, true);
     await aliceAgent.close();
-    // No files, with a message.
+    // Voice notes only, with a message: no photos, no documents.
     const messageId = relay.klatsch.sendMessage(b, aHandle, 'Hi!');
-    assert.throws(() => relay.klatsch.attachToMessage(b, messageId, { name: 'a.png', bytes: new Uint8Array(8) }), /Files need an account/);
+    const png = new Uint8Array([0x89, ...[...'PNG'].map((ch) => ch.charCodeAt(0)), ...Array(20).fill(1)]);
+    assert.throws(() => relay.klatsch.attachToMessage(b, messageId, { name: 'a.png', bytes: png }), /Photos and documents need an account/);
     // At most 3 friend links (a made 2 so far).
     relay.klatsch.friendCircle(a);
     assert.throws(() => relay.klatsch.friendCircle(a), /at most 3 friend links/);
     // Nobody else can pick a guest-looking handle.
     assert.equal(reservedHandle('guest-abc123'), true);
     assert.equal(reservedHandle('guesthouse'), false);
+  });
+
+  it('Start here ticks itself off; the sample circle is the Circles tab of a guest, read-only', async () => {
+    const { a, b, bHandle } = guestPair(relay);
+    const aBrowser = await browser(relay, relay.loginLink(a));
+    assert.deepEqual(relay.klatsch.guestSteps(a), { friend: true, message: false, ai: false });
+    assert.match((await aBrowser.get('/ui')).html, /Start here[\s\S]*class="done"[\s\S]*Open the chat[\s\S]*href="\/ui\/tokens">Connect/);
+    relay.klatsch.sendMessage(a, bHandle, 'Hi!');
+    relay.agentToken(a);
+    assert.deepEqual(relay.klatsch.guestSteps(a), { friend: true, message: true, ai: true });
+    assert.equal((await aBrowser.get('/ui/circles')).status, 303);
+    const sample = (await aBrowser.get('/ui/sample')).html;
+    assert.match(sample, /Weekend crew[\s\S]*Sample circle[\s\S]*Who is in for the market on Saturday\?/);
+    assert.doesNotMatch(sample, /<form[^>]*action="\/ui\/(c|sample)/, 'nothing to post');
+    assert.match((await aBrowser.get('/ui/sample?room=ask')).html, /Brunch on Sunday, where\?[\s\S]*solved/);
+    assert.match((await aBrowser.get('/ui/sample?room=announcements')).html, /Welcome to Weekend crew!/);
+    void b;
+  });
+
+  it('guests send each other voice notes; a few MB a day; they go with the guest', async () => {
+    const { a, b, bHandle } = guestPair(relay);
+    const WEBM = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, ...Array(60).fill(3)]);
+    const aBrowser = await browser(relay, relay.loginLink(a));
+    const bHandleBare = bHandle.slice(1);
+    const sent = await aBrowser.upload(`/ui/chat/${bHandleBare}`, [{ name: 'voice-note.webm', bytes: WEBM, type: 'audio/webm' }], { text: '', voice: '1' });
+    assert.equal(sent.status, 303);
+    const note = relay.klatsch.conversation(b, `@${relay.klatsch.user(a).handle}`).messages.at(-1)!;
+    assert.equal(note.text, 'Voice note');
+    const bBrowser = await browser(relay, relay.loginLink(b));
+    const played = await bBrowser.get(`/ui/attachments/${note.files[0]!.id}`);
+    assert.equal(played.status, 200, 'the other guest plays it');
+    // A day's voice notes stop at 5 MB.
+    const big = new Uint8Array(5 * 1024 * 1024);
+    big.set([0x1a, 0x45, 0xdf, 0xa3]);
+    const id = relay.klatsch.sendMessage(a, bHandle, 'long one');
+    assert.throws(() => relay.klatsch.attachToMessage(a, id, { name: 'long.webm', bytes: big }), /./);
+    relay.klatsch.endGuest(a, 'web');
+    assert.equal((relay.db.prepare('SELECT count(*) AS n FROM message_files WHERE user_id = ?').get(a) as { n: number }).n, 0, 'gone with the guest');
   });
 
   it('a guest sends at most 30 messages and asks at most 5 questions; its cards offer no file picker', async () => {

@@ -245,14 +245,18 @@ main.center { flex-grow: 1; display: grid; place-items: center; padding: 48px 16
 /* One block in the middle of the screen, on a phone as on a wide screen: the sign, the words, the ways in. */
 main.signin { flex-grow: 1; display: flex; justify-content: center; align-items: center; width: 100%; padding: 32px 24px calc(32px + env(safe-area-inset-bottom)); }
 .chat { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 20px; }
-.chat .lockup { align-self: flex-start; margin-bottom: 28px; }
+.chat .lockup { align-self: center; margin-bottom: 28px; }
+/* Centred, like the ways in under it: one axis for the sign, the words, the buttons and the links. */
+.chat .words h1 { text-align: center; }
+.chat .more details.keeps summary { margin: 0 auto; }
 /* A small, quiet entrance: the words knock once, the rest rises in. None for people who asked for less motion. */
 @keyframes knock { 0%, 100% { transform: none; } 20% { transform: translateX(-3px) rotate(-0.6deg); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .chat .words .first { display: inline-block; animation: knock 520ms ease-in-out 200ms 1 both; }
-.chat .words .sub, .chat .replies, .chat form.composer, .chat .more, .chat > p, .chat > ul, .chat > form { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.chat .words .sub, .chat .ways, .chat .mailway, .chat form.composer, .chat .more, .chat > p, .chat > ul, .chat > form { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .chat .words .sub { animation-delay: 650ms; }
-.chat .replies { animation-delay: 800ms; }
+.chat .ways { animation-delay: 800ms; }
+.chat .mailway { animation-delay: 900ms; }
 .chat > p, .chat > ul { animation-delay: 650ms; }
 .chat form.composer, .chat > form { animation-delay: 900ms; }
 .chat .more { animation-delay: 1000ms; }
@@ -268,11 +272,26 @@ main.signin { flex-grow: 1; display: flex; justify-content: center; align-items:
 .chat > ul { padding-left: 18px; display: grid; gap: 4px; }
 /* The ways in share one row, in equal parts, on any phone: never a second row. */
 .replies { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }
+/* The ways in, one under the other at full width, each with its mark: the way most sign-in pages look. */
+.ways { display: grid; gap: 10px; }
+.ways:empty { display: none; }
+.ways > [hidden] { display: none; }
+.ways > span { display: grid; }
+a.way, button.way { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 48px; min-height: 48px; padding: 0 16px; border-radius: 12px;
+  background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line) inset; font: 500 15px/1 var(--sans); text-decoration: none; border: 0; cursor: pointer; transition: background 120ms; }
+a.way:hover, button.way:hover { text-decoration: none; background: var(--sunk); }
+a.way svg, button.way svg { width: 18px; height: 18px; flex-shrink: 0; }
+details.mailway { text-align: center; }
+details.mailway summary { cursor: pointer; list-style: none; color: var(--accent); font-size: 15px; font-weight: 500; width: fit-content; margin: 0 auto; padding: 6px 0; }
+details.mailway summary::-webkit-details-marker { display: none; }
+details.mailway[open] summary { display: none; }
+details.mailway form.composer { text-align: left; }
 .replies > [hidden] { display: none; }
 .replies > span { display: grid; }
 .replies:empty { display: none; }
 .chat .more { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; font-size: 13px; }
 .chat .more a { color: var(--fg); }
+.chat .more { flex-direction: column; align-items: center; text-align: center; }
 a.chip, .replies button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; min-height: 40px; min-width: 0; padding: 0 10px; white-space: nowrap; border-radius: 999px;
   background: transparent; color: var(--fg); box-shadow: 0 0 0 1px var(--line) inset; font: 500 14px/1 var(--sans); text-decoration: none; border: 0; }
 a.chip:hover, .replies button:hover { text-decoration: none; background: var(--sunk); }
@@ -361,6 +380,22 @@ form.newcircle input:focus-visible { outline: none; }
 .settingsform .stack button { justify-self: start; }
 .settingsform h2 { font-size: 13px; font-weight: 600; color: var(--muted); }
 .settingsform .acts form { display: inline-flex; gap: 4px; align-items: center; }
+/* A guest's first steps on Home, and the sample circle's note. */
+section.steps { display: grid; gap: 12px; margin: 8px 0 20px; }
+section.steps h2 { font: 600 13px/1 var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+section.steps ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+section.steps li { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-radius: 14px; background: var(--sunk); }
+section.steps li > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+section.steps li .t { font-weight: 600; }
+section.steps li .num { width: 26px; height: 26px; flex-shrink: 0; border-radius: 999px; display: grid; place-items: center; font: 600 13px/1 var(--sans); background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line) inset; }
+section.steps li.done { opacity: 0.6; }
+section.steps li.done .num { background: var(--good); color: #FFFFFF; box-shadow: none; }
+section.steps li.done .t { text-decoration: line-through; }
+section.steps li form, section.steps li .button { flex-shrink: 0; }
+section.steps .sample a { color: var(--fg); display: inline-flex; gap: 6px; align-items: center; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+p.sidenote { margin: 12px 20px; font-size: 13px; color: var(--muted); }
+p.samplenote { margin: 0; padding: 8px 20px; font-size: 13px; color: var(--muted); background: var(--sunk); text-align: center; }
 /* Ask around: the question box, filters and search, the list; a question with its answers. */
 .asklist, .question { display: grid; gap: 18px; }
 form.askform { display: grid; gap: 8px; }
@@ -634,6 +669,8 @@ export const ICON_PATHS = {
   more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
   down: '<path d="m6 9 6 6 6-6"/>',
   reply: '<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
 } as const;
@@ -774,6 +811,8 @@ export function legalPage(page: 'privacy' | 'terms' | 'support', operator: Opera
 
 /** "Sign in with Google", beside GitHub's on the sign-in page. */
 /** A quick-reply chip on the sign-in page: a short label, the full one for screen readers. */
+/** A way in on the sign-in page: one full-width button with the provider's mark, "Continue with …". */
+export const way = (href: string, label: string, mark: unknown) => html`<a class="way" href="${href}">${mark}<span>${label}</span></a>`;
 export const chip = (href: string, label: string, full: string, mark: unknown = '') => html`<a class="chip" href="${href}" aria-label="${full}">${mark}<span>${label}</span></a>`;
 export const GITHUB_ICON = () => GITHUB_MARK;
 /** A key in one colour, like the GitHub mark beside it (an emoji key would be the only coloured drawing in the row). */

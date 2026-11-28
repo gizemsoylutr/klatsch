@@ -91,7 +91,7 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
     assert.equal(relay.klatsch.conversation(eve, '@alice').messages.at(-1)!.text, 'First line\nsecond line');
   });
 
-  it('a guest has no microphone button (guests send no files)', async () => {
+  it('a guest has the microphone but no file picker (guests send voice notes only)', async () => {
     const a = relay.klatsch.startGuest();
     const link = relay.klatsch.friendCircle(a);
     const b = relay.klatsch.startGuest();
@@ -99,7 +99,7 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
     const guest = await browser(relay, relay.loginLink(a));
     const page = await guest.get(`/ui/chat/${relay.klatsch.user(b).handle}`);
     assert.equal(page.status, 200);
-    // The page's script still runs (Enter sends), but there is no microphone.
-    assert.doesNotMatch(page.html, /data-record[ >]/);
+    assert.match(page.html, /class="mic" data-record/);
+    assert.doesNotMatch(page.html, /type="file"/);
   });
 });

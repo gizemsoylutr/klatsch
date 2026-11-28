@@ -47,7 +47,7 @@ test.describe.serial('passkeys: add, sign in, remove', () => {
   test('Alice signs out and signs back in with the passkey', async () => {
     await alice.signOut();
     await alice.open(`${base}/ui`);
-    const signIn = alice.page.getByRole('button', { name: 'Sign in with a passkey' });
+    const signIn = alice.page.getByRole('button', { name: 'Continue with a passkey' });
     await expect(signIn).toBeVisible();
     await alice.shot('passkeys-sign-in.png');
     await Promise.all([alice.page.waitForURL(`${base}/ui`), signIn.click()]);
@@ -136,7 +136,7 @@ test('the passkey button stays hidden where passkeys do not work (127.0.0.1)', a
   try {
     const visitor = await person(browser, relay, 'Visitor', import.meta.filename);
     await visitor.open(`${relay.base}/ui`);
-    await expect(visitor.page.getByRole('button', { name: 'Sign in with a passkey' })).toHaveCount(0);
+    await expect(visitor.page.getByRole('button', { name: 'Continue with a passkey' })).toHaveCount(0);
     await visitor.expectCleanBrowser();
     await visitor.context.close();
   } finally {

@@ -24,7 +24,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | friends: a link, a question about anything, an answer typed by hand that reaches the agent that asked | 8 | [friends.drawio](friends.drawio) |
 | sign in with GitHub: a new person is made only when they join by invite, connecting GitHub needs a confirmation, and the callback refuses what it should | 21 | [github-sign-in.drawio](github-sign-in.drawio) |
 | sign in with Google: made only by joining, found by id only, verified addresses only | 14 | [google-sign-in.drawio](google-sign-in.drawio) |
-| guest mode is off unless the operator turns it on | 9 | [guest.drawio](guest.drawio) |
+| guest mode is off unless the operator turns it on | 11 | [guest.drawio](guest.drawio) |
 | hosted connect: token from the Tokens page, connect with the CLI, agent calls the relay | 5 | [hosted-connect.drawio](hosted-connect.drawio) |
 | invites and removal: the owner invites Carol, then removes her | 13 | [invites-and-removal.drawio](invites-and-removal.drawio) |
 | a 2025-06-18 client without dialogs or tasks (Codex by default) | 5 | [legacy-client.drawio](legacy-client.drawio) |

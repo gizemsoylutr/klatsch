@@ -473,6 +473,8 @@ export const GUEST_HOURS = 5;
 const GUEST_LIVE_MAX = 300;
 const GUEST_MESSAGES = 30;
 const GUEST_ASKS = 5;
+/** A guest's voice notes, together, in a day. */
+const GUEST_VOICE_BYTES_PER_DAY = 5 * 1024 * 1024;
 /** Friend links a guest may make in all: enough to try it with a friend or two. */
 const GUEST_LINKS = 3;
 /**
@@ -1781,6 +1783,15 @@ export class Klatsch {
     });
   }
 
+  /** A guest's first steps, done or not: a friend, a first message, an AI connected. */
+  guestSteps(userId: string): { friend: boolean; message: boolean; ai: boolean } {
+    return {
+      friend: this.inAnyCircle(userId),
+      message: Boolean(this.db.prepare('SELECT 1 FROM messages WHERE sender_id = ? LIMIT 1').get(userId)),
+      ai: Boolean(this.db.prepare('SELECT 1 FROM tokens WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1').get(userId, Date.now())),
+    };
+  }
+
   /** Ends every guest whose hours are up. Cheap (an index); the relay calls it on every signed-in request and tool call. */
   sweepGuests(now = Date.now()): void {
     const due = this.db.prepare('SELECT id FROM users WHERE guest_expires_at IS NOT NULL AND guest_expires_at <= ?').all(now) as { id: string }[];
@@ -2032,7 +2043,9 @@ export class Klatsch {
 
   /** A file with a message, by its sender, within ten minutes of sending it. Its type is read from its bytes. */
   attachToMessage(userId: string, messageId: string, file: { name: string; bytes: Uint8Array }, via: Via = 'web'): { id: string; name: string; mime: string; size: number } {
-    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.noFiles);
+    // Guests send voice notes only (no photos or documents), a few MB a day; they go with the guest.
+    const guest = this.isGuest(userId);
+    if (guest && sniff(file.bytes)?.kind !== 'audio') throw new KlatschError('forbidden', GUEST.voiceOnly);
     this.dropExpiredAttachments();
     const row = this.db.prepare('SELECT sender_id, recipient_id, circle_id, created_at FROM messages WHERE id = ?').get(messageId) as
       | { sender_id: string; recipient_id: string; circle_id: string; created_at: number }
@@ -2046,7 +2059,7 @@ export class Klatsch {
     if (!kind) throw new KlatschError('invalid', ATTACH.wrongType);
     const count = this.db.prepare('SELECT count(*) AS n FROM message_files WHERE message_id = ?').get(messageId) as { n: number };
     if (count.n >= ATTACHMENTS_PER_SIDE) throw new KlatschError('forbidden', ATTACH.tooMany);
-    if (this.bytesToday(userId) + bytes.length > ATTACHMENT_BYTES_PER_DAY) throw new KlatschError('forbidden', ATTACH.dayLimit);
+    if (this.bytesToday(userId) + bytes.length > (guest ? GUEST_VOICE_BYTES_PER_DAY : ATTACHMENT_BYTES_PER_DAY)) throw new KlatschError('forbidden', ATTACH.dayLimit);
     const id = newId('mf');
     const name = cleanName(file.name, kind);
     this.db

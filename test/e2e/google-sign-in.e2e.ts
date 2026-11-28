@@ -39,7 +39,7 @@ describe('sign in with Google: made only by joining, found by id only, verified 
   it('the sign-in page offers Google, and the landing page does not say GitHub only', async () => {
     const page = await signedOutBrowser(relay).go('/ui/settings', { headers: { 'Sec-Fetch-Site': 'none' } });
     assert.equal(page.status, 401);
-    assert.match(page.html, /href="\/ui\/auth\/google"[^]*Sign in with Google/);
+    assert.match(page.html, /href="\/ui\/auth\/google"[^]*Continue with Google/);
     assert.match(page.html, /no access to your mail or files/);
     const landing = await (await fetch(new URL('/', relay.base), { headers: { Accept: 'text/html' } })).text();
     assert.doesNotMatch(landing, /Sign in with GitHub/);

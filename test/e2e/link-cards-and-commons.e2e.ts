@@ -84,7 +84,7 @@ describe('link cards and the commons: a stranger in a public circle reads a link
     const signIn = await carol.go(`/join/${token}`, { headers: { 'Sec-Fetch-Site': 'none' } });
     assert.equal(signIn.status, 401);
     assert.match(signIn.html, /Join commons/);
-    assert.match(signIn.html, /Sign in with GitHub/);
+    assert.match(signIn.html, /Continue with GitHub/);
     github.signIn(CAROL);
     const join = await carol.go('/ui/auth/github');
     assert.match(join.html, /<h1 id="title">Join commons<\/h1>/);
