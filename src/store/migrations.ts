@@ -769,4 +769,53 @@ export const migrations: string[] = [
   );
   CREATE INDEX message_marks_by_user ON message_marks (user_id);
   `,
+  // Circles as communities: rooms to talk in (general, an announcements room only hosts write in), each person's
+  // place in a circle (host, rules accepted, timed out until), what a circle's hosts set (rules, slow mode), and
+  // reports of room messages to the hosts. Room messages are sealed like messages between friends.
+  `
+  ALTER TABLE circles ADD COLUMN rules TEXT;
+  ALTER TABLE circles ADD COLUMN slow_seconds INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE circle_people (
+    circle_id TEXT NOT NULL REFERENCES circles(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    host INTEGER NOT NULL DEFAULT 0,
+    rules_at INTEGER,
+    timeout_until INTEGER,
+    PRIMARY KEY (circle_id, user_id)
+  );
+  CREATE TABLE rooms (
+    id TEXT PRIMARY KEY,
+    circle_id TEXT NOT NULL REFERENCES circles(id),
+    name TEXT NOT NULL,
+    announce INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX rooms_by_circle ON rooms (circle_id);
+  CREATE TABLE room_messages (
+    id TEXT PRIMARY KEY,
+    room_id TEXT NOT NULL REFERENCES rooms(id),
+    sender_id TEXT NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    deleted_at INTEGER,
+    deleted_by TEXT REFERENCES users(id)
+  );
+  CREATE INDEX room_messages_by_room ON room_messages (room_id, created_at);
+  CREATE TABLE room_reads (
+    room_id TEXT NOT NULL REFERENCES rooms(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (room_id, user_id)
+  );
+  CREATE TABLE room_reports (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL REFERENCES room_messages(id),
+    reporter_id TEXT NOT NULL REFERENCES users(id),
+    reason TEXT,
+    created_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    resolved_by TEXT REFERENCES users(id),
+    UNIQUE (message_id, reporter_id)
+  );
+  `,
 ];

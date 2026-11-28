@@ -249,15 +249,17 @@ describe('guest mode limits who can make guests, and how many live at once', () 
 });
 
 describe('the one rule that keeps guests from real people', () => {
-  it('memberships are written in exactly three places, each of which applies the guest rule', () => {
+  it('memberships are written in exactly four places, each of which applies the guest rule', () => {
     const source = readFileSync(new URL('../../src/service.ts', import.meta.url), 'utf8');
     // ensureCircle refuses guests; friendCircle makes a guest the only member of a new pair; addMember applies
     // refuseGuest with the circle. A new place that adds memberships must apply the rule too, and be counted here.
-    assert.equal(source.match(/INSERT (OR IGNORE )?INTO memberships/g)?.length, 3);
+    // createCircle (a person starts one) refuses guests too.
+    assert.equal(source.match(/INSERT (OR IGNORE )?INTO memberships/g)?.length, 4);
     const body = (name: string) => source.slice(source.indexOf(`  ${name}(`), source.indexOf(`  ${name}(`) + 700);
     assert.match(body('addMember'), /this\.refuseGuest\(userId, circleId\)/);
     assert.match(body('acceptInvite'), /this\.refuseGuest\(userId, invite\.circleId\)/);
     for (const name of ['ensureCircle', 'joinPublic']) assert.match(body(name), /this\.isGuest\(\w+\)\) throw/, name);
     assert.match(body('friendCircle'), /this\.isGuest\(userId\)/);
+    assert.match(body('createCircle'), /this\.isGuest\(userId\)\) throw/);
   });
 });

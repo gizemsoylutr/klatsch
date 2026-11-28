@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ATTACH, ASK, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ROOM, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -212,6 +212,48 @@ export interface ConversationView {
   /** The message pinned in this conversation, if any: both people see it at the top. */
   pinned?: { id: string; text: string; deleted: boolean };
 }
+/** A room of a circle, with how many messages the person has not read. */
+export interface RoomView {
+  id: string;
+  name: string;
+  /** Only hosts write here. */
+  announce: boolean;
+  unread: number;
+}
+/** A circle as a community: its rooms, the person's place in it, and what its hosts set. */
+export interface CircleSpace {
+  id: string;
+  name: string;
+  people: number;
+  public: boolean;
+  owner: boolean;
+  host: boolean;
+  rules: string | null;
+  /** The person still has to accept the rules before writing. */
+  mustAccept: boolean;
+  slowSeconds: number;
+  /** The person may not write until then (a host's timeout). */
+  timeoutUntil: number | null;
+  rooms: RoomView[];
+}
+export interface RoomMessageView {
+  id: string;
+  mine: boolean;
+  from: { name: string; handle: string };
+  text: string;
+  at: number;
+  deleted: boolean;
+}
+export interface RoomReportView {
+  id: string;
+  messageId: string;
+  roomId: string;
+  text: string;
+  from: { name: string; handle: string };
+  reporter: { name: string; handle: string };
+  reason: string | null;
+  at: number;
+}
 /** A message the person starred, for their own list of starred messages. */
 export interface StarredView {
   id: string;
@@ -352,6 +394,12 @@ const MESSAGES_PER_DAY = 200;
 const MESSAGE_DAYS = 90;
 /** How long after sending its sender may delete a message for everyone. */
 const DELETE_FOR_EVERYONE_MS = 2 * DAY;
+/** Rooms: one message's length, how many a person writes in a day across rooms, and a new member's first day without links. */
+const ROOM_MESSAGE_MAX = 2000;
+const ROOM_MESSAGES_PER_DAY = 300;
+const NEW_MEMBER_MS = DAY;
+const ROOMS_PER_CIRCLE = 20;
+const RULES_MAX = 2000;
 const ATTACHMENT_DAYS = 14;
 /** How many of the friend's messages one "Brew a reply" hands over. */
 const THREAD_FOR_AGENT = 10;
@@ -2062,6 +2110,300 @@ export class Klatsch {
         const other = this.user(r.sender_id === userId ? r.recipient_id : r.sender_id);
         return { id: r.id, other: { name: other.display_name, handle: other.handle }, mine: r.sender_id === userId, text: r.body, at: r.created_at };
       });
+  }
+
+
+  // ---------- circles as communities: rooms, hosts, rules, moderation ----------
+
+  /** The circle for someone in it, not a friendship (those are Chats); anyone else gets "not found". */
+  private spaceRow(userId: string, circleId: string) {
+    const role = this.memberRole(userId, circleId);
+    const row = this.db.prepare('SELECT id, name, pair, ended_at, rules, slow_seconds, public FROM circles WHERE id = ?').get(circleId) as
+      | { id: string; name: string; pair: number; ended_at: number | null; rules: string | null; slow_seconds: number; public: number }
+      | undefined;
+    if (!role || !row || row.pair || row.ended_at !== null) throw new KlatschError('not-found', ROOM.noCircle);
+    return { ...row, role };
+  }
+
+  private person(circleId: string, userId: string) {
+    return (this.db.prepare('SELECT host, rules_at, timeout_until FROM circle_people WHERE circle_id = ? AND user_id = ?').get(circleId, userId) as
+      | { host: number; rules_at: number | null; timeout_until: number | null }
+      | undefined) ?? { host: 0, rules_at: null, timeout_until: null };
+  }
+
+  /** The owner is always a host; the owner makes others hosts. */
+  isHost(userId: string, circleId: string): boolean {
+    const role = this.memberRole(userId, circleId);
+    return role === 'owner' || (role !== undefined && this.person(circleId, userId).host === 1);
+  }
+
+  private refuseNonHost(userId: string, circleId: string): void {
+    if (!this.isHost(userId, circleId)) throw new KlatschError('forbidden', ROOM.hostsOnly);
+  }
+
+  private setPerson(circleId: string, userId: string, column: 'host' | 'rules_at' | 'timeout_until', value: number | null): void {
+    this.db.prepare(`INSERT INTO circle_people (circle_id, user_id, ${column}) VALUES (?, ?, ?) ON CONFLICT (circle_id, user_id) DO UPDATE SET ${column} = excluded.${column}`).run(circleId, userId, value);
+  }
+
+  /** Anyone (not a guest) starts a circle and owns it; at most five of their own. */
+  createCircle(userId: string, name: string): string {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.guestsOnly);
+    const clean = name.replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!clean) throw new KlatschError('invalid', ROOM.circleName);
+    refuseHidden(clean);
+    const owned = (this.db.prepare(`SELECT count(*) AS n FROM memberships m JOIN circles c ON c.id = m.circle_id WHERE m.user_id = ? AND m.role = 'owner' AND c.pair = 0 AND c.ended_at IS NULL`).get(userId) as { n: number }).n;
+    if (owned >= 5) throw new KlatschError('forbidden', ROOM.tooManyCircles);
+    const id = newId('cir');
+    transaction(this.db, () => {
+      this.db.prepare('INSERT INTO circles (id, name, created_at) VALUES (?, ?, ?)').run(id, clean, Date.now());
+      this.db.prepare(`INSERT INTO memberships (circle_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`).run(id, userId, Date.now());
+      this.ensureRooms(id);
+      this.audit(userId, 'web', 'circle.create', id);
+    });
+    return id;
+  }
+
+  /** A circle's first rooms, made the first time anyone opens it: general, and announcements for hosts. */
+  private ensureRooms(circleId: string): void {
+    if (this.db.prepare('SELECT 1 FROM rooms WHERE circle_id = ?').get(circleId)) return;
+    const insert = this.db.prepare('INSERT INTO rooms (id, circle_id, name, announce, created_at) VALUES (?, ?, ?, ?, ?)');
+    insert.run(newId('room'), circleId, 'general', 0, Date.now());
+    insert.run(newId('room'), circleId, 'announcements', 1, Date.now() + 1);
+  }
+
+  /** The person's circles as communities (friendships are Chats), each with its unread count. */
+  spacesOf(userId: string): (CircleSpace & { unread: number })[] {
+    const ids = this.db
+      .prepare(`SELECT c.id FROM memberships m JOIN circles c ON c.id = m.circle_id WHERE m.user_id = ? AND c.pair = 0 AND c.ended_at IS NULL ORDER BY c.created_at`)
+      .all(userId) as { id: string }[];
+    return ids.map(({ id }) => {
+      const space = this.space(userId, id);
+      return { ...space, unread: space.rooms.reduce((n, r) => n + r.unread, 0) };
+    });
+  }
+
+  space(userId: string, circleId: string): CircleSpace {
+    const row = this.spaceRow(userId, circleId);
+    this.ensureRooms(circleId);
+    const me = this.person(circleId, userId);
+    const host = this.isHost(userId, circleId);
+    const rooms = this.db.prepare('SELECT id, name, announce FROM rooms WHERE circle_id = ? ORDER BY created_at').all(circleId) as { id: string; name: string; announce: number }[];
+    const people = (this.db.prepare('SELECT count(*) AS n FROM memberships WHERE circle_id = ?').get(circleId) as { n: number }).n;
+    return {
+      id: circleId,
+      name: row.name,
+      people,
+      public: row.public === 1,
+      owner: row.role === 'owner',
+      host,
+      rules: row.rules,
+      mustAccept: Boolean(row.rules) && me.rules_at === null && !host,
+      slowSeconds: row.slow_seconds,
+      timeoutUntil: me.timeout_until && me.timeout_until > Date.now() ? me.timeout_until : null,
+      rooms: rooms.map((r) => ({ id: r.id, name: r.name, announce: r.announce === 1, unread: this.roomUnread(userId, r.id) })),
+    };
+  }
+
+  private roomUnread(userId: string, roomId: string): number {
+    const read = (this.db.prepare('SELECT read_at FROM room_reads WHERE room_id = ? AND user_id = ?').get(roomId, userId) as { read_at: number } | undefined)?.read_at ?? 0;
+    return (this.db.prepare('SELECT count(*) AS n FROM room_messages WHERE room_id = ? AND created_at > ? AND sender_id != ? AND deleted_at IS NULL').get(roomId, read, userId) as { n: number }).n;
+  }
+
+  private roomRow(userId: string, roomId: string) {
+    const room = this.db.prepare('SELECT id, circle_id, name, announce FROM rooms WHERE id = ?').get(roomId) as { id: string; circle_id: string; name: string; announce: number } | undefined;
+    if (!room) throw new KlatschError('not-found', ROOM.noCircle);
+    this.spaceRow(userId, room.circle_id);
+    return room;
+  }
+
+  /** A room's last messages, oldest first; reading them marks the room read. */
+  roomMessages(userId: string, roomId: string, limit = 80): RoomMessageView[] {
+    const room = this.roomRow(userId, roomId);
+    this.dropOldRoomMessages();
+    const rows = (
+      this.db
+        .prepare('SELECT m.id, m.sender_id, m.body, m.created_at, m.deleted_at, u.handle, u.display_name FROM room_messages m JOIN users u ON u.id = m.sender_id WHERE m.room_id = ? ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?')
+        .all(room.id, limit) as { id: string; sender_id: string; body: string; created_at: number; deleted_at: number | null; handle: string; display_name: string }[]
+    ).reverse();
+    this.db.prepare('INSERT INTO room_reads (room_id, user_id, read_at) VALUES (?, ?, ?) ON CONFLICT (room_id, user_id) DO UPDATE SET read_at = excluded.read_at').run(room.id, userId, Date.now());
+    return rows.map((r) => ({
+      id: r.id,
+      mine: r.sender_id === userId,
+      from: { name: r.display_name, handle: r.handle },
+      text: r.deleted_at ? '' : r.body,
+      at: r.created_at,
+      deleted: r.deleted_at !== null,
+    }));
+  }
+
+  /**
+   * Writes in a room, as the person typed it. Refused: before accepting the circle's rules, while timed out, in the
+   * announcements room for anyone but hosts, faster than the room's slow mode, a link in a new member's first day,
+   * hidden characters, too long, or too many in a day.
+   */
+  postRoomMessage(userId: string, roomId: string, typed: string): string {
+    const room = this.roomRow(userId, roomId);
+    const space = this.space(userId, room.circle_id);
+    const text = typed.replace(/\r\n?/g, '\n').trim();
+    if (!text) throw new KlatschError('invalid', MESSAGE.empty);
+    if (text.length > ROOM_MESSAGE_MAX) throw new KlatschError('invalid', MESSAGE.tooLong);
+    refuseHidden(text);
+    if (space.mustAccept) throw new KlatschError('forbidden', ROOM.acceptRules);
+    if (space.timeoutUntil) throw new KlatschError('forbidden', ROOM.timedOut(space.timeoutUntil));
+    if (room.announce && !space.host) throw new KlatschError('forbidden', ROOM.announceOnly);
+    const now = Date.now();
+    if (!space.host && space.slowSeconds > 0) {
+      const last = (this.db.prepare('SELECT max(created_at) AS at FROM room_messages WHERE room_id = ? AND sender_id = ?').get(room.id, userId) as { at: number | null }).at;
+      if (last && now - last < space.slowSeconds * 1000) throw new KlatschError('forbidden', ROOM.slow(space.slowSeconds));
+    }
+    const joined = (this.db.prepare('SELECT created_at FROM memberships WHERE circle_id = ? AND user_id = ?').get(room.circle_id, userId) as { created_at: number }).created_at;
+    if (!space.host && now - joined < NEW_MEMBER_MS && /https?:\/\/|www\./i.test(text)) throw new KlatschError('forbidden', ROOM.newMemberLinks);
+    const today = (this.db.prepare('SELECT count(*) AS n FROM room_messages WHERE sender_id = ? AND created_at > ?').get(userId, now - DAY) as { n: number }).n;
+    if (today >= ROOM_MESSAGES_PER_DAY) throw new KlatschError('forbidden', ROOM.tooMany);
+    const id = newId('rm');
+    this.db.prepare('INSERT INTO room_messages (id, room_id, sender_id, body, created_at) VALUES (?, ?, ?, ?, ?)').run(id, room.id, userId, sealText(this.db, text), now);
+    this.db.prepare('INSERT INTO room_reads (room_id, user_id, read_at) VALUES (?, ?, ?) ON CONFLICT (room_id, user_id) DO UPDATE SET read_at = excluded.read_at').run(room.id, userId, now);
+    this.audit(userId, 'web', 'room.post', id);
+    return id;
+  }
+
+  /** Deletes a room message: its writer, or a host of the circle. Its words go; the room shows that it was deleted. */
+  deleteRoomMessage(userId: string, messageId: string): string {
+    const row = this.db.prepare('SELECT m.id, m.sender_id, m.room_id, r.circle_id FROM room_messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = ?').get(messageId) as
+      | { id: string; sender_id: string; room_id: string; circle_id: string }
+      | undefined;
+    if (!row) throw new KlatschError('not-found', ROOM.noMessage);
+    this.spaceRow(userId, row.circle_id);
+    if (row.sender_id !== userId && !this.isHost(userId, row.circle_id)) throw new KlatschError('forbidden', ROOM.hostsOnly);
+    transaction(this.db, () => {
+      this.db.prepare('UPDATE room_messages SET body = ?, deleted_at = ?, deleted_by = ? WHERE id = ?').run(sealText(this.db, ''), Date.now(), userId, messageId);
+      this.db.prepare('UPDATE room_reports SET resolved_at = ?, resolved_by = ? WHERE message_id = ? AND resolved_at IS NULL').run(Date.now(), userId, messageId);
+      this.audit(userId, 'web', row.sender_id === userId ? 'room.delete' : 'room.moderate.delete', messageId);
+    });
+    return row.room_id;
+  }
+
+  /** Reports a room message to the circle's hosts, once per person. Returns the room. */
+  reportRoomMessage(userId: string, messageId: string, reason: string): string {
+    const row = this.db.prepare('SELECT m.id, m.sender_id, m.room_id, r.circle_id FROM room_messages m JOIN rooms r ON r.id = m.room_id WHERE m.id = ? AND m.deleted_at IS NULL').get(messageId) as
+      | { id: string; sender_id: string; room_id: string; circle_id: string }
+      | undefined;
+    if (!row) throw new KlatschError('not-found', ROOM.noMessage);
+    this.spaceRow(userId, row.circle_id);
+    const clean = reason.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (clean) refuseHidden(clean);
+    this.db.prepare('INSERT OR IGNORE INTO room_reports (id, message_id, reporter_id, reason, created_at) VALUES (?, ?, ?, ?, ?)').run(newId('rr'), messageId, userId, clean ? sealText(this.db, clean) : null, Date.now());
+    this.audit(userId, 'web', 'room.report', messageId);
+    return row.room_id;
+  }
+
+  /** What waits for the hosts of a circle: open reports, oldest first. */
+  roomReports(userId: string, circleId: string): RoomReportView[] {
+    this.spaceRow(userId, circleId);
+    this.refuseNonHost(userId, circleId);
+    const rows = this.db
+      .prepare(
+        `SELECT p.id, p.reason, p.created_at, m.id AS message_id, m.room_id, m.body, s.handle AS s_handle, s.display_name AS s_name, q.handle AS q_handle, q.display_name AS q_name
+         FROM room_reports p JOIN room_messages m ON m.id = p.message_id JOIN rooms r ON r.id = m.room_id JOIN users s ON s.id = m.sender_id JOIN users q ON q.id = p.reporter_id
+         WHERE r.circle_id = ? AND p.resolved_at IS NULL ORDER BY p.created_at`,
+      )
+      .all(circleId) as { id: string; reason: string | null; created_at: number; message_id: string; room_id: string; body: string; s_handle: string; s_name: string; q_handle: string; q_name: string }[];
+    return rows.map((r) => ({
+      id: r.id,
+      messageId: r.message_id,
+      roomId: r.room_id,
+      text: r.body,
+      from: { name: r.s_name, handle: r.s_handle },
+      reporter: { name: r.q_name, handle: r.q_handle },
+      reason: r.reason,
+      at: r.created_at,
+    }));
+  }
+
+  /** A host leaves a report be: the message stays. */
+  dismissReport(userId: string, reportId: string): string {
+    const row = this.db.prepare('SELECT r.circle_id FROM room_reports p JOIN room_messages m ON m.id = p.message_id JOIN rooms r ON r.id = m.room_id WHERE p.id = ?').get(reportId) as { circle_id: string } | undefined;
+    if (!row) throw new KlatschError('not-found', ROOM.noMessage);
+    this.spaceRow(userId, row.circle_id);
+    this.refuseNonHost(userId, row.circle_id);
+    this.db.prepare('UPDATE room_reports SET resolved_at = ?, resolved_by = ? WHERE id = ?').run(Date.now(), userId, reportId);
+    this.audit(userId, 'web', 'room.moderate.dismiss', reportId);
+    return row.circle_id;
+  }
+
+  /** A host keeps someone from writing for a while (minutes; 0 lifts it). Hosts cannot be timed out by hosts; the owner never. */
+  timeoutMember(userId: string, circleId: string, memberId: string, minutes: number): void {
+    this.spaceRow(userId, circleId);
+    this.refuseNonHost(userId, circleId);
+    const role = this.memberRole(memberId, circleId);
+    if (!role || memberId === userId || role === 'owner' || (this.isHost(memberId, circleId) && this.memberRole(userId, circleId) !== 'owner')) {
+      throw new KlatschError('forbidden', ROOM.cannotTimeout);
+    }
+    const until = minutes > 0 ? Date.now() + Math.min(minutes, 7 * 24 * 60) * 60 * 1000 : null;
+    this.setPerson(circleId, memberId, 'timeout_until', until);
+    this.audit(userId, 'web', until ? 'room.moderate.timeout' : 'room.moderate.untimeout', circleId);
+  }
+
+  /** The owner makes a member a host, or no longer one. */
+  setHost(userId: string, circleId: string, memberId: string, on: boolean): void {
+    this.spaceRow(userId, circleId);
+    if (this.memberRole(userId, circleId) !== 'owner') throw new KlatschError('forbidden', ROOM.ownerOnly);
+    if (!this.memberRole(memberId, circleId) || memberId === userId) throw new KlatschError('forbidden', ROOM.cannotTimeout);
+    this.setPerson(circleId, memberId, 'host', on ? 1 : 0);
+    this.audit(userId, 'web', on ? 'circle.host.add' : 'circle.host.remove', circleId);
+  }
+
+  /** Hosts set the rules (shown before writing, accepted once) and the slow mode in seconds (0 is off). */
+  setCircleSettings(userId: string, circleId: string, settings: { rules?: string; slowSeconds?: number }): void {
+    this.spaceRow(userId, circleId);
+    this.refuseNonHost(userId, circleId);
+    transaction(this.db, () => {
+      if (settings.rules !== undefined) {
+        const rules = settings.rules.replace(/\r\n?/g, '\n').trim();
+        if (rules.length > RULES_MAX) throw new KlatschError('invalid', ROOM.rulesTooLong);
+        if (rules) refuseHidden(rules);
+        const before = (this.db.prepare('SELECT rules FROM circles WHERE id = ?').get(circleId) as { rules: string | null }).rules ?? '';
+        this.db.prepare('UPDATE circles SET rules = ? WHERE id = ?').run(rules ? sealText(this.db, rules) : null, circleId);
+        // New rules are accepted again.
+        if (rules !== before) this.db.prepare('UPDATE circle_people SET rules_at = NULL WHERE circle_id = ?').run(circleId);
+      }
+      if (settings.slowSeconds !== undefined) {
+        const seconds = [0, 10, 30, 60, 300].includes(settings.slowSeconds) ? settings.slowSeconds : 0;
+        this.db.prepare('UPDATE circles SET slow_seconds = ? WHERE id = ?').run(seconds, circleId);
+      }
+      this.audit(userId, 'web', 'circle.settings', circleId);
+    });
+  }
+
+  acceptRules(userId: string, circleId: string): void {
+    this.spaceRow(userId, circleId);
+    this.setPerson(circleId, userId, 'rules_at', Date.now());
+  }
+
+  /** Hosts add a room; announcement rooms only hosts write in. */
+  addRoom(userId: string, circleId: string, name: string, announce = false): string {
+    this.spaceRow(userId, circleId);
+    this.refuseNonHost(userId, circleId);
+    const clean = name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+    if (!clean) throw new KlatschError('invalid', ROOM.badName);
+    this.ensureRooms(circleId);
+    const count = (this.db.prepare('SELECT count(*) AS n FROM rooms WHERE circle_id = ?').get(circleId) as { n: number }).n;
+    if (count >= ROOMS_PER_CIRCLE) throw new KlatschError('forbidden', ROOM.tooManyRooms);
+    if (this.db.prepare('SELECT 1 FROM rooms WHERE circle_id = ? AND name = ?').get(circleId, clean)) throw new KlatschError('invalid', ROOM.nameTaken);
+    const id = newId('room');
+    this.db.prepare('INSERT INTO rooms (id, circle_id, name, announce, created_at) VALUES (?, ?, ?, ?, ?)').run(id, circleId, clean, announce ? 1 : 0, Date.now());
+    this.audit(userId, 'web', 'room.add', id);
+    return id;
+  }
+
+  /** Room messages go after the same 90 days as messages between friends. */
+  private dropOldRoomMessages(): void {
+    const old = Date.now() - MESSAGE_DAYS * DAY;
+    if (!this.db.prepare('SELECT 1 FROM room_messages WHERE created_at < ? LIMIT 1').get(old)) return;
+    transaction(this.db, () => {
+      this.db.prepare('DELETE FROM room_reports WHERE message_id IN (SELECT id FROM room_messages WHERE created_at < ?)').run(old);
+      this.db.prepare('DELETE FROM room_messages WHERE created_at < ?').run(old);
+    });
   }
 
   private unreadFrom(userId: string, circleId: string): number {

@@ -332,6 +332,32 @@ details.menu > nav form.theme button[aria-pressed="true"] { background: var(--su
 .row.new time { color: var(--accent); }
 .row .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #FFFFFF; font-size: 12px; font-weight: 600; display: grid; place-items: center; flex-shrink: 0; }
 .side .empty { padding: 12px 20px; font-size: 14px; color: var(--muted); }
+/* Chats · Circles: two tabs under the sign, like a messenger's sections. */
+.sidetabs { display: flex; gap: 4px; padding: 0 12px 8px; }
+.sidetabs a { flex: 1; text-align: center; padding: 8px 10px; border-radius: 10px; color: var(--muted); font-size: 14px; font-weight: 500; display: inline-flex; justify-content: center; gap: 6px; align-items: center; }
+.sidetabs a:hover { background: var(--sunk); text-decoration: none; }
+.sidetabs a[aria-current="page"] { background: var(--sunk); color: var(--fg); }
+.sidetabs .badge, .roomtabs .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: #FFFFFF; font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; }
+form.newcircle { display: flex; gap: 6px; align-items: center; margin: 6px 12px 14px; padding: 4px 4px 4px 14px; border-radius: 999px; background: var(--sunk); }
+form.newcircle input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 14px; min-height: 36px; }
+form.newcircle input:focus-visible { outline: none; }
+.circleacts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.roomtabs { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.roomtabs a { flex-shrink: 0; padding: 6px 12px; border-radius: 999px; color: var(--muted); font-size: 14px; display: inline-flex; gap: 4px; align-items: center; }
+.roomtabs a:hover { background: var(--sunk); text-decoration: none; }
+.roomtabs a[aria-current="page"] { background: var(--sunk); color: var(--fg); font-weight: 500; }
+.mess .msg .from { font-weight: 600; color: var(--accent-text); }
+.rulesgate { display: grid; gap: 8px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.rulesgate .rules, .settingsform .rules { white-space: pre-wrap; color: var(--muted); font-size: 14px; }
+.rulesgate button { justify-self: start; }
+.cannot { padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+.msgmenu .pop button.danger { color: #FF3B30; }
+.settingsform { display: grid; gap: 22px; }
+.settingsform .stack { display: grid; gap: 8px; }
+.settingsform textarea, .settingsform select, .settingsform input[type="text"] { font: inherit; color: var(--fg); background: var(--sunk); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.settingsform .stack button { justify-self: start; }
+.settingsform h2 { font-size: 13px; font-weight: 600; color: var(--muted); }
+.settingsform .acts form { display: inline-flex; gap: 4px; align-items: center; }
 .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .pane .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 36px 40px calc(48px + env(safe-area-inset-bottom)); }
 .pane .scroll > .inner { max-width: 760px; margin: 0 auto; }
@@ -424,6 +450,8 @@ form.typebar { display: flex; align-items: flex-end; gap: 6px; padding: 10px 12p
   main.mess:not(.open) .pane { border-top: 1px solid var(--line); overflow: visible; }
   main.mess:not(.open) .pane .scroll { overflow: visible; padding: 24px 16px calc(96px + env(safe-area-inset-bottom)); }
   main.mess:not(.open) .pane .pick { display: none; }
+  /* Nothing but the "pick one" line: on a phone the list is the whole page. */
+  main.mess:not(.open) .pane:not(:has(.inner > :not(.pick))) { display: none; }
   main.mess.open { height: 100vh; height: 100dvh; overflow: hidden; }
   main.mess.open .side { display: none; }
   main.mess.open .pane { animation: slidein 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }

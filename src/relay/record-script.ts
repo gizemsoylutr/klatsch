@@ -20,6 +20,20 @@ export const RECORD_SCRIPT = `'use strict';
     });
   }
 
+  // A room shows new messages while it is on screen: the page asks for itself every 8 seconds and swaps the list.
+  const live = document.querySelector('[data-live]');
+  if (live) {
+    setInterval(async () => {
+      if (document.visibilityState !== 'visible' || (text && text.value)) return;
+      try {
+        const res = await fetch(location.pathname, { credentials: 'same-origin' });
+        if (!res.ok) return;
+        const next = new DOMParser().parseFromString(await res.text(), 'text/html').querySelector('[data-live]');
+        if (next && next.innerHTML !== live.innerHTML) live.innerHTML = next.innerHTML;
+      } catch {}
+    }, 8000);
+  }
+
   const button = document.querySelector('[data-record]');
   if (!button) return;
   const cancelButton = document.querySelector('[data-record-cancel]');

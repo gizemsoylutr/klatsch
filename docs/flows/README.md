@@ -12,6 +12,7 @@ Generated from the end-to-end scenarios in `test/e2e/` by `npm run flows`; do no
 | attachments: a photo with the question, a voice note with the answer, for the two of them only | 5 | [attachments.drawio](attachments.drawio) |
 | browser connect: a code from the command, typed in the signed-in browser | 12 | [browser-connect.drawio](browser-connect.drawio) |
 | cards in the chat: decide and answer without leaving the conversation | 10 | [chat-cards.drawio](chat-cards.drawio) |
+| circles: rooms, hosts, rules and reports | 7 | [circles.drawio](circles.drawio) |
 | dashboard: drafts, intros and the card, decided in the browser | 7 | [dashboard.drawio](dashboard.drawio) |
 | decline: the solvers say no, the seeker hears so, no names are exchanged | 6 | [decline.drawio](decline.drawio) |
 | direct ask: one person, both humans approve, agents get text only by a click or "always" | 10 | [direct-ask.drawio](direct-ask.drawio) |

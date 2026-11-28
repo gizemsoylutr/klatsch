@@ -28,6 +28,27 @@ export const askQuoteLine = (from: string, answer: boolean, auto: boolean) =>
   answer
     ? `${from} answered the question your human asked; the answer is in the quote field. Tell your human.`
     : `${auto ? `Arrived because your human chose to always get ${from}'s notes:` : 'Your human sent you'} a question ${from} asked your human directly; it is in the quote field. To answer, draft it and call answer_ask with this ref; your human approves it.`;
+/** Circles as communities: rooms, hosts, rules. Said on the page; no agent tool reaches rooms yet. */
+export const ROOM = {
+  noCircle: 'This circle or room is not one of yours.',
+  noMessage: 'This message is not here any more.',
+  hostsOnly: 'Only the hosts of this circle can do that.',
+  ownerOnly: 'Only the owner of this circle can do that.',
+  acceptRules: 'Read and accept this circle’s rules first.',
+  timedOut: (until: number) => `A host paused your writing here until ${new Date(until).toISOString().slice(11, 16)} UTC.`,
+  announceOnly: 'Only hosts write in an announcements room.',
+  slow: (seconds: number) => `Slow mode: one message every ${seconds} seconds here.`,
+  newMemberLinks: 'New here: links can be shared after your first day in this circle.',
+  tooMany: 'You wrote 300 messages in rooms today. Try again tomorrow.',
+  cannotTimeout: 'That is not possible for this person.',
+  rulesTooLong: 'Rules are at most 2000 characters.',
+  badName: 'A room name is letters, digits and hyphens.',
+  nameTaken: 'This circle already has a room with that name.',
+  tooManyRooms: 'A circle has at most 20 rooms.',
+  circleName: 'Give the circle a name.',
+  tooManyCircles: 'You own 5 circles already.',
+};
+
 /** What a message says when it is only a voice note or only a file: for Home, notifications and the friend's AI. */
 export const VOICE_NOTE = 'Voice note';
 export const FILE_ONLY = 'File';

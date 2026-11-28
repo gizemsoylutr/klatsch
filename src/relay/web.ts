@@ -31,6 +31,9 @@ import {
   type IntroView,
   type Klatsch,
   type AskView,
+  type CircleSpace,
+  type RoomMessageView,
+  type RoomReportView,
   type NoteView,
   type SharingCircle,
   type SipRow,
@@ -39,7 +42,7 @@ import {
   sourceOfRow,
 } from '../service.ts';
 import { sourceHost, type Source } from '../source.ts';
-import { AGENT_THANKS_PER_DAY, GUEST } from '../copy/agent.ts';
+import { AGENT_THANKS_PER_DAY, GUEST, ROOM } from '../copy/agent.ts';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -2309,6 +2312,128 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   const guestBanner = (expiresAt: number, csrf: string) =>
     html`<section class="offer" aria-label="${copy.guest.end}"><p>${copy.guest.banner(copy.guest.left(expiresAt - Date.now()))}</p><p class="sub">${copy.guest.upgrade}</p>${button('/ui/guest/end', copy.guest.end, csrf, 'primary')}</section>`;
 
+  // ---------- circles as communities: the Circles tab, rooms, hosts, rules, reports ----------
+
+  const circlesSide = (c: Context<Env>, current?: string) => {
+    const userId = c.get('userId');
+    return chatSide(klatsch.conversationsOf(userId), klatsch.asksOf(userId), c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto', { spaces: klatsch.spacesOf(userId), current });
+  };
+  /** Where a room is, for going back to it after an action. */
+  const roomPath = (roomId: string) => {
+    const room = db.prepare('SELECT circle_id FROM rooms WHERE id = ?').get(roomId) as { circle_id: string } | undefined;
+    return room ? `/ui/c/${room.circle_id}/r/${roomId}` : '/ui/circles';
+  };
+  const notMine = (c: Context<Env>, error: unknown) => {
+    if (error instanceof KlatschError) return c.html(notice(copy.layout.notPossible, html`<p class="sub">${error.message}</p><p><a href="/ui/circles">${copy.circles.back}</a></p>`), 404);
+    throw error;
+  };
+
+  web.get('/circles', (c) =>
+    c.html(messenger(copy.circles.tab, circlesSide(c), html`<div class="scroll"><div class="inner"><div class="pick"><h1>${copy.circles.pick}</h1><p>${copy.circles.pickLine}</p></div></div></div>`, false)),
+  );
+  web.post('/circles/new', async (c) => {
+    const name = (await c.req.parseBody()).name;
+    let id = '';
+    return attempt(c, () => void (id = klatsch.createCircle(c.get('userId'), typeof name === 'string' ? name : '')), '/ui/circles', () => c.redirect(`/ui/c/${id}`, 303));
+  });
+  web.get('/c/:id', (c) => {
+    try {
+      const space = klatsch.space(c.get('userId'), c.req.param('id'));
+      return c.redirect(`/ui/c/${space.id}/r/${space.rooms[0]!.id}`, 302);
+    } catch (error) {
+      return notMine(c, error);
+    }
+  });
+  web.get('/c/:id/r/:room', (c) => {
+    const userId = c.get('userId');
+    try {
+      const space = klatsch.space(userId, c.req.param('id'));
+      if (!space.rooms.some((r) => r.id === c.req.param('room'))) throw new KlatschError('not-found', ROOM.noCircle);
+      const messages = klatsch.roomMessages(userId, c.req.param('room'));
+      const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
+      c.header('Content-Security-Policy', CHAT_CSP);
+      return c.html(messenger(space.name, circlesSide(c, space.id), roomPane(klatsch.space(userId, space.id), c.req.param('room'), messages, c.get('csrf'), reports), true));
+    } catch (error) {
+      return notMine(c, error);
+    }
+  });
+  web.post('/c/:id/r/:room', async (c) => {
+    const text = (await c.req.parseBody()).text;
+    const back = `/ui/c/${c.req.param('id')}/r/${c.req.param('room')}`;
+    return attempt(c, () => void klatsch.postRoomMessage(c.get('userId'), c.req.param('room'), typeof text === 'string' ? text : ''), back, () => c.redirect(`${back}#end`, 303));
+  });
+  web.post('/c/:id/rules', async (c) => {
+    const room = (await c.req.parseBody()).back;
+    const back = typeof room === 'string' && /^[\w-]+$/.test(room) ? `/ui/c/${c.req.param('id')}/r/${room}` : `/ui/c/${c.req.param('id')}`;
+    return attempt(c, () => klatsch.acceptRules(c.get('userId'), c.req.param('id')), back, () => c.redirect(back, 303));
+  });
+  web.post('/rm/:id/delete', (c) => {
+    let room = '';
+    return attempt(c, () => void (room = klatsch.deleteRoomMessage(c.get('userId'), c.req.param('id'))), '/ui/circles', () => c.redirect(`${roomPath(room)}#end`, 303));
+  });
+  web.post('/rm/:id/report', async (c) => {
+    const reason = (await c.req.parseBody()).reason;
+    let room = '';
+    return attempt(
+      c,
+      () => void (room = klatsch.reportRoomMessage(c.get('userId'), c.req.param('id'), typeof reason === 'string' ? reason : '')),
+      '/ui/circles',
+      () => c.html(notice(copy.circles.reportsTitle, html`<p class="sub">${copy.circles.reported}</p><p><a href="${roomPath(room)}">${copy.circles.backToCircle}</a></p>`)),
+    );
+  });
+  web.get('/c/:id/settings', (c) => {
+    const userId = c.get('userId');
+    try {
+      const space = klatsch.space(userId, c.req.param('id'));
+      const circle = klatsch.circlesOf(userId).find((x) => x.id === space.id);
+      return c.html(messenger(space.name, circlesSide(c, space.id), circleSettings(userId, space, circle, c.get('csrf'), base(c)), true));
+    } catch (error) {
+      return notMine(c, error);
+    }
+  });
+  web.post('/c/:id/settings', async (c) => {
+    const form = await c.req.parseBody();
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(
+      c,
+      () => klatsch.setCircleSettings(c.get('userId'), c.req.param('id'), { rules: typeof form.rules === 'string' ? form.rules : '', slowSeconds: Number(form.slow) || 0 }),
+      back,
+      () => c.redirect(back, 303),
+    );
+  });
+  web.post('/c/:id/rooms', async (c) => {
+    const form = await c.req.parseBody();
+    let room = '';
+    return attempt(
+      c,
+      () => void (room = klatsch.addRoom(c.get('userId'), c.req.param('id'), typeof form.name === 'string' ? form.name : '', form.announce === '1')),
+      `/ui/c/${c.req.param('id')}/settings`,
+      () => c.redirect(`/ui/c/${c.req.param('id')}/r/${room}`, 303),
+    );
+  });
+  web.post('/c/:id/members/:member/host', (c) => {
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(c, () => klatsch.setHost(c.get('userId'), c.req.param('id'), c.req.param('member'), !klatsch.isHost(c.req.param('member'), c.req.param('id'))), back, () => c.redirect(back, 303));
+  });
+  web.post('/c/:id/members/:member/timeout', async (c) => {
+    const minutes = Number((await c.req.parseBody()).minutes) || 0;
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(c, () => klatsch.timeoutMember(c.get('userId'), c.req.param('id'), c.req.param('member'), minutes), back, () => c.redirect(back, 303));
+  });
+  web.get('/c/:id/reports', (c) => {
+    const userId = c.get('userId');
+    try {
+      const space = klatsch.space(userId, c.req.param('id'));
+      return c.html(messenger(space.name, circlesSide(c, space.id), reportsPane(space, klatsch.roomReports(userId, space.id), c.get('csrf')), true));
+    } catch (error) {
+      return notMine(c, error);
+    }
+  });
+  web.post('/reports/:id/dismiss', (c) => {
+    let circle = '';
+    return attempt(c, () => void (circle = klatsch.dismissReport(c.get('userId'), c.req.param('id'))), '/ui/circles', () => c.redirect(`/ui/c/${circle}/reports`, 303));
+  });
+
   // A message's own menu: star or unstar (for oneself), pin or unpin (for both), delete for oneself or for everyone.
   const MESSAGE_ACTIONS = ['star', 'unstar', 'pin', 'unpin', 'hide', 'delete'] as const;
   web.post('/messages/:id/:action', (c) => {
@@ -2591,7 +2716,7 @@ function shortWhen(at: number): string {
  * The left side of the messenger: the sign, "add a friend", a menu for the other pages, and the chats, newest
  * first. A friend's waiting question shows as the chat's last line.
  */
-function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string, theme = 'auto') {
+function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: string, current?: string, theme = 'auto', circles?: { spaces: (CircleSpace & { unread: number })[]; current?: string }) {
   const t = copy.chat;
   const nav = copy.layout.nav;
   const asking = new Map(asks.filter((k) => k.role === 'helper' && k.state === 'open').map((k) => [k.other.handle, k.question]));
@@ -2606,7 +2731,13 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
           <form method="post" action="/ui/logout"><input type="hidden" name="csrf" value="${csrf}" /><button>${copy.dashboard.signOut}</button></form></nav>
       </details>
     </div>
-    ${conversations.length
+    <nav class="sidetabs" aria-label="${t.sections}">
+      <a href="/ui"${circles ? '' : html` aria-current="page"`}>${t.chats}${(() => { const n = conversations.reduce((a, x) => a + x.unread, 0); return n ? html` <span class="badge">${n}</span>` : ''; })()}</a>
+      <a href="/ui/circles"${circles ? html` aria-current="page"` : ''}>${copy.circles.tab}</a>
+    </nav>
+    ${circles
+      ? circleList(circles.spaces, csrf, circles.current)
+      : conversations.length
       ? html`<ul class="chats">${conversations.map((x) => {
           const ask = asking.get(x.other.handle);
           const last = ask ? `${t.asksYou} ${ask}` : x.last ? (x.last.deleted ? t.deleted : `${x.last.mine ? `${t.you}: ` : ''}${x.last.text}`) : `@${x.other.handle}`;
@@ -2655,6 +2786,139 @@ function msgMenu(m: ConversationView['messages'][number], csrf: string) {
     ${m.deleted ? '' : html`${act(m.starred ? 'unstar' : 'star', m.starred ? t.unstar : t.star, 'star')}${act(m.pinned ? 'unpin' : 'pin', m.pinned ? t.unpin : t.pin, 'pin')}`}
     <details class="del"><summary>${t.del}</summary>${act('hide', t.delForMe)}${forAll ? act('delete', t.delForAll) : ''}</details>
   </div></details>`;
+}
+
+/** The Circles tab: the person's circles, like groups in a messenger, and a way to start one. */
+function circleList(spaces: (CircleSpace & { unread: number })[], csrf: string, current?: string) {
+  const t = copy.circles;
+  return html`${spaces.length
+      ? html`<ul class="chats">${spaces.map(
+          (s) => html`<li><a class="row${s.unread ? ' new' : ''}" href="/ui/c/${s.id}"${current === s.id ? html` aria-current="page"` : ''}>
+            ${avatar(s.name)}
+            <span class="who"><span class="l1"><span class="name">${s.name}</span></span>
+              <span class="l2"><span class="last">${t.meta(s.people, s.public, s.rooms.length)}</span>${s.unread ? html`<span class="badge" aria-label="${copy.chat.unread(s.unread)}">${s.unread}</span>` : ''}</span></span>
+          </a></li>`,
+        )}</ul>`
+      : html`<p class="empty">${t.none}</p>`}
+    <form class="newcircle" method="post" action="/ui/circles/new">
+      <input type="hidden" name="csrf" value="${csrf}" />
+      <input type="text" name="name" maxlength="60" required placeholder="${t.newPlaceholder}" aria-label="${t.newLabel}" />
+      <button class="iconbtn" aria-label="${t.start}" title="${t.start}">${ic('plus')}</button>
+    </form>`;
+}
+
+/**
+ * A circle on the right: its name and rooms on top, the open room's messages, and the bar to write in (or the rules
+ * to accept first, or why the person cannot write now). Hosts get Settings and the reports waiting.
+ */
+function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, reports: number) {
+  const t = copy.circles;
+  const room = space.rooms.find((r) => r.id === roomId)!;
+  const canWrite = !space.mustAccept && !space.timeoutUntil && (!room.announce || space.host);
+  return html`<header class="chathead">
+      <a class="iconbtn back" href="/ui/circles" aria-label="${t.back}">${ic('back')}</a>
+      ${avatar(space.name)}
+      <div class="who"><h1>${space.name}</h1><span>${t.meta(space.people, space.public, space.rooms.length)}</span></div>
+      <nav class="circleacts" aria-label="${t.actions}">
+        ${space.host && reports ? html`<a class="pill warn" href="/ui/c/${space.id}/reports">${t.reports(reports)}</a>` : ''}
+        <a class="iconbtn" href="/ui/c/${space.id}/settings" aria-label="${space.host ? t.settings : t.about}" title="${space.host ? t.settings : t.about}">${ic('more')}</a>
+      </nav>
+    </header>
+    <nav class="roomtabs" aria-label="${t.rooms}">${space.rooms.map(
+      (r) => html`<a href="/ui/c/${space.id}/r/${r.id}"${r.id === roomId ? html` aria-current="page"` : ''}>${r.announce ? ic('pin', 13) : '#'} ${r.name}${r.unread && r.id !== roomId ? html` <span class="badge">${r.unread}</span>` : ''}</a>`,
+    )}</nav>
+    <div class="stream" data-live>
+      ${messages.length
+        ? html`<ol class="thread" aria-label="${room.name}">${messages.map(
+            (m) => html`<li class="msg${m.mine ? ' mine' : ''}${m.deleted ? ' gone' : ''}" id="m-${m.id}">
+              ${m.deleted ? '' : roomMenu(m, space, csrf)}
+              ${m.mine ? '' : html`<span class="m from">${m.from.name}</span>`}
+              <p>${m.deleted ? html`${ic('ban', 15)} ${copy.chat.deleted}` : m.text}</p>
+              <time datetime="${new Date(m.at).toISOString()}">${shortWhen(m.at)}</time>
+            </li>`,
+          )}</ol>`
+        : html`<p class="hint">${room.announce ? t.quietAnnounce : t.quiet}</p>`}
+    </div>
+    ${space.mustAccept
+      ? html`<form class="rulesgate" method="post" action="/ui/c/${space.id}/rules">
+          <input type="hidden" name="csrf" value="${csrf}" /><input type="hidden" name="back" value="${roomId}" />
+          <p class="t">${t.rulesTitle}</p><p class="rules">${space.rules}</p><button class="primary">${t.accept}</button>
+        </form>`
+      : canWrite
+        ? html`<form id="end" class="typebar" method="post" action="/ui/c/${space.id}/r/${roomId}">
+            <input type="hidden" name="csrf" value="${csrf}" />
+            <textarea id="text" name="text" maxlength="2000" required rows="1" placeholder="${t.writeIn(room.name)}" aria-label="${t.writeIn(room.name)}"></textarea>
+            <button class="primary send" aria-label="${copy.chat.send}">${ic('send', 18)}</button>
+          </form>`
+        : html`<p class="cannot">${space.timeoutUntil ? ROOM.timedOut(space.timeoutUntil) : ROOM.announceOnly}</p>`}
+    <script src="/ui/record.js" defer></script>`;
+}
+
+/** A room message's menu: report it (someone else's), delete it (one's own, or any as a host). */
+function roomMenu(m: RoomMessageView, space: CircleSpace, csrf: string) {
+  const t = copy.circles;
+  const del = m.mine || space.host;
+  return html`<details class="msgmenu"><summary aria-label="${copy.chat.options}" title="${copy.chat.options}">${ic('down', 16)}</summary><div class="pop">
+    ${m.mine ? '' : html`<form method="post" action="/ui/rm/${m.id}/report"><input type="hidden" name="csrf" value="${csrf}" /><button>${ic('ban', 16)}<span>${t.report}</span></button></form>`}
+    ${del ? html`<form method="post" action="/ui/rm/${m.id}/delete"><input type="hidden" name="csrf" value="${csrf}" /><button class="danger">${ic('close', 16)}<span>${m.mine ? t.deleteMine : t.deleteAsHost}</span></button></form>` : ''}
+  </div></details>`;
+}
+
+/** A circle's settings for its hosts (rules, slow mode, rooms, members and their roles), or its rules for anyone else. */
+function circleSettings(userId: string, space: CircleSpace, circle: CircleView | undefined, csrf: string, base: string) {
+  const t = copy.circles;
+  const others = circle?.members.filter((m) => m.id !== userId) ?? [];
+  return html`<header class="chathead">
+      <a class="iconbtn back" href="/ui/c/${space.id}" aria-label="${t.backToCircle}">${ic('back')}</a>
+      <div class="who"><h1>${space.host ? t.settings : t.about}</h1><span>${space.name}</span></div>
+    </header>
+    <div class="scroll"><div class="inner settingsform">
+      ${space.host
+        ? html`<form method="post" action="/ui/c/${space.id}/settings" class="stack">
+            <input type="hidden" name="csrf" value="${csrf}" />
+            <label for="rules">${t.rulesLabel}</label>
+            <textarea id="rules" name="rules" maxlength="2000" rows="4" placeholder="${t.rulesPlaceholder}">${space.rules ?? ''}</textarea>
+            <label for="slow">${t.slowLabel}</label>
+            <select id="slow" name="slow">${[0, 10, 30, 60, 300].map((v) => html`<option value="${v}"${space.slowSeconds === v ? html` selected` : ''}>${t.slowOption(v)}</option>`)}</select>
+            <button class="primary">${t.save}</button>
+          </form>
+          <form method="post" action="/ui/c/${space.id}/rooms" class="row2">
+            <input type="hidden" name="csrf" value="${csrf}" />
+            <input type="text" name="name" maxlength="30" required placeholder="${t.roomPlaceholder}" aria-label="${t.roomLabel}" />
+            <label class="m"><input type="checkbox" name="announce" value="1" /> ${t.announceLabel}</label>
+            <button>${t.addRoom}</button>
+          </form>`
+        : html`<p class="t">${t.rulesTitle}</p><p class="rules">${space.rules ?? t.noRules}</p>`}
+      ${circle && (space.host || !circle.public) ? html`<h2>${t.members(space.people)}</h2>
+        <ul class="list">${others.map((m) => html`<li class="item">${avatar(m.displayName)}<div class="main"><span class="t">${m.displayName} <span class="m">@${m.handle}</span></span><span class="m">${m.role === 'owner' ? t.owner : ''}</span></div>
+          ${space.host && m.role !== 'owner'
+            ? html`<div class="acts">
+                ${space.owner ? html`<form method="post" action="/ui/c/${space.id}/members/${m.id}/host"><input type="hidden" name="csrf" value="${csrf}" /><button class="link">${t.toggleHost}</button></form>` : ''}
+                <form method="post" action="/ui/c/${space.id}/members/${m.id}/timeout"><input type="hidden" name="csrf" value="${csrf}" /><select name="minutes" aria-label="${t.timeoutLabel}">${[10, 60, 1440, 0].map((v) => html`<option value="${v}">${t.timeoutOption(v)}</option>`)}</select><button class="link">${t.timeout}</button></form>
+                ${space.owner ? button(`/ui/circles/${space.id}/members/${m.id}/remove`, copy.circle.remove, csrf, 'link') : ''}
+              </div>`
+            : ''}</li>`)}</ul>` : ''}
+      ${space.host || (circle && !circle.public) ? button(`/ui/circles/${space.id}/invites`, copy.circle.invite, csrf, 'primary') : ''}
+    </div></div>`;
+}
+
+/** What waits for a circle's hosts: reported messages, with what to do about each. */
+function reportsPane(space: CircleSpace, reports: RoomReportView[], csrf: string) {
+  const t = copy.circles;
+  return html`<header class="chathead">
+      <a class="iconbtn back" href="/ui/c/${space.id}" aria-label="${t.backToCircle}">${ic('back')}</a>
+      <div class="who"><h1>${t.reportsTitle}</h1><span>${space.name}</span></div>
+    </header>
+    <div class="scroll"><div class="inner">${reports.length
+      ? html`<ul class="list">${reports.map(
+          (r) => html`<li class="item"><div class="main">
+              <span class="t">${r.from.name} <span class="m">@${r.from.handle}</span></span>
+              <span>“${r.text}”</span>
+              <span class="m">${t.reportedBy(r.reporter.name)}${r.reason ? ` · ${r.reason}` : ''}</span>
+            </div>
+            <div class="acts">${button(`/ui/rm/${r.messageId}/delete`, t.deleteAsHost, csrf, 'primary')}${button(`/ui/reports/${r.id}/dismiss`, t.dismiss, csrf)}</div></li>`,
+        )}</ul>`
+      : html`<p class="hint">${t.noReports}</p>`}</div></div>`;
 }
 
 /** The open conversation on the right: who, the messages (the newest at the bottom), and the bar to write in. */
