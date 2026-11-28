@@ -231,6 +231,8 @@ export interface CircleSpace {
   rules: string | null;
   /** The person still has to accept the rules before writing. */
   mustAccept: boolean;
+  /** What the person hears from this circle. */
+  notify: 'all' | 'mentions' | 'none';
   slowSeconds: number;
   /** The person may not write until then (a host's timeout). */
   timeoutUntil: number | null;
@@ -2166,9 +2168,9 @@ export class Klatsch {
   }
 
   private person(circleId: string, userId: string) {
-    return (this.db.prepare('SELECT host, rules_at, timeout_until FROM circle_people WHERE circle_id = ? AND user_id = ?').get(circleId, userId) as
-      | { host: number; rules_at: number | null; timeout_until: number | null }
-      | undefined) ?? { host: 0, rules_at: null, timeout_until: null };
+    return (this.db.prepare('SELECT host, rules_at, timeout_until, notify FROM circle_people WHERE circle_id = ? AND user_id = ?').get(circleId, userId) as
+      | { host: number; rules_at: number | null; timeout_until: number | null; notify: 'all' | 'mentions' | 'none' }
+      | undefined) ?? { host: 0, rules_at: null, timeout_until: null, notify: 'mentions' as const };
   }
 
   /** The owner is always a host; the owner makes others hosts. */
@@ -2181,7 +2183,7 @@ export class Klatsch {
     if (!this.isHost(userId, circleId)) throw new KlatschError('forbidden', ROOM.hostsOnly);
   }
 
-  private setPerson(circleId: string, userId: string, column: 'host' | 'rules_at' | 'timeout_until', value: number | null): void {
+  private setPerson(circleId: string, userId: string, column: 'host' | 'rules_at' | 'timeout_until' | 'notify', value: number | string | null): void {
     this.db.prepare(`INSERT INTO circle_people (circle_id, user_id, ${column}) VALUES (?, ?, ?) ON CONFLICT (circle_id, user_id) DO UPDATE SET ${column} = excluded.${column}`).run(circleId, userId, value);
   }
 
@@ -2238,6 +2240,7 @@ export class Klatsch {
       host,
       rules: row.rules,
       mustAccept: Boolean(row.rules) && me.rules_at === null && !host,
+      notify: me.notify,
       slowSeconds: row.slow_seconds,
       timeoutUntil: me.timeout_until && me.timeout_until > Date.now() ? me.timeout_until : null,
       rooms: rooms.map((r) => ({ id: r.id, name: r.name, announce: r.announce === 1, unread: this.roomUnread(userId, r.id) })),
@@ -2308,6 +2311,18 @@ export class Klatsch {
     this.db.prepare('INSERT INTO room_messages (id, room_id, sender_id, body, created_at) VALUES (?, ?, ?, ?, ?)').run(id, room.id, userId, sealText(this.db, text), now);
     this.db.prepare('INSERT INTO room_reads (room_id, user_id, read_at) VALUES (?, ?, ?) ON CONFLICT (room_id, user_id) DO UPDATE SET read_at = excluded.read_at').run(room.id, userId, now);
     this.audit(userId, 'web', 'room.post', id);
+    // Who hears of it: members who want everything, and those mentioned by @handle who want mentions. Never the words,
+    // and no agent: rooms are not in the agent's inbox.
+    const mentioned = new Set([...text.matchAll(/(?:^|[^\w@])@([a-z0-9][a-z0-9-]{0,38})/gi)].map((m) => m[1]!.toLowerCase()));
+    const members = this.db
+      .prepare(`SELECT u.id, u.handle, coalesce(p.notify, 'mentions') AS notify FROM memberships m JOIN users u ON u.id = m.user_id LEFT JOIN circle_people p ON p.circle_id = m.circle_id AND p.user_id = m.user_id WHERE m.circle_id = ? AND m.user_id != ?`)
+      .all(room.circle_id, userId) as { id: string; handle: string; notify: 'all' | 'mentions' | 'none' }[];
+    for (const m of members) {
+      const isMentioned = mentioned.has(m.handle);
+      if (m.notify === 'none') continue;
+      if (isMentioned) this.notifyUser(m.id, notifications.mention);
+      else if (m.notify === 'all') this.notifyUser(m.id, notifications.room);
+    }
     return id;
   }
 
@@ -2418,6 +2433,13 @@ export class Klatsch {
       }
       this.audit(userId, 'web', 'circle.settings', circleId);
     });
+  }
+
+  /** What the person hears from a circle: everything, only mentions, or nothing. */
+  setCircleNotify(userId: string, circleId: string, notify: string): void {
+    this.spaceRow(userId, circleId);
+    if (notify !== 'all' && notify !== 'mentions' && notify !== 'none') throw new KlatschError('invalid', ROOM.badNotify);
+    this.setPerson(circleId, userId, 'notify', notify);
   }
 
   acceptRules(userId: string, circleId: string): void {

@@ -25,7 +25,7 @@ test('a circle: start it, set rules, add a room, hosts, a pause, a report', asyn
   // Settings: rules and slow mode, a room, Bob a host, Carol paused then let go.
   await g.click(g.page.getByRole('link', { name: 'Circle settings' }));
   await g.page.getByLabel('House rules, shown once to everyone before they write').fill('Be kind. No sales.');
-  await g.click(g.page.getByRole('button', { name: 'Save' }));
+  await g.click(g.page.locator('form', { has: g.page.locator('#rules') }).getByRole('button', { name: 'Save' }));
   await g.page.getByLabel('Name of a new room').fill('abap');
   await g.click(g.page.getByRole('button', { name: 'Add room' }));
   await expect(g.page.getByRole('link', { name: /abap/ })).toBeVisible();
@@ -56,6 +56,11 @@ test('a circle: start it, set rules, add a room, hosts, a pause, a report', asyn
   await message.locator('details.msgmenu > summary').click();
   await c.click(message.getByRole('button', { name: 'Report to the hosts' }));
   await expect(c.page.getByText('Reported. The hosts will look at it.')).toBeVisible();
+  // She hears nothing from this circle any more.
+  await c.open(`${relay.base}/ui/c/${circle}/settings`);
+  await c.page.getByLabel('Notifications from this circle').selectOption('none');
+  await c.click(c.page.locator('form', { has: c.page.locator('#notify') }).getByRole('button', { name: 'Save' }));
+  await expect(c.page.getByLabel('Notifications from this circle')).toHaveValue('none');
 
   // Gizem sees it, keeps it; then deletes her own message.
   await g.open(`${relay.base}/ui/c/${circle}`);

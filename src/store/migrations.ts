@@ -834,4 +834,8 @@ export const migrations: string[] = [
   CREATE INDEX room_files_by_message ON room_files (message_id);
   CREATE INDEX room_files_by_user ON room_files (user_id, created_at);
   `,
+  // What a member hears from a circle: everything, only when mentioned (the default), or nothing.
+  `
+  ALTER TABLE circle_people ADD COLUMN notify TEXT NOT NULL DEFAULT 'mentions' CHECK (notify IN ('all', 'mentions', 'none'));
+  `,
 ];

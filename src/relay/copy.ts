@@ -704,6 +704,8 @@ export const copy = {
     dismiss: 'Keep it',
     noReports: 'Nothing reported. All calm.',
     reported: 'Reported. The hosts will look at it.',
+    notifyLabel: 'Notifications from this circle',
+    notifyOption: { all: 'Everything', mentions: 'Only when someone @mentions me', none: 'Nothing' },
   },
 
   /** "Try it without an account": a guest for a few hours whose only friend is the demo friend. */

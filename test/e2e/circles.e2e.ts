@@ -129,6 +129,23 @@ describe('circles: rooms, hosts, rules and reports', () => {
     assert.match((await danB.upload(`/ui/c/${circle}/r/${general}`, [{ name: 'map.png', bytes: PNG, type: 'image/png' }], { text: 'Hi' })).html, /files can be shared after your first day/);
   });
 
+  it('an @mention marks the name and tells that member; each member chooses what they hear', async () => {
+    const before = relay.notifications.length;
+    relay.klatsch.postRoomMessage(bob, general, 'Hey @carol, see <b>this</b>?');
+    const told = relay.notifications.slice(before);
+    assert.deepEqual(told, ['@carol: ☕ Someone mentioned you in a circle.'], 'only Carol, and never the words');
+    const page = (await carolB.get(`/ui/c/${circle}/r/${general}`)).html;
+    assert.match(page, /Hey <b class="at me">@carol<\/b>, see &lt;b&gt;this&lt;\/b&gt;\?/);
+    // Gizem wants everything; Carol nothing.
+    assert.equal((await gizemB.post(`/ui/c/${circle}/notify`, { notify: 'all' })).status, 303);
+    assert.equal((await carolB.post(`/ui/c/${circle}/notify`, { notify: 'none' })).status, 303);
+    const next = relay.notifications.length;
+    relay.klatsch.postRoomMessage(bob, general, 'Ping @carol again');
+    assert.deepEqual(relay.notifications.slice(next), ['@gizem: ☕ Something new in one of your circles.']);
+    assert.match((await carolB.get(`/ui/c/${circle}/settings`)).html, /<option value="none" selected>Nothing<\/option>/);
+    assert.ok((await carolB.post(`/ui/c/${circle}/notify`, { notify: 'loud' })).status >= 400);
+  });
+
   it('nobody outside a circle sees into it; guests start none; friendships stay in Chats', async () => {
     assert.equal((await frankB.get(`/ui/c/${circle}/r/${general}`)).status, 404);
     assert.ok((await frankB.post(`/ui/c/${circle}/r/${general}`, { text: 'Hi' })).status >= 400);

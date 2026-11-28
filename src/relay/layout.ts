@@ -347,6 +347,9 @@ form.newcircle input:focus-visible { outline: none; }
 .roomtabs a:hover { background: var(--sunk); text-decoration: none; }
 .roomtabs a[aria-current="page"] { background: var(--sunk); color: var(--fg); font-weight: 500; }
 .mess .msg .from { font-weight: 600; color: var(--accent-text); }
+.mess .msg b.at { font-weight: 600; color: var(--accent-text); }
+.mess .msg.mine b.at { color: #FFFFFF; text-decoration: underline; }
+.mess .msg b.at.me { background: var(--accent-soft); border-radius: 4px; padding: 0 3px; }
 .rulesgate { display: grid; gap: 8px; padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
 .rulesgate .rules, .settingsform .rules { white-space: pre-wrap; color: var(--muted); font-size: 14px; }
 .rulesgate button { justify-self: start; }

@@ -2363,7 +2363,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       const messages = klatsch.roomMessages(userId, c.req.param('room'));
       const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
       c.header('Content-Security-Policy', CHAT_CSP);
-      return c.html(messenger(space.name, circlesSide(c, space.id), roomPane(klatsch.space(userId, space.id), c.req.param('room'), messages, c.get('csrf'), reports), true));
+      return c.html(messenger(space.name, circlesSide(c, space.id), roomPane(klatsch.space(userId, space.id), c.req.param('room'), messages, c.get('csrf'), reports, klatsch.user(userId).handle), true));
     } catch (error) {
       return notMine(c, error);
     }
@@ -2422,6 +2422,11 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       back,
       () => c.redirect(back, 303),
     );
+  });
+  web.post('/c/:id/notify', async (c) => {
+    const notify = (await c.req.parseBody()).notify;
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(c, () => klatsch.setCircleNotify(c.get('userId'), c.req.param('id'), typeof notify === 'string' ? notify : ''), back, () => c.redirect(back, 303));
   });
   web.post('/c/:id/rooms', async (c) => {
     const form = await c.req.parseBody();
@@ -2833,7 +2838,7 @@ function circleList(spaces: (CircleSpace & { unread: number })[], csrf: string, 
  * A circle on the right: its name and rooms on top, the open room's messages, and the bar to write in (or the rules
  * to accept first, or why the person cannot write now). Hosts get Settings and the reports waiting.
  */
-function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, reports: number) {
+function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, reports: number, me = '') {
   const t = copy.circles;
   const room = space.rooms.find((r) => r.id === roomId)!;
   const canWrite = !space.mustAccept && !space.timeoutUntil && (!room.announce || space.host);
@@ -2855,7 +2860,7 @@ function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[
             (m) => html`<li class="msg${m.mine ? ' mine' : ''}${m.deleted ? ' gone' : ''}" id="m-${m.id}">
               ${m.deleted ? '' : roomMenu(m, space, csrf)}
               ${m.mine ? '' : html`<span class="m from">${m.from.name}</span>`}
-              <p>${m.deleted ? html`${ic('ban', 15)} ${copy.chat.deleted}` : m.text}</p>
+              <p>${m.deleted ? html`${ic('ban', 15)} ${copy.chat.deleted}` : withMentions(m.text, me)}</p>
               ${fileLinks(m.files)}
               <time datetime="${new Date(m.at).toISOString()}">${shortWhen(m.at)}</time>
             </li>`,
@@ -2878,6 +2883,12 @@ function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[
           </form>`
         : html`<p class="cannot">${space.timeoutUntil ? ROOM.timedOut(space.timeoutUntil) : ROOM.announceOnly}</p>`}
     <script src="/ui/record.js" defer></script>`;
+}
+
+/** A room message's text with @handles marked, and the person's own handle marked stronger. Everything stays escaped. */
+function withMentions(text: string, me: string) {
+  const parts = text.split(/((?:^|(?<=[^\w@]))@[a-z0-9][a-z0-9-]{0,38})/gi);
+  return parts.map((part) => (/^@[a-z0-9]/i.test(part) ? html`<b class="at${part.slice(1).toLowerCase() === me ? ' me' : ''}">${part}</b>` : part));
 }
 
 /** Files under a message: voice notes play where they are, other files open. */
@@ -2925,6 +2936,12 @@ function circleSettings(userId: string, space: CircleSpace, circle: CircleView |
       <div class="who"><h1>${space.host ? t.settings : t.about}</h1><span>${space.name}</span></div>
     </header>
     <div class="scroll"><div class="inner settingsform">
+      <form method="post" action="/ui/c/${space.id}/notify" class="stack">
+        <input type="hidden" name="csrf" value="${csrf}" />
+        <label for="notify">${t.notifyLabel}</label>
+        <select id="notify" name="notify">${(['all', 'mentions', 'none'] as const).map((v) => html`<option value="${v}"${space.notify === v ? html` selected` : ''}>${t.notifyOption[v]}</option>`)}</select>
+        <button>${t.save}</button>
+      </form>
       ${space.host
         ? html`<form method="post" action="/ui/c/${space.id}/settings" class="stack">
             <input type="hidden" name="csrf" value="${csrf}" />
