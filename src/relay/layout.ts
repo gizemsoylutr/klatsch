@@ -375,6 +375,8 @@ ul.questions, ul.answers { list-style: none; padding: 0; margin: 0; display: gri
 ul.questions a { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--sunk); color: var(--fg); }
 ul.questions a:hover { text-decoration: none; filter: brightness(1.05); }
 ul.questions .qt { font-weight: 600; }
+ul.questions li.listed { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: 14px; background: var(--sunk); }
+ul.questions li.listed > div { display: grid; gap: 3px; }
 b.solvedtag, p.solvedtag { color: var(--good); font-weight: 600; font-size: inherit; }
 p.solvedtag { font-size: 13px; }
 .question article.q h2 { font: 700 24px/1.2 var(--display); letter-spacing: -0.015em; }
@@ -633,6 +635,7 @@ export const ICON_PATHS = {
   down: '<path d="m6 9 6 6 6-6"/>',
   reply: '<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
   close: '<path d="M18 6 6 18M6 6l12 12"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
 } as const;
 export type IconName = keyof typeof ICON_PATHS;
 /** One icon, hidden from screen readers (the button or link around it carries the words). */

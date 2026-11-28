@@ -233,6 +233,9 @@ export interface CircleSpace {
   mustAccept: boolean;
   /** What the person hears from this circle. */
   notify: 'all' | 'mentions' | 'none';
+  /** Listed in Explore by its owner, with a line about it. */
+  listed: boolean;
+  about: string | null;
   slowSeconds: number;
   /** The person may not write until then (a host's timeout). */
   timeoutUntil: number | null;
@@ -265,6 +268,8 @@ export interface QuestionSummary {
   mine: boolean;
   answers: number;
   solved: boolean;
+  /** One of the circle's Picks. */
+  picked: boolean;
   at: number;
 }
 export interface AnswerView {
@@ -282,6 +287,21 @@ export interface QuestionView extends QuestionSummary {
   body: string | null;
   answerList: AnswerView[];
   canDelete: boolean;
+}
+/** A circle listed in Explore, as someone outside it sees it. */
+export interface ListedCircle {
+  id: string;
+  name: string;
+  about: string | null;
+  people: number;
+  /** The person asked to join and waits. */
+  asked: boolean;
+}
+export interface JoinRequestView {
+  userId: string;
+  name: string;
+  handle: string;
+  at: number;
 }
 /** A message the person starred, for their own list of starred messages. */
 export interface StarredView {
@@ -2191,8 +2211,8 @@ export class Klatsch {
   /** The circle for someone in it, not a friendship (those are Chats); anyone else gets "not found". */
   private spaceRow(userId: string, circleId: string) {
     const role = this.memberRole(userId, circleId);
-    const row = this.db.prepare('SELECT id, name, pair, ended_at, rules, slow_seconds, public FROM circles WHERE id = ?').get(circleId) as
-      | { id: string; name: string; pair: number; ended_at: number | null; rules: string | null; slow_seconds: number; public: number }
+    const row = this.db.prepare('SELECT id, name, pair, ended_at, rules, slow_seconds, public, listed, about FROM circles WHERE id = ?').get(circleId) as
+      | { id: string; name: string; pair: number; ended_at: number | null; rules: string | null; slow_seconds: number; public: number; listed: number; about: string | null }
       | undefined;
     if (!role || !row || row.pair || row.ended_at !== null) throw new KlatschError('not-found', ROOM.noCircle);
     return { ...row, role };
@@ -2272,6 +2292,8 @@ export class Klatsch {
       rules: row.rules,
       mustAccept: Boolean(row.rules) && me.rules_at === null && !host,
       notify: me.notify,
+      listed: row.listed === 1,
+      about: row.about,
       slowSeconds: row.slow_seconds,
       timeoutUntil: me.timeout_until && me.timeout_until > Date.now() ? me.timeout_until : null,
       rooms: rooms.map((r) => ({ id: r.id, name: r.name, announce: r.announce === 1, unread: this.roomUnread(userId, r.id) })),
@@ -2524,8 +2546,8 @@ export class Klatsch {
   }
 
   private questionRow(userId: string, questionId: string) {
-    const row = this.db.prepare('SELECT id, circle_id, author_id, title, body, created_at, solved_by FROM questions WHERE id = ? AND deleted_at IS NULL').get(questionId) as
-      | { id: string; circle_id: string; author_id: string; title: string; body: string | null; created_at: number; solved_by: string | null }
+    const row = this.db.prepare('SELECT id, circle_id, author_id, title, body, created_at, solved_by, picked_at FROM questions WHERE id = ? AND deleted_at IS NULL').get(questionId) as
+      | { id: string; circle_id: string; author_id: string; title: string; body: string | null; created_at: number; solved_by: string | null; picked_at: number | null }
       | undefined;
     if (!row) throw new KlatschError('not-found', ASKAROUND.gone);
     this.spaceRow(userId, row.circle_id);
@@ -2533,20 +2555,20 @@ export class Klatsch {
   }
 
   /** A circle's questions, newest first; `state` open or answered; `q` matches words in the title. */
-  questionsOf(userId: string, circleId: string, options: { state?: 'open' | 'answered'; q?: string } = {}): QuestionSummary[] {
+  questionsOf(userId: string, circleId: string, options: { state?: 'open' | 'answered' | 'picks'; q?: string } = {}): QuestionSummary[] {
     this.spaceRow(userId, circleId);
     const rows = this.db
       .prepare(
-        `SELECT q.id, q.title, q.author_id, q.created_at, q.solved_by, u.handle, u.display_name,
+        `SELECT q.id, q.title, q.author_id, q.created_at, q.solved_by, q.picked_at, u.handle, u.display_name,
            (SELECT count(*) FROM answers a WHERE a.question_id = q.id AND a.deleted_at IS NULL) AS answers
          FROM questions q JOIN users u ON u.id = q.author_id WHERE q.circle_id = ? AND q.deleted_at IS NULL ORDER BY q.created_at DESC LIMIT 300`,
       )
-      .all(circleId) as { id: string; title: string; author_id: string; created_at: number; solved_by: string | null; handle: string; display_name: string; answers: number }[];
+      .all(circleId) as { id: string; title: string; author_id: string; created_at: number; solved_by: string | null; picked_at: number | null; handle: string; display_name: string; answers: number }[];
     // The words are sealed: a search reads them here, never in the database.
     const words = (options.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
     return rows
-      .map((r) => ({ id: r.id, title: r.title, author: { name: r.display_name, handle: r.handle }, mine: r.author_id === userId, answers: r.answers, solved: r.solved_by !== null, at: r.created_at }))
-      .filter((q) => (options.state === 'open' ? !q.solved : options.state === 'answered' ? q.solved : true))
+      .map((r) => ({ id: r.id, title: r.title, author: { name: r.display_name, handle: r.handle }, mine: r.author_id === userId, answers: r.answers, solved: r.solved_by !== null, picked: r.picked_at !== null, at: r.created_at }))
+      .filter((q) => (options.state === 'open' ? !q.solved : options.state === 'answered' ? q.solved : options.state === 'picks' ? q.picked : true))
       .filter((q) => words.every((w) => q.title.toLowerCase().includes(w)));
   }
 
@@ -2574,6 +2596,7 @@ export class Klatsch {
       mine: row.author_id === userId,
       answers: list.length,
       solved: row.solved_by !== null,
+      picked: row.picked_at !== null,
       at: row.created_at,
       answerList: list,
       canDelete: row.author_id === userId || this.isHost(userId, row.circle_id),
@@ -2643,6 +2666,85 @@ export class Klatsch {
       this.audit(userId, 'web', row.author_id === userId ? 'answer.delete' : 'answer.moderate.delete', answerId);
     });
     return row.question_id;
+  }
+
+  /** Hosts add a question to the circle's Picks, or take it out. Returns the question. */
+  pickQuestion(userId: string, questionId: string, on: boolean): string {
+    const row = this.questionRow(userId, questionId);
+    this.refuseNonHost(userId, row.circle_id);
+    this.db.prepare('UPDATE questions SET picked_at = ? WHERE id = ?').run(on ? Date.now() : null, questionId);
+    this.audit(userId, 'web', on ? 'question.pick' : 'question.unpick', questionId);
+    return questionId;
+  }
+
+  /** The owner lists the circle in Explore with a line about it, or takes it out. Never a friendship or a public circle. */
+  setListing(userId: string, circleId: string, listed: boolean, about: string): void {
+    const row = this.spaceRow(userId, circleId);
+    if (row.role !== 'owner') throw new KlatschError('forbidden', ROOM.ownerOnly);
+    const line = about.replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (line) refuseHidden(line);
+    if (listed && !line) throw new KlatschError('invalid', ROOM.aboutNeeded);
+    this.db.prepare('UPDATE circles SET listed = ?, about = ? WHERE id = ?').run(listed ? 1 : 0, line ? sealText(this.db, line) : null, circleId);
+    this.audit(userId, 'web', listed ? 'circle.list' : 'circle.unlist', circleId);
+  }
+
+  /** Explore: circles their owners listed, that the person is not in and was not removed from; `q` matches name or line. */
+  explore(userId: string, q = ''): ListedCircle[] {
+    if (this.isGuest(userId)) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.name, c.about, (SELECT count(*) FROM memberships m WHERE m.circle_id = c.id) AS people,
+           EXISTS (SELECT 1 FROM join_requests r WHERE r.circle_id = c.id AND r.user_id = ? AND r.decided_at IS NULL) AS asked
+         FROM circles c WHERE c.listed = 1 AND c.pair = 0 AND c.ended_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.circle_id = c.id AND m.user_id = ?)
+           AND NOT EXISTS (SELECT 1 FROM removals x WHERE x.circle_id = c.id AND x.user_id = ?)
+         ORDER BY people DESC, c.created_at LIMIT 200`,
+      )
+      .all(userId, userId, userId) as { id: string; name: string; about: string | null; people: number; asked: number }[];
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    return rows
+      .map((r) => ({ id: r.id, name: r.name, about: r.about, people: r.people, asked: r.asked === 1 }))
+      .filter((c) => words.every((w) => `${c.name} ${c.about ?? ''}`.toLowerCase().includes(w)));
+  }
+
+  /** Asks to join a listed circle; its hosts decide. Not a guest, not someone removed, at most 20 a day. */
+  requestToJoin(userId: string, circleId: string): void {
+    if (this.isGuest(userId)) throw new KlatschError('forbidden', GUEST.guestsOnly);
+    const listed = this.db.prepare('SELECT 1 FROM circles WHERE id = ? AND listed = 1 AND pair = 0 AND ended_at IS NULL').get(circleId);
+    if (!listed || this.memberRole(userId, circleId) || this.isRemoved(userId, circleId)) throw new KlatschError('not-found', ROOM.noCircle);
+    const today = (this.db.prepare('SELECT count(*) AS n FROM join_requests WHERE user_id = ? AND created_at > ?').get(userId, Date.now() - DAY) as { n: number }).n;
+    if (today >= 20) throw new KlatschError('forbidden', ROOM.tooManyRequests);
+    this.db
+      .prepare('INSERT INTO join_requests (circle_id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT (circle_id, user_id) DO UPDATE SET created_at = excluded.created_at, decided_at = NULL, accepted = NULL')
+      .run(circleId, userId, Date.now());
+    const hosts = this.db.prepare(`SELECT user_id FROM memberships WHERE circle_id = ? AND role = 'owner' UNION SELECT user_id FROM circle_people WHERE circle_id = ? AND host = 1`).all(circleId, circleId) as { user_id: string }[];
+    for (const h of hosts) this.notifyUser(h.user_id, notifications.joinRequest);
+    this.audit(userId, 'web', 'circle.request', circleId);
+  }
+
+  /** Waiting requests to join, for the circle's hosts. */
+  joinRequests(userId: string, circleId: string): JoinRequestView[] {
+    this.spaceRow(userId, circleId);
+    this.refuseNonHost(userId, circleId);
+    return (
+      this.db
+        .prepare('SELECT r.user_id, r.created_at, u.handle, u.display_name FROM join_requests r JOIN users u ON u.id = r.user_id WHERE r.circle_id = ? AND r.decided_at IS NULL ORDER BY r.created_at')
+        .all(circleId) as { user_id: string; created_at: number; handle: string; display_name: string }[]
+    ).map((r) => ({ userId: r.user_id, name: r.display_name, handle: r.handle, at: r.created_at }));
+  }
+
+  /** A host lets someone in, or not; they hear which, without more. */
+  decideJoin(userId: string, circleId: string, requesterId: string, accept: boolean): void {
+    this.spaceRow(userId, circleId);
+    this.refuseNonHost(userId, circleId);
+    const waiting = this.db.prepare('SELECT 1 FROM join_requests WHERE circle_id = ? AND user_id = ? AND decided_at IS NULL').get(circleId, requesterId);
+    if (!waiting) throw new KlatschError('not-found', ROOM.noRequest);
+    transaction(this.db, () => {
+      this.db.prepare('UPDATE join_requests SET decided_at = ?, accepted = ? WHERE circle_id = ? AND user_id = ?').run(Date.now(), accept ? 1 : 0, circleId, requesterId);
+      if (accept && !this.memberRole(requesterId, circleId)) this.addMember(circleId, requesterId, userId);
+      this.audit(userId, 'web', accept ? 'circle.request.accept' : 'circle.request.decline', circleId);
+    });
+    this.notifyUser(requesterId, accept ? notifications.joinAccepted : notifications.joinDeclined);
   }
 
   /** Room messages go after the same 90 days as messages between friends. */

@@ -704,6 +704,7 @@ export const copy = {
     dismiss: 'Keep it',
     noReports: 'Nothing reported. All calm.',
     reported: 'Reported. The hosts will look at it.',
+    requests: (n: number) => (n === 1 ? '1 wants to join' : `${n} want to join`),
     notifyLabel: 'Notifications from this circle',
     notifyOption: { all: 'Everything', mentions: 'Only when someone @mentions me', none: 'Nothing' },
   },
@@ -737,6 +738,25 @@ export const copy = {
     answerLabel: 'Your answer',
     answerPlaceholder: 'Write an answer…',
     answer: 'Answer',
+    picks: 'Picks',
+    picked: 'pick',
+    pick: 'Add to Picks',
+    unpick: 'Take out of Picks',
+  },
+
+  /** Explore: circles listed by their owners; asking to join. */
+  explore: {
+    title: 'Explore circles',
+    sub: 'Listed by their owners. Ask to join; the hosts decide.',
+    search: 'Search circles',
+    none: 'No circles listed yet.',
+    ask: 'Ask to join',
+    asked: 'Asked: the hosts decide',
+    listLabel: 'List this circle in Explore (people ask to join; hosts decide)',
+    aboutLabel: 'A line about the circle',
+    aboutPlaceholder: 'What this circle is about, in one line',
+    accept: 'Let in',
+    decline: 'Not now',
   },
 
   /** "Try it without an account": a guest for a few hours whose only friend is the demo friend. */

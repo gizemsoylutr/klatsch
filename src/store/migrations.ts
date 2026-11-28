@@ -868,4 +868,19 @@ export const migrations: string[] = [
     PRIMARY KEY (answer_id, user_id)
   );
   `,
+  // Explore: an owner lists a circle with a line about it; people ask to join and its hosts decide. Picks: questions
+  // the hosts chose as the circle's best.
+  `
+  ALTER TABLE circles ADD COLUMN listed INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE circles ADD COLUMN about TEXT;
+  ALTER TABLE questions ADD COLUMN picked_at INTEGER;
+  CREATE TABLE join_requests (
+    circle_id TEXT NOT NULL REFERENCES circles(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER,
+    accepted INTEGER,
+    PRIMARY KEY (circle_id, user_id)
+  );
+  `,
 ];

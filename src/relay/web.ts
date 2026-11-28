@@ -34,6 +34,7 @@ import {
   type CircleSpace,
   type QuestionSummary,
   type QuestionView,
+  type JoinRequestView,
   type RoomMessageView,
   type RoomReportView,
   type NoteView,
@@ -2331,6 +2332,9 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const userId = c.get('userId');
     return chatSide(klatsch.conversationsOf(userId), klatsch.asksOf(userId), c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto', { spaces: klatsch.spacesOf(userId), current });
   };
+  /** What waits for a circle's hosts: reports and requests to join. */
+  const waitingFor = (userId: string, space: CircleSpace): Waiting =>
+    space.host ? { reports: klatsch.roomReports(userId, space.id).length, requests: klatsch.joinRequests(userId, space.id).length } : { reports: 0, requests: 0 };
   /** Where a room is, for going back to it after an action. */
   const roomPath = (roomId: string) => {
     const room = db.prepare('SELECT circle_id FROM rooms WHERE id = ?').get(roomId) as { circle_id: string } | undefined;
@@ -2363,9 +2367,8 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       const space = klatsch.space(userId, c.req.param('id'));
       if (!space.rooms.some((r) => r.id === c.req.param('room'))) throw new KlatschError('not-found', ROOM.noCircle);
       const messages = klatsch.roomMessages(userId, c.req.param('room'));
-      const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
       c.header('Content-Security-Policy', CHAT_CSP);
-      return c.html(messenger(space.name, circlesSide(c, space.id), roomPane(klatsch.space(userId, space.id), c.req.param('room'), messages, c.get('csrf'), reports, klatsch.user(userId).handle), true));
+      return c.html(messenger(space.name, circlesSide(c, space.id), roomPane(klatsch.space(userId, space.id), c.req.param('room'), messages, c.get('csrf'), waitingFor(userId, space), klatsch.user(userId).handle), true));
     } catch (error) {
       return notMine(c, error);
     }
@@ -2410,11 +2413,11 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     const userId = c.get('userId');
     try {
       const space = klatsch.space(userId, c.req.param('id'));
-      const state = c.req.query('state') === 'open' || c.req.query('state') === 'answered' ? (c.req.query('state') as 'open' | 'answered') : '';
+      const asked = c.req.query('state');
+      const state = asked === 'open' || asked === 'answered' || asked === 'picks' ? asked : '';
       const q = (c.req.query('q') ?? '').slice(0, 100);
       const list = klatsch.questionsOf(userId, space.id, { ...(state ? { state } : {}), q });
-      const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
-      return c.html(messenger(space.name, circlesSide(c, space.id), askList(space, list, state, q, c.get('csrf'), reports), true));
+      return c.html(messenger(space.name, circlesSide(c, space.id), askList(space, list, state, q, c.get('csrf'), waitingFor(userId, space)), true));
     } catch (error) {
       return notMine(c, error);
     }
@@ -2434,8 +2437,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
     try {
       const x = klatsch.question(userId, c.req.param('id'));
       const space = klatsch.space(userId, x.circleId);
-      const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
-      return c.html(messenger(x.title, circlesSide(c, space.id), questionPane(space, x, c.get('csrf'), reports), true));
+      return c.html(messenger(x.title, circlesSide(c, space.id), questionPane(space, x, c.get('csrf'), waitingFor(userId, space)), true));
     } catch (error) {
       return notMine(c, error);
     }
@@ -2459,12 +2461,53 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
   web.post('/a/:id/helped', (c) => toAnswer(c, (u, id) => klatsch.helpedToo(u, id)));
   web.post('/a/:id/delete', (c) => toAnswer(c, (u, id) => klatsch.deleteAnswer(u, id)));
 
+  // Explore: circles their owners listed; asking to join; the owner's listing; hosts deciding; Picks.
+  web.get('/explore', (c) => {
+    const userId = c.get('userId');
+    const q = (c.req.query('q') ?? '').slice(0, 100);
+    const t = copy.explore;
+    const list = klatsch.explore(userId, q);
+    return c.html(
+      messenger(
+        t.title,
+        circlesSide(c),
+        html`<header class="chathead"><a class="iconbtn back" href="/ui/circles" aria-label="${copy.circles.back}">${ic('back')}</a><div class="who"><h1>${t.title}</h1><span>${t.sub}</span></div></header>
+          <div class="scroll"><div class="inner asklist">
+            <form method="get" action="/ui/explore" class="search"><input type="search" name="q" value="${q}" placeholder="${t.search}" aria-label="${t.search}" /></form>
+            ${list.length
+              ? html`<ul class="questions">${list.map(
+                  (x) => html`<li class="listed"><div><span class="qt">${x.name}</span><span class="m">${x.about ?? ''}</span><span class="m">${copy.circles.members(x.people)}</span></div>
+                    ${x.asked ? html`<span class="m">${t.asked}</span>` : button(`/ui/explore/${x.id}/join`, t.ask, c.get('csrf'), 'primary')}</li>`,
+                )}</ul>`
+              : html`<p class="hint">${q ? copy.askAround.noMatch : t.none}</p>`}
+          </div></div>`,
+        true,
+      ),
+    );
+  });
+  web.post('/explore/:id/join', (c) => attempt(c, () => klatsch.requestToJoin(c.get('userId'), c.req.param('id')), '/ui/explore', () => c.redirect('/ui/explore', 303)));
+  web.post('/c/:id/listing', async (c) => {
+    const form = await c.req.parseBody();
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(c, () => klatsch.setListing(c.get('userId'), c.req.param('id'), form.listed === '1', typeof form.about === 'string' ? form.about : ''), back, () => c.redirect(back, 303));
+  });
+  web.post('/c/:id/requests/:user/accept', (c) => {
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(c, () => klatsch.decideJoin(c.get('userId'), c.req.param('id'), c.req.param('user'), true), back, () => c.redirect(back, 303));
+  });
+  web.post('/c/:id/requests/:user/decline', (c) => {
+    const back = `/ui/c/${c.req.param('id')}/settings`;
+    return attempt(c, () => klatsch.decideJoin(c.get('userId'), c.req.param('id'), c.req.param('user'), false), back, () => c.redirect(back, 303));
+  });
+  web.post('/q/:id/pick', (c) => attempt(c, () => void klatsch.pickQuestion(c.get('userId'), c.req.param('id'), true), `/ui/q/${c.req.param('id')}`, () => c.redirect(`/ui/q/${c.req.param('id')}`, 303)));
+  web.post('/q/:id/unpick', (c) => attempt(c, () => void klatsch.pickQuestion(c.get('userId'), c.req.param('id'), false), `/ui/q/${c.req.param('id')}`, () => c.redirect(`/ui/q/${c.req.param('id')}`, 303)));
+
   web.get('/c/:id/settings', (c) => {
     const userId = c.get('userId');
     try {
       const space = klatsch.space(userId, c.req.param('id'));
       const circle = klatsch.circlesOf(userId).find((x) => x.id === space.id);
-      return c.html(messenger(space.name, circlesSide(c, space.id), circleSettings(userId, space, circle, c.get('csrf'), base(c)), true));
+      return c.html(messenger(space.name, circlesSide(c, space.id), circleSettings(userId, space, circle, c.get('csrf'), base(c), space.host ? klatsch.joinRequests(userId, space.id) : []), true));
     } catch (error) {
       return notMine(c, error);
     }
@@ -2591,6 +2634,9 @@ function notice(title: string, body: unknown, muted = true) {
 }
 
 const homeLink = html`<p><a href="/ui">${copy.layout.home}</a></p>`;
+
+/** What waits for a circle's hosts, shown in its head. */
+type Waiting = { reports: number; requests: number };
 
 /**
  * "Brew a reply", with one optional line on what to say ("yes, 9 is fine, keep it short"): the line goes to the
@@ -2819,7 +2865,7 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
       <a href="/ui/circles"${circles ? html` aria-current="page"` : ''}>${copy.circles.tab}</a>
     </nav>
     ${circles
-      ? html`<a class="peoplelink" href="/ui/circle">${ic('plus', 16)} ${copy.circle.title}</a>${circleList(circles.spaces, csrf, circles.current)}`
+      ? html`<a class="peoplelink" href="/ui/explore">${ic('search', 16)} ${copy.explore.title}</a><a class="peoplelink" href="/ui/circle">${ic('plus', 16)} ${copy.circle.title}</a>${circleList(circles.spaces, csrf, circles.current)}`
       : conversations.length
       ? html`<ul class="chats">${conversations.map((x) => {
           const ask = asking.get(x.other.handle);
@@ -2891,14 +2937,15 @@ function circleList(spaces: (CircleSpace & { unread: number })[], csrf: string, 
 }
 
 /** A circle's head: back, its name, the reports waiting (hosts), settings; then Ask around and the rooms. */
-function circleHead(space: CircleSpace, reports: number, current: string) {
+function circleHead(space: CircleSpace, waiting: Waiting, current: string) {
   const t = copy.circles;
   return html`<header class="chathead">
       <a class="iconbtn back" href="/ui/circles" aria-label="${t.back}">${ic('back')}</a>
       ${avatar(space.name)}
       <div class="who"><h1>${space.name}</h1><span>${t.meta(space.people, space.public, space.rooms.length)}</span></div>
       <nav class="circleacts" aria-label="${t.actions}">
-        ${space.host && reports ? html`<a class="pill warn" href="/ui/c/${space.id}/reports">${t.reports(reports)}</a>` : ''}
+        ${space.host && waiting.reports ? html`<a class="pill warn" href="/ui/c/${space.id}/reports">${t.reports(waiting.reports)}</a>` : ''}
+        ${space.host && waiting.requests ? html`<a class="pill warn" href="/ui/c/${space.id}/settings#requests">${t.requests(waiting.requests)}</a>` : ''}
         <a class="iconbtn" href="/ui/c/${space.id}/settings" aria-label="${space.host ? t.settings : t.about}" title="${space.host ? t.settings : t.about}">${ic('more')}</a>
       </nav>
     </header>
@@ -2911,11 +2958,11 @@ function circleHead(space: CircleSpace, reports: number, current: string) {
 }
 
 /** Ask around: ask the circle anything, the questions with their state, and a search. */
-function askList(space: CircleSpace, questions: QuestionSummary[], state: string, q: string, csrf: string, reports: number) {
+function askList(space: CircleSpace, questions: QuestionSummary[], state: string, q: string, csrf: string, waiting: Waiting) {
   const t = copy.askAround;
   const can = !space.mustAccept && !space.timeoutUntil;
   const filter = (value: string, label: string) => html`<a href="/ui/c/${space.id}/ask${value ? `?state=${value}` : ''}"${state === value ? html` aria-current="page"` : ''}>${label}</a>`;
-  return html`${circleHead(space, reports, 'ask')}
+  return html`${circleHead(space, waiting, 'ask')}
     <div class="scroll"><div class="inner asklist">
       ${can
         ? html`<form class="askform" method="post" action="/ui/c/${space.id}/ask">
@@ -2926,14 +2973,14 @@ function askList(space: CircleSpace, questions: QuestionSummary[], state: string
           </form>`
         : html`<p class="hint">${space.mustAccept ? ROOM.acceptRules : ROOM.timedOut(space.timeoutUntil!)}</p>`}
       <div class="askbar">
-        <nav class="filters" aria-label="${t.filter}">${filter('', t.all)}${filter('open', t.open)}${filter('answered', t.answered)}</nav>
+        <nav class="filters" aria-label="${t.filter}">${filter('', t.all)}${filter('open', t.open)}${filter('answered', t.answered)}${filter('picks', t.picks)}</nav>
         <form method="get" action="/ui/c/${space.id}/ask" class="search">${state ? html`<input type="hidden" name="state" value="${state}" />` : ''}<input type="search" name="q" value="${q}" placeholder="${t.search}" aria-label="${t.search}" /></form>
       </div>
       ${questions.length
         ? html`<ul class="questions">${questions.map(
             (x) => html`<li><a href="/ui/q/${x.id}">
               <span class="qt">${x.title}</span>
-              <span class="m">${x.author.name} · ${t.answers(x.answers)}${x.solved ? html` · <b class="solvedtag">${t.solvedTag}</b>` : ''} · ${shortWhen(x.at)}</span>
+              <span class="m">${x.author.name} · ${t.answers(x.answers)}${x.solved ? html` · <b class="solvedtag">${t.solvedTag}</b>` : ''}${x.picked ? html` · ${ic('star', 12)} ${t.picked}` : ''} · ${shortWhen(x.at)}</span>
             </a></li>`,
           )}</ul>`
         : html`<p class="hint">${q || state ? t.noMatch : t.none}</p>`}
@@ -2941,18 +2988,18 @@ function askList(space: CircleSpace, questions: QuestionSummary[], state: string
 }
 
 /** One question: what was asked, its answers (what solved it first), and the box to answer. */
-function questionPane(space: CircleSpace, x: QuestionView, csrf: string, reports: number) {
+function questionPane(space: CircleSpace, x: QuestionView, csrf: string, waiting: Waiting) {
   const t = copy.askAround;
   const can = !space.mustAccept && !space.timeoutUntil;
   const post = (action: string, label: string, kind?: 'primary' | 'link') => button(action, label, csrf, kind);
-  return html`${circleHead(space, reports, 'ask')}
+  return html`${circleHead(space, waiting, 'ask')}
     <div class="scroll"><div class="inner question">
       <p><a href="/ui/c/${space.id}/ask">${ic('back', 14)} ${t.back}</a></p>
       <article class="q">
         <h2>${x.title}</h2>
         ${x.body ? html`<p class="body">${x.body}</p>` : ''}
         <p class="m">${x.author.name} · ${shortWhen(x.at)}${x.solved ? html` · <b class="solvedtag">${t.solvedTag}</b>` : ''}</p>
-        ${x.canDelete ? html`<div class="acts">${post(`/ui/q/${x.id}/delete`, t.deleteQuestion, 'link')}</div>` : ''}
+        <div class="acts">${space.host ? post(`/ui/q/${x.id}/${x.picked ? 'unpick' : 'pick'}`, x.picked ? t.unpick : t.pick, 'link') : ''}${x.canDelete ? post(`/ui/q/${x.id}/delete`, t.deleteQuestion, 'link') : ''}</div>
       </article>
       <h3>${t.answers(x.answers)}</h3>
       <ul class="answers">${x.answerList.map(
@@ -2981,11 +3028,11 @@ function questionPane(space: CircleSpace, x: QuestionView, csrf: string, reports
  * A circle on the right: its name and rooms on top, the open room's messages, and the bar to write in (or the rules
  * to accept first, or why the person cannot write now). Hosts get Settings and the reports waiting.
  */
-function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, reports: number, me = '') {
+function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, waiting: Waiting, me = '') {
   const t = copy.circles;
   const room = space.rooms.find((r) => r.id === roomId)!;
   const canWrite = !space.mustAccept && !space.timeoutUntil && (!room.announce || space.host);
-  return html`${circleHead(space, reports, roomId)}
+  return html`${circleHead(space, waiting, roomId)}
     <div class="stream" data-live>
       ${messages.length
         ? html`<ol class="thread" aria-label="${room.name}">${messages.map(
@@ -3060,7 +3107,7 @@ function roomMenu(m: RoomMessageView, space: CircleSpace, csrf: string) {
 }
 
 /** A circle's settings for its hosts (rules, slow mode, rooms, members and their roles), or its rules for anyone else. */
-function circleSettings(userId: string, space: CircleSpace, circle: CircleView | undefined, csrf: string, base: string) {
+function circleSettings(userId: string, space: CircleSpace, circle: CircleView | undefined, csrf: string, base: string, requests: JoinRequestView[] = []) {
   const t = copy.circles;
   const others = circle?.members.filter((m) => m.id !== userId) ?? [];
   return html`<header class="chathead">
@@ -3090,6 +3137,19 @@ function circleSettings(userId: string, space: CircleSpace, circle: CircleView |
             <button>${t.addRoom}</button>
           </form>`
         : html`<p class="t">${t.rulesTitle}</p><p class="rules">${space.rules ?? t.noRules}</p>`}
+      ${space.owner
+        ? html`<form method="post" action="/ui/c/${space.id}/listing" class="stack">
+            <input type="hidden" name="csrf" value="${csrf}" />
+            <label class="m"><input type="checkbox" name="listed" value="1"${space.listed ? html` checked` : ''} /> ${copy.explore.listLabel}</label>
+            <input type="text" name="about" maxlength="200" value="${space.about ?? ''}" placeholder="${copy.explore.aboutPlaceholder}" aria-label="${copy.explore.aboutLabel}" />
+            <button>${t.save}</button>
+          </form>`
+        : ''}
+      ${space.host && requests.length
+        ? html`<h2 id="requests">${t.requests(requests.length)}</h2>
+          <ul class="list">${requests.map((r) => html`<li class="item">${avatar(r.name)}<div class="main"><span class="t">${r.name} <span class="m">@${r.handle}</span></span></div>
+            <div class="acts">${button(`/ui/c/${space.id}/requests/${r.userId}/accept`, copy.explore.accept, csrf, 'primary')}${button(`/ui/c/${space.id}/requests/${r.userId}/decline`, copy.explore.decline, csrf)}</div></li>`)}</ul>`
+        : ''}
       ${circle && (space.host || !circle.public) ? html`<h2>${t.members(space.people)}</h2>
         <ul class="list">${others.map((m) => html`<li class="item">${avatar(m.displayName)}<div class="main"><span class="t">${m.displayName} <span class="m">@${m.handle}</span></span><span class="m">${m.role === 'owner' ? t.owner : ''}</span></div>
           ${space.host && m.role !== 'owner'
