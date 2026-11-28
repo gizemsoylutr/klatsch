@@ -10,7 +10,7 @@ import { claimInvite, type Invite } from './auth/invites.ts';
 import { revokeTokens } from './auth/tokens.ts';
 import type { Config } from './config.ts';
 import { fromBlob, SEMANTIC_MAX_MATCHES, SEMANTIC_THRESHOLD, similarity, toBlob, type Embedder } from './match/semantic.ts';
-import { ATTACH, ASK, FILE_ONLY, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ROOM, VOICE_NOTE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
+import { ATTACH, ASK, ASKAROUND, FILE_ONLY, GUEST, HOW_MAX, HOW_NOTE, MESSAGE, ROOM, VOICE_NOTE, ASK_QUOTE_NOTE, askQuoteLine, AGENT_THANKS_PER_DAY, inboxText, matchReason, NO_INTRO_NEEDED, openNote, openNoteUnnamed, pendingReminder, SEARCHES_PER_HOUR, QUOTE_NOTE, quoteLine, sentNote, THANKS, WATCH, type PendingCounts } from './copy/agent.ts';
 import { consent } from './copy/consent.ts';
 import { handoff, QUOTES_PER_HOUR } from './copy/handoff.ts';
 import { notifications } from './copy/notifications.ts';
@@ -257,6 +257,32 @@ export interface RoomReportView {
   reason: string | null;
   at: number;
 }
+/** A question in a circle's Ask around, as a list shows it. */
+export interface QuestionSummary {
+  id: string;
+  title: string;
+  author: { name: string; handle: string };
+  mine: boolean;
+  answers: number;
+  solved: boolean;
+  at: number;
+}
+export interface AnswerView {
+  id: string;
+  author: { name: string; handle: string };
+  mine: boolean;
+  text: string;
+  at: number;
+  helped: number;
+  helpedByMe: boolean;
+  solved: boolean;
+}
+export interface QuestionView extends QuestionSummary {
+  circleId: string;
+  body: string | null;
+  answerList: AnswerView[];
+  canDelete: boolean;
+}
 /** A message the person starred, for their own list of starred messages. */
 export interface StarredView {
   id: string;
@@ -403,6 +429,11 @@ const ROOM_MESSAGES_PER_DAY = 300;
 const NEW_MEMBER_MS = DAY;
 const ROOMS_PER_CIRCLE = 20;
 const RULES_MAX = 2000;
+/** Ask around: a question's title and details, and an answer. */
+const QUESTION_TITLE_MAX = 200;
+const QUESTION_BODY_MAX = 4000;
+const ANSWER_BODY_MAX = 4000;
+const QUESTIONS_PER_DAY = 20;
 const ATTACHMENT_DAYS = 14;
 /** How many of the friend's messages one "Brew a reply" hands over. */
 const THREAD_FOR_AGENT = 10;
@@ -2461,6 +2492,157 @@ export class Klatsch {
     this.db.prepare('INSERT INTO rooms (id, circle_id, name, announce, created_at) VALUES (?, ?, ?, ?, ?)').run(id, circleId, clean, announce ? 1 : 0, Date.now());
     this.audit(userId, 'web', 'room.add', id);
     return id;
+  }
+
+  /** Whether the person may write in this circle now (rules accepted, not paused); the reason if not. */
+  private refuseSilenced(userId: string, circleId: string): void {
+    const space = this.space(userId, circleId);
+    if (space.mustAccept) throw new KlatschError('forbidden', ROOM.acceptRules);
+    if (space.timeoutUntil) throw new KlatschError('forbidden', ROOM.timedOut(space.timeoutUntil));
+  }
+
+  private cleanWords(typed: string, max: number, empty: string): string {
+    const text = typed.replace(/\r\n?/g, '\n').trim();
+    if (!text) throw new KlatschError('invalid', empty);
+    if (text.length > max) throw new KlatschError('invalid', ASKAROUND.tooLong(max));
+    refuseHidden(text);
+    return text;
+  }
+
+  /** Asks the circle: a title, and details if any. */
+  askAround(userId: string, circleId: string, title: string, body = ''): string {
+    this.spaceRow(userId, circleId);
+    this.refuseSilenced(userId, circleId);
+    const cleanTitle = this.cleanWords(title, QUESTION_TITLE_MAX, ASKAROUND.noTitle).replace(/\s+/g, ' ');
+    const details = body.trim() ? this.cleanWords(body, QUESTION_BODY_MAX, ASKAROUND.noTitle) : null;
+    const today = (this.db.prepare('SELECT count(*) AS n FROM questions WHERE author_id = ? AND created_at > ?').get(userId, Date.now() - DAY) as { n: number }).n;
+    if (today >= QUESTIONS_PER_DAY) throw new KlatschError('forbidden', ASKAROUND.tooMany);
+    const id = newId('q');
+    this.db.prepare('INSERT INTO questions (id, circle_id, author_id, title, body, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, circleId, userId, sealText(this.db, cleanTitle), details ? sealText(this.db, details) : null, Date.now());
+    this.audit(userId, 'web', 'question.ask', id);
+    return id;
+  }
+
+  private questionRow(userId: string, questionId: string) {
+    const row = this.db.prepare('SELECT id, circle_id, author_id, title, body, created_at, solved_by FROM questions WHERE id = ? AND deleted_at IS NULL').get(questionId) as
+      | { id: string; circle_id: string; author_id: string; title: string; body: string | null; created_at: number; solved_by: string | null }
+      | undefined;
+    if (!row) throw new KlatschError('not-found', ASKAROUND.gone);
+    this.spaceRow(userId, row.circle_id);
+    return row;
+  }
+
+  /** A circle's questions, newest first; `state` open or answered; `q` matches words in the title. */
+  questionsOf(userId: string, circleId: string, options: { state?: 'open' | 'answered'; q?: string } = {}): QuestionSummary[] {
+    this.spaceRow(userId, circleId);
+    const rows = this.db
+      .prepare(
+        `SELECT q.id, q.title, q.author_id, q.created_at, q.solved_by, u.handle, u.display_name,
+           (SELECT count(*) FROM answers a WHERE a.question_id = q.id AND a.deleted_at IS NULL) AS answers
+         FROM questions q JOIN users u ON u.id = q.author_id WHERE q.circle_id = ? AND q.deleted_at IS NULL ORDER BY q.created_at DESC LIMIT 300`,
+      )
+      .all(circleId) as { id: string; title: string; author_id: string; created_at: number; solved_by: string | null; handle: string; display_name: string; answers: number }[];
+    // The words are sealed: a search reads them here, never in the database.
+    const words = (options.q ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    return rows
+      .map((r) => ({ id: r.id, title: r.title, author: { name: r.display_name, handle: r.handle }, mine: r.author_id === userId, answers: r.answers, solved: r.solved_by !== null, at: r.created_at }))
+      .filter((q) => (options.state === 'open' ? !q.solved : options.state === 'answered' ? q.solved : true))
+      .filter((q) => words.every((w) => q.title.toLowerCase().includes(w)));
+  }
+
+  question(userId: string, questionId: string): QuestionView {
+    const row = this.questionRow(userId, questionId);
+    const author = this.user(row.author_id);
+    const answers = this.db
+      .prepare(
+        `SELECT a.id, a.author_id, a.body, a.created_at, u.handle, u.display_name,
+           (SELECT count(*) FROM answer_helped h WHERE h.answer_id = a.id) AS helped,
+           EXISTS (SELECT 1 FROM answer_helped h WHERE h.answer_id = a.id AND h.user_id = ?) AS mine_helped
+         FROM answers a JOIN users u ON u.id = a.author_id WHERE a.question_id = ? AND a.deleted_at IS NULL ORDER BY a.created_at`,
+      )
+      .all(userId, questionId) as { id: string; author_id: string; body: string; created_at: number; handle: string; display_name: string; helped: number; mine_helped: number }[];
+    const list = answers
+      .map((a) => ({ id: a.id, author: { name: a.display_name, handle: a.handle }, mine: a.author_id === userId, text: a.body, at: a.created_at, helped: a.helped, helpedByMe: a.mine_helped === 1, solved: a.id === row.solved_by }))
+      // The one that solved it first, then the most helpful, then the oldest.
+      .sort((x, y) => Number(y.solved) - Number(x.solved) || y.helped - x.helped || x.at - y.at);
+    return {
+      id: row.id,
+      circleId: row.circle_id,
+      title: row.title,
+      body: row.body,
+      author: { name: author.display_name, handle: author.handle },
+      mine: row.author_id === userId,
+      answers: list.length,
+      solved: row.solved_by !== null,
+      at: row.created_at,
+      answerList: list,
+      canDelete: row.author_id === userId || this.isHost(userId, row.circle_id),
+    };
+  }
+
+  /** Answers a question; its asker hears that an answer came, without the words. */
+  answerQuestion(userId: string, questionId: string, typed: string): string {
+    const row = this.questionRow(userId, questionId);
+    this.refuseSilenced(userId, row.circle_id);
+    const text = this.cleanWords(typed, ANSWER_BODY_MAX, ASKAROUND.noAnswer);
+    const id = newId('ans');
+    this.db.prepare('INSERT INTO answers (id, question_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)').run(id, questionId, userId, sealText(this.db, text), Date.now());
+    this.audit(userId, 'web', 'question.answer', id);
+    if (row.author_id !== userId) this.notifyUser(row.author_id, notifications.answer);
+    return id;
+  }
+
+  private answerRow(userId: string, answerId: string) {
+    const row = this.db.prepare('SELECT a.id, a.author_id, a.question_id, q.author_id AS asker_id, q.circle_id FROM answers a JOIN questions q ON q.id = a.question_id WHERE a.id = ? AND a.deleted_at IS NULL AND q.deleted_at IS NULL').get(answerId) as
+      | { id: string; author_id: string; question_id: string; asker_id: string; circle_id: string }
+      | undefined;
+    if (!row) throw new KlatschError('not-found', ASKAROUND.gone);
+    this.spaceRow(userId, row.circle_id);
+    return row;
+  }
+
+  /** The asker marks the answer that solved it (again to unmark). Returns the question. */
+  solveWith(userId: string, answerId: string): string {
+    const row = this.answerRow(userId, answerId);
+    if (row.asker_id !== userId) throw new KlatschError('forbidden', ASKAROUND.askerOnly);
+    const current = (this.db.prepare('SELECT solved_by FROM questions WHERE id = ?').get(row.question_id) as { solved_by: string | null }).solved_by;
+    this.db.prepare('UPDATE questions SET solved_by = ? WHERE id = ?').run(current === answerId ? null : answerId, row.question_id);
+    if (current !== answerId && row.author_id !== userId) this.notifyUser(row.author_id, notifications.solved);
+    this.audit(userId, 'web', 'question.solve', answerId);
+    return row.question_id;
+  }
+
+  /** "Helped me too", once per person (again to take it back); not on one's own answer. Returns the question. */
+  helpedToo(userId: string, answerId: string): string {
+    const row = this.answerRow(userId, answerId);
+    if (row.author_id === userId) throw new KlatschError('forbidden', ASKAROUND.notOwn);
+    const had = this.db.prepare('DELETE FROM answer_helped WHERE answer_id = ? AND user_id = ?').run(answerId, userId).changes;
+    if (!had) this.db.prepare('INSERT INTO answer_helped (answer_id, user_id, created_at) VALUES (?, ?, ?)').run(answerId, userId, Date.now());
+    return row.question_id;
+  }
+
+  /** A question goes, with its answers: its asker, or a host. Returns the circle. */
+  deleteQuestion(userId: string, questionId: string): string {
+    const row = this.questionRow(userId, questionId);
+    if (row.author_id !== userId && !this.isHost(userId, row.circle_id)) throw new KlatschError('forbidden', ROOM.hostsOnly);
+    transaction(this.db, () => {
+      this.db.prepare('UPDATE answers SET body = ?, deleted_at = ? WHERE question_id = ? AND deleted_at IS NULL').run(sealText(this.db, ''), Date.now(), questionId);
+      this.db.prepare('UPDATE questions SET title = ?, body = NULL, deleted_at = ? WHERE id = ?').run(sealText(this.db, ''), Date.now(), questionId);
+      this.audit(userId, 'web', row.author_id === userId ? 'question.delete' : 'question.moderate.delete', questionId);
+    });
+    return row.circle_id;
+  }
+
+  /** An answer goes: its writer, or a host. Returns the question. */
+  deleteAnswer(userId: string, answerId: string): string {
+    const row = this.answerRow(userId, answerId);
+    if (row.author_id !== userId && !this.isHost(userId, row.circle_id)) throw new KlatschError('forbidden', ROOM.hostsOnly);
+    transaction(this.db, () => {
+      this.db.prepare('UPDATE answers SET body = ?, deleted_at = ? WHERE id = ?').run(sealText(this.db, ''), Date.now(), answerId);
+      this.db.prepare('UPDATE questions SET solved_by = NULL WHERE id = ? AND solved_by = ?').run(row.question_id, answerId);
+      this.audit(userId, 'web', row.author_id === userId ? 'answer.delete' : 'answer.moderate.delete', answerId);
+    });
+    return row.question_id;
   }
 
   /** Room messages go after the same 90 days as messages between friends. */

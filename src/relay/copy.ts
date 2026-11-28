@@ -708,6 +708,37 @@ export const copy = {
     notifyOption: { all: 'Everything', mentions: 'Only when someone @mentions me', none: 'Nothing' },
   },
 
+  /** Ask around: a circle's questions of any kind, and their answers. */
+  askAround: {
+    tab: 'Ask around',
+    titleLabel: 'Your question',
+    titlePlaceholder: 'Ask the circle anything…',
+    bodyLabel: 'Details',
+    bodyPlaceholder: 'Details, if they help (optional)',
+    ask: 'Ask',
+    filter: 'Show',
+    all: 'All',
+    open: 'Open',
+    answered: 'Answered',
+    search: 'Search questions',
+    answers: (n: number) => (n === 1 ? '1 answer' : `${n} answers`),
+    solvedTag: 'solved',
+    none: 'Nothing asked yet. Ask the first question.',
+    noMatch: 'No question matches.',
+    back: 'All questions',
+    deleteQuestion: 'Delete the question',
+    solvedIt: 'Solved it',
+    solve: 'This solved it',
+    unsolve: 'Not the one',
+    helped: 'Helped me too',
+    unhelped: 'Take back “helped”',
+    helpedCount: (n: number) => (n === 1 ? 'helped 1 more' : `helped ${n} more`),
+    deleteAnswer: 'Delete',
+    answerLabel: 'Your answer',
+    answerPlaceholder: 'Write an answer…',
+    answer: 'Answer',
+  },
+
   /** "Try it without an account": a guest for a few hours whose only friend is the demo friend. */
   guest: {
     link: 'Just peeking? Come in as a guest',

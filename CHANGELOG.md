@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Ask around, in every circle (the first tab beside its rooms): questions of any kind, with details if they help; answers from the circle; the asker marks the one that solved it (it comes first), others say it helped them too; open and answered filters and a search (the words are unsealed to search, never searched in the database). The asker hears that an answer came, and an answer's writer that it solved it, never the words. Askers and hosts delete questions; writers and hosts delete answers. Kept, not dropped after 90 days. No agent reaches it yet.
 - @mentions in rooms: an @handle of a member is marked (one's own stronger) and tells that member, without the words ("Someone mentioned you in a circle."). Each member chooses per circle what they hear: everything, only @mentions (the default), or nothing. Rooms stay out of agents' inboxes.
 - Rooms take files and voice notes like conversations do: the paperclip and the microphone (hold, or tap for hands-free) in a room's bar; photos, PDFs and voice notes, for the circle's members only, sealed, kept 14 days, three per message, within the day's limit. A new member shares no files on their first day.
 - The Circle page is now "People & invites", inside the messenger with the Circles tab open (and linked at the top of it, and from the ⋯ menu): friends, invite links, members and the public join link, as before.

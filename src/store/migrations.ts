@@ -838,4 +838,34 @@ export const migrations: string[] = [
   `
   ALTER TABLE circle_people ADD COLUMN notify TEXT NOT NULL DEFAULT 'mentions' CHECK (notify IN ('all', 'mentions', 'none'));
   `,
+  // Ask around: a circle's questions of any kind and their answers, kept (not dropped after 90 days); the asker marks
+  // the answer that solved it, others say it helped them too. Words sealed at rest.
+  `
+  CREATE TABLE questions (
+    id TEXT PRIMARY KEY,
+    circle_id TEXT NOT NULL REFERENCES circles(id),
+    author_id TEXT NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    body TEXT,
+    created_at INTEGER NOT NULL,
+    solved_by TEXT,
+    deleted_at INTEGER
+  );
+  CREATE INDEX questions_by_circle ON questions (circle_id, created_at);
+  CREATE TABLE answers (
+    id TEXT PRIMARY KEY,
+    question_id TEXT NOT NULL REFERENCES questions(id),
+    author_id TEXT NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    deleted_at INTEGER
+  );
+  CREATE INDEX answers_by_question ON answers (question_id, created_at);
+  CREATE TABLE answer_helped (
+    answer_id TEXT NOT NULL REFERENCES answers(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (answer_id, user_id)
+  );
+  `,
 ];

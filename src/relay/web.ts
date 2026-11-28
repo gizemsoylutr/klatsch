@@ -32,6 +32,8 @@ import {
   type Klatsch,
   type AskView,
   type CircleSpace,
+  type QuestionSummary,
+  type QuestionView,
   type RoomMessageView,
   type RoomReportView,
   type NoteView,
@@ -2403,6 +2405,60 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       () => c.html(notice(copy.circles.reportsTitle, html`<p class="sub">${copy.circles.reported}</p><p><a href="${roomPath(room)}">${copy.circles.backToCircle}</a></p>`)),
     );
   });
+  // Ask around: a circle's questions and answers.
+  web.get('/c/:id/ask', (c) => {
+    const userId = c.get('userId');
+    try {
+      const space = klatsch.space(userId, c.req.param('id'));
+      const state = c.req.query('state') === 'open' || c.req.query('state') === 'answered' ? (c.req.query('state') as 'open' | 'answered') : '';
+      const q = (c.req.query('q') ?? '').slice(0, 100);
+      const list = klatsch.questionsOf(userId, space.id, { ...(state ? { state } : {}), q });
+      const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
+      return c.html(messenger(space.name, circlesSide(c, space.id), askList(space, list, state, q, c.get('csrf'), reports), true));
+    } catch (error) {
+      return notMine(c, error);
+    }
+  });
+  web.post('/c/:id/ask', async (c) => {
+    const form = await c.req.parseBody();
+    let id = '';
+    return attempt(
+      c,
+      () => void (id = klatsch.askAround(c.get('userId'), c.req.param('id'), typeof form.title === 'string' ? form.title : '', typeof form.body === 'string' ? form.body : '')),
+      `/ui/c/${c.req.param('id')}/ask`,
+      () => c.redirect(`/ui/q/${id}`, 303),
+    );
+  });
+  web.get('/q/:id', (c) => {
+    const userId = c.get('userId');
+    try {
+      const x = klatsch.question(userId, c.req.param('id'));
+      const space = klatsch.space(userId, x.circleId);
+      const reports = space.host ? klatsch.roomReports(userId, space.id).length : 0;
+      return c.html(messenger(x.title, circlesSide(c, space.id), questionPane(space, x, c.get('csrf'), reports), true));
+    } catch (error) {
+      return notMine(c, error);
+    }
+  });
+  web.post('/q/:id/answer', async (c) => {
+    const body = (await c.req.parseBody()).body;
+    let id = '';
+    const back = `/ui/q/${c.req.param('id')}`;
+    return attempt(c, () => void (id = klatsch.answerQuestion(c.get('userId'), c.req.param('id'), typeof body === 'string' ? body : '')), back, () => c.redirect(`${back}#a-${id}`, 303));
+  });
+  web.post('/q/:id/delete', (c) => {
+    let circle = '';
+    return attempt(c, () => void (circle = klatsch.deleteQuestion(c.get('userId'), c.req.param('id'))), `/ui/q/${c.req.param('id')}`, () => c.redirect(`/ui/c/${circle}/ask`, 303));
+  });
+  /** After an action on an answer: back to its question, at the answer. */
+  const toAnswer = (c: Context<Env>, fn: (userId: string, id: string) => string) => {
+    let question = '';
+    return attempt(c, () => void (question = fn(c.get('userId'), c.req.param('id') ?? '')), '/ui/circles', () => c.redirect(`/ui/q/${question}#a-${c.req.param('id')}`, 303));
+  };
+  web.post('/a/:id/solve', (c) => toAnswer(c, (u, id) => klatsch.solveWith(u, id)));
+  web.post('/a/:id/helped', (c) => toAnswer(c, (u, id) => klatsch.helpedToo(u, id)));
+  web.post('/a/:id/delete', (c) => toAnswer(c, (u, id) => klatsch.deleteAnswer(u, id)));
+
   web.get('/c/:id/settings', (c) => {
     const userId = c.get('userId');
     try {
@@ -2834,14 +2890,9 @@ function circleList(spaces: (CircleSpace & { unread: number })[], csrf: string, 
     </form>`;
 }
 
-/**
- * A circle on the right: its name and rooms on top, the open room's messages, and the bar to write in (or the rules
- * to accept first, or why the person cannot write now). Hosts get Settings and the reports waiting.
- */
-function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, reports: number, me = '') {
+/** A circle's head: back, its name, the reports waiting (hosts), settings; then Ask around and the rooms. */
+function circleHead(space: CircleSpace, reports: number, current: string) {
   const t = copy.circles;
-  const room = space.rooms.find((r) => r.id === roomId)!;
-  const canWrite = !space.mustAccept && !space.timeoutUntil && (!room.announce || space.host);
   return html`<header class="chathead">
       <a class="iconbtn back" href="/ui/circles" aria-label="${t.back}">${ic('back')}</a>
       ${avatar(space.name)}
@@ -2851,9 +2902,90 @@ function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[
         <a class="iconbtn" href="/ui/c/${space.id}/settings" aria-label="${space.host ? t.settings : t.about}" title="${space.host ? t.settings : t.about}">${ic('more')}</a>
       </nav>
     </header>
-    <nav class="roomtabs" aria-label="${t.rooms}">${space.rooms.map(
-      (r) => html`<a href="/ui/c/${space.id}/r/${r.id}"${r.id === roomId ? html` aria-current="page"` : ''}>${r.announce ? ic('pin', 13) : '#'} ${r.name}${r.unread && r.id !== roomId ? html` <span class="badge">${r.unread}</span>` : ''}</a>`,
-    )}</nav>
+    <nav class="roomtabs" aria-label="${t.rooms}">
+      <a href="/ui/c/${space.id}/ask"${current === 'ask' ? html` aria-current="page"` : ''}>${ic('reply', 13)} ${copy.askAround.tab}</a>
+      ${space.rooms.map(
+        (r) => html`<a href="/ui/c/${space.id}/r/${r.id}"${r.id === current ? html` aria-current="page"` : ''}>${r.announce ? ic('pin', 13) : '#'} ${r.name}${r.unread && r.id !== current ? html` <span class="badge">${r.unread}</span>` : ''}</a>`,
+      )}
+    </nav>`;
+}
+
+/** Ask around: ask the circle anything, the questions with their state, and a search. */
+function askList(space: CircleSpace, questions: QuestionSummary[], state: string, q: string, csrf: string, reports: number) {
+  const t = copy.askAround;
+  const can = !space.mustAccept && !space.timeoutUntil;
+  const filter = (value: string, label: string) => html`<a href="/ui/c/${space.id}/ask${value ? `?state=${value}` : ''}"${state === value ? html` aria-current="page"` : ''}>${label}</a>`;
+  return html`${circleHead(space, reports, 'ask')}
+    <div class="scroll"><div class="inner asklist">
+      ${can
+        ? html`<form class="askform" method="post" action="/ui/c/${space.id}/ask">
+            <input type="hidden" name="csrf" value="${csrf}" />
+            <input type="text" name="title" maxlength="200" required placeholder="${t.titlePlaceholder}" aria-label="${t.titleLabel}" />
+            <textarea name="body" maxlength="4000" rows="2" placeholder="${t.bodyPlaceholder}" aria-label="${t.bodyLabel}"></textarea>
+            <button class="primary">${t.ask}</button>
+          </form>`
+        : html`<p class="hint">${space.mustAccept ? ROOM.acceptRules : ROOM.timedOut(space.timeoutUntil!)}</p>`}
+      <div class="askbar">
+        <nav class="filters" aria-label="${t.filter}">${filter('', t.all)}${filter('open', t.open)}${filter('answered', t.answered)}</nav>
+        <form method="get" action="/ui/c/${space.id}/ask" class="search">${state ? html`<input type="hidden" name="state" value="${state}" />` : ''}<input type="search" name="q" value="${q}" placeholder="${t.search}" aria-label="${t.search}" /></form>
+      </div>
+      ${questions.length
+        ? html`<ul class="questions">${questions.map(
+            (x) => html`<li><a href="/ui/q/${x.id}">
+              <span class="qt">${x.title}</span>
+              <span class="m">${x.author.name} · ${t.answers(x.answers)}${x.solved ? html` · <b class="solvedtag">${t.solvedTag}</b>` : ''} · ${shortWhen(x.at)}</span>
+            </a></li>`,
+          )}</ul>`
+        : html`<p class="hint">${q || state ? t.noMatch : t.none}</p>`}
+    </div></div>`;
+}
+
+/** One question: what was asked, its answers (what solved it first), and the box to answer. */
+function questionPane(space: CircleSpace, x: QuestionView, csrf: string, reports: number) {
+  const t = copy.askAround;
+  const can = !space.mustAccept && !space.timeoutUntil;
+  const post = (action: string, label: string, kind?: 'primary' | 'link') => button(action, label, csrf, kind);
+  return html`${circleHead(space, reports, 'ask')}
+    <div class="scroll"><div class="inner question">
+      <p><a href="/ui/c/${space.id}/ask">${ic('back', 14)} ${t.back}</a></p>
+      <article class="q">
+        <h2>${x.title}</h2>
+        ${x.body ? html`<p class="body">${x.body}</p>` : ''}
+        <p class="m">${x.author.name} · ${shortWhen(x.at)}${x.solved ? html` · <b class="solvedtag">${t.solvedTag}</b>` : ''}</p>
+        ${x.canDelete ? html`<div class="acts">${post(`/ui/q/${x.id}/delete`, t.deleteQuestion, 'link')}</div>` : ''}
+      </article>
+      <h3>${t.answers(x.answers)}</h3>
+      <ul class="answers">${x.answerList.map(
+        (a) => html`<li class="answer${a.solved ? ' solved' : ''}" id="a-${a.id}">
+          ${a.solved ? html`<p class="solvedtag">${t.solvedIt}</p>` : ''}
+          <p class="body">${a.text}</p>
+          <p class="m">${a.author.name} · ${shortWhen(a.at)}${a.helped ? ` · ${t.helpedCount(a.helped)}` : ''}</p>
+          <div class="acts">
+            ${x.mine && !a.mine ? post(`/ui/a/${a.id}/solve`, a.solved ? t.unsolve : t.solve, a.solved ? 'link' : 'primary') : ''}
+            ${!a.mine && !x.mine ? post(`/ui/a/${a.id}/helped`, a.helpedByMe ? t.unhelped : t.helped) : ''}
+            ${a.mine || space.host ? post(`/ui/a/${a.id}/delete`, t.deleteAnswer, 'link') : ''}
+          </div>
+        </li>`,
+      )}</ul>
+      ${can
+        ? html`<form class="askform" method="post" action="/ui/q/${x.id}/answer">
+            <input type="hidden" name="csrf" value="${csrf}" />
+            <textarea name="body" maxlength="4000" rows="3" required placeholder="${t.answerPlaceholder}" aria-label="${t.answerLabel}"></textarea>
+            <button class="primary">${t.answer}</button>
+          </form>`
+        : ''}
+    </div></div>`;
+}
+
+/**
+ * A circle on the right: its name and rooms on top, the open room's messages, and the bar to write in (or the rules
+ * to accept first, or why the person cannot write now). Hosts get Settings and the reports waiting.
+ */
+function roomPane(space: CircleSpace, roomId: string, messages: RoomMessageView[], csrf: string, reports: number, me = '') {
+  const t = copy.circles;
+  const room = space.rooms.find((r) => r.id === roomId)!;
+  const canWrite = !space.mustAccept && !space.timeoutUntil && (!room.announce || space.host);
+  return html`${circleHead(space, reports, roomId)}
     <div class="stream" data-live>
       ${messages.length
         ? html`<ol class="thread" aria-label="${room.name}">${messages.map(

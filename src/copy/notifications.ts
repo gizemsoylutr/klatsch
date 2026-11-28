@@ -9,6 +9,8 @@ export const notifications = {
   message: '☕ A friend sent you a message.',
   mention: '☕ Someone mentioned you in a circle.',
   room: '☕ Something new in one of your circles.',
+  answer: '☕ Someone answered your question.',
+  solved: '☕ Your answer solved someone’s question.',
   test: '☕ Test from Klatsch: notifications reach this device.',
   githubLinked: 'A GitHub account can now sign in to your Klatsch account. Not you? Disconnect it in Settings.',
   githubUnlinked: 'GitHub sign-in was disconnected from your Klatsch account.',

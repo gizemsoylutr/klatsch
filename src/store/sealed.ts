@@ -75,4 +75,6 @@ export const SEALED_COLUMNS: [table: string, id: string, columns: string[]][] = 
   ['room_messages', 'id', ['body']],
   ['room_reports', 'id', ['reason']],
   ['circles', 'id', ['rules']],
+  ['questions', 'id', ['title', 'body']],
+  ['answers', 'id', ['body']],
 ];

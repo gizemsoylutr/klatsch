@@ -361,6 +361,28 @@ form.newcircle input:focus-visible { outline: none; }
 .settingsform .stack button { justify-self: start; }
 .settingsform h2 { font-size: 13px; font-weight: 600; color: var(--muted); }
 .settingsform .acts form { display: inline-flex; gap: 4px; align-items: center; }
+/* Ask around: the question box, filters and search, the list; a question with its answers. */
+.asklist, .question { display: grid; gap: 18px; }
+form.askform { display: grid; gap: 8px; }
+form.askform input, form.askform textarea, .askbar input[type="search"] { font: inherit; color: var(--fg); background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
+form.askform button { justify-self: start; }
+.askbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.askbar .filters { display: flex; gap: 4px; }
+.askbar .filters a { padding: 6px 12px; border-radius: 999px; color: var(--muted); font-size: 14px; }
+.askbar .filters a[aria-current="page"] { background: var(--sunk); color: var(--fg); }
+.askbar .search input { min-width: 220px; padding: 8px 14px; border-radius: 999px; }
+ul.questions, ul.answers { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+ul.questions a { display: grid; gap: 4px; padding: 14px 16px; border-radius: 14px; background: var(--sunk); color: var(--fg); }
+ul.questions a:hover { text-decoration: none; filter: brightness(1.05); }
+ul.questions .qt { font-weight: 600; }
+b.solvedtag, p.solvedtag { color: var(--good); font-weight: 600; font-size: inherit; }
+p.solvedtag { font-size: 13px; }
+.question article.q h2 { font: 700 24px/1.2 var(--display); letter-spacing: -0.015em; }
+.question .body { white-space: pre-wrap; }
+.question h3 { font-size: 13px; color: var(--muted); font-weight: 600; }
+ul.answers li { padding: 14px 16px; border-radius: 14px; background: var(--sunk); display: grid; gap: 6px; }
+ul.answers li.solved { box-shadow: 0 0 0 2px var(--good) inset; }
+ul.answers .acts, .question .acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; }
 .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 .pane .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 36px 40px calc(48px + env(safe-area-inset-bottom)); }
 .pane .scroll > .inner { max-width: 760px; margin: 0 auto; }

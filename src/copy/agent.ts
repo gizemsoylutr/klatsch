@@ -51,6 +51,17 @@ export const ROOM = {
   tooManyCircles: 'You own 5 circles already.',
 };
 
+/** Ask around, a circle's questions and answers. On the page only; no agent tool yet. */
+export const ASKAROUND = {
+  noTitle: 'Write the question first.',
+  noAnswer: 'Write an answer first.',
+  tooLong: (max: number) => `At most ${max} characters.`,
+  tooMany: 'You asked 20 questions today. Try again tomorrow.',
+  gone: 'This question is not here any more.',
+  askerOnly: 'Only the person who asked marks what solved it.',
+  notOwn: 'That is your own answer.',
+};
+
 /** What a message says when it is only a voice note or only a file: for Home, notifications and the friend's AI. */
 export const VOICE_NOTE = 'Voice note';
 export const FILE_ONLY = 'File';
