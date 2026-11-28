@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Landing page redone, black and quiet: one large centred line, pill buttons, the apps it works in, an example of a message drafted in a chat app and read on a friend's phone, three feature cards with small drawings (Messages, Brew a reply, Circles), and hairline cards for privacy and the apps. It now tells what Klatsch is today: a messenger your AI can draft in, with circles.
 - Sign-in page: the ways in are full-width buttons, one under the other ("Continue with Google", "Continue with GitHub", "Continue with a passkey"), and email is the "Continue with Email →" link under them; the column is centred.
 - Guests: voice notes to each other (audio only, 5 MB a day, deleted with the guest; photos and documents still need an account); "Start here" on Home (bring a friend, say hi, ask from your AI), each step ticking itself off; and a read-only sample circle (rooms, Ask around, Picks) as a guest's Circles tab.
 - Explore: an owner lists a circle with a line about it (Circle settings). Anyone else, not a guest and not someone removed from it, finds it under Explore circles (search by name or line) and asks to join; the hosts see who waits (in the circle's head and settings) and let them in or not. The hosts hear of a request, the asker of the answer, never more; 20 requests a day. Picks: hosts add a circle's best questions to its Picks, a filter in Ask around.

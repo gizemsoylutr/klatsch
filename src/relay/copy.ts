@@ -34,122 +34,67 @@ export const copy = {
    */
   landing: {
     title: 'Ask your friends from any chat',
-    nav: { label: 'Sections', how: 'How it works', privacy: 'Privacy', tools: 'Works with', selfHost: 'Self-host' },
+    nav: { label: 'Sections', how: 'How it works', features: 'Features', privacy: 'Privacy', tools: 'Works with', selfHost: 'Self-host' },
     signIn: 'Sign in',
     signInGitHub: 'Sign in with GitHub',
-    eyebrow: ['Open source', 'Works in ChatGPT, Claude and your coding agent'],
     headline: ['Ask your friends.', 'From any chat.'],
     name: 'Klatsch',
-    lead: 'Write to a friend from the chat you are in: your AI drafts it, you send it, only your friend reads it. Their reply shows up in your chat.',
+    lead: 'A messenger your AI can draft in. Write to friends and circles from ChatGPT, Claude or the web: your AI drafts, you send, only they read it.',
     howLink: 'See how it works',
     demo: ['npx klatsch up --demo', 'try it locally in a minute'],
     /** The relay's own MCP address, for chat apps that add a server by its URL. */
-    connector: (url: string) => [url, 'add it as a connector in ChatGPT or Claude, then sign in here'] as const,
+    connector: (url: string) => [url, 'add it as a connector in ChatGPT or Claude'] as const,
+    worksIn: 'Works in',
+    apps: ['ChatGPT', 'Claude', 'Claude Code', 'Codex', 'GitHub Copilot', 'Any MCP client'],
     example: {
-      caption: 'Example: an agent asks in the terminal, and the person decides on the page Klatsch opens.',
-      terminalTitle: 'claude · ~/shop-api',
-      terminal: html`<span class="d">›</span> the payment webhook test keeps timing out on CI, no idea why
-
-<span class="a">●</span> Ran the suite 3 times. Fails only on CI, after 30 s.
-  Let me check whether someone in your circle hit this.
-
-<span class="a">●</span> <b>klatsch</b> · update_card
-  <span class="d">looking · tags: webhooks, ci, testing</span>
-  <span class="d">"Payment webhook test hangs on CI only"</span>
-
-  Waiting for you to approve it in the browser…
-  <span class="ok">✓ Shared.</span> 1 match: a solved note, open to your circle.
-
-<span class="a">●</span> <b>Bob</b> solved this in March:
-  <span class="d">"CI has no outbound network. Run a mock of the payment</span>
-  <span class="d"> API in a service container and point the base URL at it."</span>
-  Applying that now.`,
-      pageTitle: 'Klatsch',
-      pageKicker: 'Your agent wants to share',
-      summary: 'Payment webhook test hangs on CI only',
-      tags: ['webhooks', 'ci', 'testing'],
-      pageNote: 'Only these words and tags go to your circle. Nothing from your code or chat.',
-      share: 'Share',
-      notNow: 'Not now',
-      circle: 'Circle: beta · 6 people',
+      heading: 'From the chat you are in.',
+      sub: 'Ask your AI to write to a friend. Klatsch shows the message in the chat; you change it or send it. The answer comes back to the same chat.',
+      caption: 'Example: a message drafted in a chat app, and the friend’s Klatsch on their phone.',
+      chatTitle: 'Chat app',
+      you: 'Ask Ayşe if Saturday still works, and whether I should bring anything.',
+      assistant: 'Here is the message for Ayşe. Send it when it reads right.',
+      cardTo: 'To Ayşe',
+      cardText: 'Hi Ayşe! Is Saturday still on? Should I bring anything?',
+      send: 'Send',
+      edit: 'Edit',
+      phoneTitle: 'Klatsch',
+      friend: 'Sam',
+      incoming: 'Hi Ayşe! Is Saturday still on? Should I bring anything?',
+      reply: 'Yes! 11 at the museum. Bring your good shoes.',
+      voice: '0:07',
     },
-    how: {
-      kicker: 'How it works',
-      heading: ['Your agent asks.', 'People decide.'],
-      sub: 'Each step that shares something is yours to approve. Nothing moves without your click, in Klatsch’s card in the chat or on its page.',
-      steps: [
-        {
-          title: 'Your agent drafts a sip',
-          line: 'Stuck, or just learned something? Your agent writes one line and a few tags. That is all that ever leaves your machine.',
-          window: 'Your card',
-          example: html`<div class="person"><span class="av">S</span><span class="who"><b>Payment webhook test hangs on CI only</b><small>looking · webhooks, ci, testing</small></span><span class="state quiet">Draft</span></div>`,
-        },
-        {
-          title: 'You share it, or not',
-          line: 'Klatsch opens a page with the exact words. Share, or close the tab. Your agent can’t press the button for you.',
-          window: 'Klatsch',
-          example: html`<div class="row2"><span class="btn primary">Share</span><span class="btn quiet">Not now</span></div><p class="small">Or type the code your terminal shows: <b>KQTM-RZPW</b></p>`,
-        },
-        {
-          title: 'Klatsch matches tags',
-          line: '“Looking” meets “solved” on shared tags, inside your circles only. Notes you tick also show on your circle’s Notes page. Agents see ids and tags, never another person’s words.',
-          window: 'Matches',
-          example: html`<div class="person"><span class="av">B</span><span class="who"><b>Bob</b><small>solved · webhooks, ci</small></span><span class="state">Open note</span></div>
-            <div class="person"><span class="av">?</span><span class="who"><b>Someone in beta</b><small>solved · testing</small></span><span class="state quiet">Asks first</span></div>`,
-        },
-        {
-          title: 'People decide',
-          line: 'A note left open to the circle you read at once. Otherwise the person who solved it reads your question and decides. Names appear only when both accept.',
-          window: 'Intro',
-          example: html`<div class="person"><span class="av">?</span><span class="who"><b>Someone would like to compare notes</b><small>webhooks · ci</small></span></div>
-            <div class="row2"><span class="btn primary">Allow once</span><span class="btn quiet">Decline</span></div>`,
-        },
-        {
-          title: 'Or ask one person',
-          line: '“Ask Ayşe about this.” Your agent drafts the question, you approve it, and only Ayşe reads it, with your name. Their agent can help write the answer; they approve it, and only you read it.',
-          window: 'Asked directly',
-          example: html`<div class="person"><span class="av">S</span><span class="who"><b>Sam asks you</b><small>“How did you get the webhook test to pass on CI?” · webhooks, ci</small></span></div>
-            <div class="row2"><span class="btn primary">Send to my agent</span><span class="btn quiet">Decline</span></div>`,
-        },
+    features: {
+      heading: 'Everything a chat needs.',
+      sub: 'Simple like the messenger you know, with your AI one tap away.',
+      cards: [
+        { title: 'Messages.', line: 'Voice notes, files, stars, pins and delete for everyone.', kind: 'chat' },
+        { title: 'Brew a reply.', line: 'Your AI drafts the answer from the conversation. You change it and send.', kind: 'brew' },
+        { title: 'Circles.', line: 'Rooms, Ask around and Picks for the groups you choose.', kind: 'circle' },
       ],
     },
     privacy: {
-      kicker: 'Privacy',
       heading: ['Built so agents', 'can’t overshare.'],
       tiles: [
-        { title: 'People approve, not agents', line: 'Every message, share, intro, question and answer waits for your click, in Klatsch’s own card or page. Your AI drafts; it can’t send.' },
-        { title: 'Agents never read each other', line: 'They get ids, tags and states. Words reach your agent only when a person hands them over.' },
-        { title: 'Circles you choose', line: 'Private circles grow by invite. A public commons shows no list of names, and your open notes reach it only when you tick it.' },
+        { title: 'People send, not agents.', line: 'Every message, question and answer waits for your click. Your AI drafts; it can’t send.' },
+        { title: 'Agents never read each other.', line: 'They get ids and states. Words reach your AI only when you hand them over.' },
+        { title: 'Sealed at rest.', line: 'Messages, rooms and questions are encrypted in the database. Messages go after 90 days.' },
       ],
     },
     tools: {
-      kicker: 'Works with',
-      heading: 'The agent you already use.',
+      heading: 'The AI you already use.',
       tiles: [
-        {
-          title: 'ChatGPT',
-          line: 'Add Klatsch as a connector by its address. You sign in here and approve the connection; every share still waits for you.',
-        },
-        {
-          title: 'Claude',
-          line: 'On claude.ai, the desktop app and the phone: add Klatsch as a custom connector and ask a friend from any chat.',
-        },
-        { title: 'Claude Code', line: 'Approval pages open from the chat. Idle sessions wake up when news arrives.' },
-        { title: 'Codex', line: 'One command writes the project config. Approvals fall back to a short code.' },
-        {
-          title: 'GitHub Copilot',
-          line: 'VS Code and the Copilot CLI, through a small local proxy. Your token stays in a file only you can read.',
-        },
-        {
-          title: 'Any MCP client',
-          line: 'Clients that speak OAuth connect by the address alone; the rest through the local proxy.',
-        },
+        { title: 'ChatGPT.', line: 'Add Klatsch as a connector by its address, sign in here, and write to friends from any chat.' },
+        { title: 'Claude.', line: 'On claude.ai, the desktop app and the phone, as a custom connector.' },
+        { title: 'Claude Code.', line: 'Approval pages open from the chat. Idle sessions wake up when news arrives.' },
+        { title: 'Codex.', line: 'One command writes the project config. Approvals fall back to a short code.' },
+        { title: 'GitHub Copilot.', line: 'VS Code and the Copilot CLI, through a small local proxy.' },
+        { title: 'Any MCP client.', line: 'Clients that speak OAuth connect by the address alone.' },
       ],
     },
     selfHost: {
       heading: ['Use a relay you trust,', 'or run your own.'],
       sub: 'One small server, Docker Compose, automatic HTTPS and continuous backups. Apache-2.0.',
-      guide: 'Read the self-hosting guide',
+      guide: 'Self-hosting guide',
     },
     footer: { line: 'Klatsch · Apache-2.0 · by Gizem Soylu', github: 'GitHub', security: 'Security', docs: 'Docs' },
     links: {

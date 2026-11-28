@@ -639,6 +639,111 @@ footer .sp { margin-left: auto; }
 }
 `;
 
+/**
+ * The landing page: black, like a night sky, whatever the device's theme: one huge centred line, pill buttons, thin
+ * hairline cards with a small drawing each, and a bold first phrase that runs into a quieter line.
+ */
+const VLANDING_STYLE = `${TOKENS}
+:root, :root[data-theme="light"], :root[data-theme="dark"] { color-scheme: dark;
+  --bg: #000000; --fg: #EDEDED; --muted: #A1A1A1; --soft: #707070; --line: #262626; --card: #0A0A0A; --sunk: #111111; --chip: #1A1A1A;
+  --accent: #3291FF; --good: #3ECF8E; --bar: rgba(0,0,0,0.72); }
+body { font-size: 16px; background: var(--bg); color: var(--fg); }
+a.btn:hover, .nav a:hover, footer a:hover { text-decoration: none; }
+.wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.nav { position: sticky; top: 0; z-index: 5; background: var(--bar); border-bottom: 1px solid var(--line); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+.nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+.mark { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 17px; color: var(--fg); }
+.links { display: flex; gap: 24px; margin-left: 12px; font-size: 14px; }
+.links a { color: var(--muted); transition: color 120ms; }
+.links a:hover { color: var(--fg); }
+.nav .btn { margin-left: auto; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 34px; padding: 0 14px; border-radius: 999px; font-size: 14px; font-weight: 500; white-space: nowrap; transition: background 120ms, border-color 120ms; }
+.btn.primary { background: #EDEDED; color: #0A0A0A; }
+.btn.primary:hover { background: #FFFFFF; }
+.btn.outline { color: var(--fg); box-shadow: 0 0 0 1px #3A3A3A inset; }
+.btn.outline:hover { background: #111111; }
+.btn.lg { height: 44px; padding: 0 22px; font-size: 15px; }
+@keyframes up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.hero { min-height: calc(78vh - 64px); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-top: 72px; padding-bottom: 72px; }
+.hero > * { animation: up 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.hero .lead { animation-delay: 120ms; } .hero .ctas { animation-delay: 220ms; } .hero .cmd { animation-delay: 320ms; }
+@media (prefers-reduced-motion: reduce) { .hero > * { animation: none; } }
+h1 { font: 600 clamp(44px, 8vw, 84px)/1.02 var(--display); letter-spacing: -0.055em; margin: 0 auto; max-width: 13ch; text-wrap: balance; color: #F2F2F2; }
+h1 span { display: block; color: #8F8F8F; }
+.lead { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 46ch; margin: 26px auto 0; text-wrap: balance; line-height: 1.5; }
+.ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+.cmd { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--soft); margin-top: 22px; }
+.cmd code { font: 13px var(--mono); color: var(--muted); border: 1px solid var(--line); padding: 4px 10px; border-radius: 8px; }
+.cmd.left { justify-content: flex-start; margin-top: 28px; }
+.strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.strip ul { list-style: none; margin: 0; padding: 30px 0; display: flex; flex-wrap: wrap; gap: 18px 44px; justify-content: space-between; align-items: center; }
+.strip li { font: 600 20px/1 var(--display); letter-spacing: -0.02em; color: #7A7A7A; }
+section.block { padding-top: 120px; }
+h2 { font: 600 clamp(32px, 5vw, 56px)/1.05 var(--display); letter-spacing: -0.045em; margin: 0; max-width: 18ch; text-wrap: balance; color: #F2F2F2; }
+h2 span { color: #8F8F8F; }
+.sub { color: var(--muted); font-size: 18px; max-width: 56ch; margin: 18px 0 0; line-height: 1.5; }
+figure { margin: 48px 0 0; }
+figcaption { font-size: 12px; color: var(--soft); margin-bottom: 14px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.win { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
+.bar { height: 36px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 7px; padding: 0 13px; position: relative; }
+.bar i { width: 10px; height: 10px; border-radius: 50%; display: block; background: #2A2A2A; }
+.bar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; color: var(--soft); }
+.convo { padding: 22px; display: grid; gap: 14px; }
+.convo p { margin: 0; font-size: 15px; line-height: 1.5; }
+.convo .me { justify-self: end; max-width: 80%; background: #1A1A1A; padding: 10px 14px; border-radius: 16px; }
+.convo .ai { color: var(--muted); }
+.kcard { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; background: #050505; }
+.kcard .k { font-size: 12px; color: var(--soft); display: inline-flex; gap: 6px; align-items: center; }
+.kcard .cup { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: var(--accent); color: #FFFFFF; }
+.row2 { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px; font-size: 13px; box-shadow: 0 0 0 1px #3A3A3A inset; color: var(--fg); }
+.pill.solid { background: #EDEDED; color: #0A0A0A; box-shadow: none; }
+.phone { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.phone .who { margin: 0 0 6px; display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 14px; }
+.av { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--accent); color: #FFFFFF; }
+.b { display: inline-flex; align-items: center; gap: 8px; max-width: 85%; padding: 8px 12px; border-radius: 16px; font-size: 14px; line-height: 1.4; }
+.b.in { align-self: flex-start; background: #1A1A1A; border-bottom-left-radius: 6px; }
+.b.out { align-self: flex-end; background: var(--accent); color: #FFFFFF; border-bottom-right-radius: 6px; }
+.b small { font-size: 11px; opacity: 0.8; }
+.wave { display: inline-block; width: 70px; height: 14px; background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 5px); -webkit-mask: linear-gradient(transparent 30%, #000 30% 70%, transparent 70%), linear-gradient(90deg, #000 0 100%); opacity: 0.85; border-radius: 2px; }
+.feats { list-style: none; padding: 0; margin: 48px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.feats li { display: grid; gap: 18px; align-content: start; }
+.feats .art { height: 260px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); display: grid; place-items: center; padding: 20px; overflow: hidden;
+  background-image: radial-gradient(circle at 1px 1px, #1C1C1C 1px, transparent 0); background-size: 22px 22px; }
+.feats p, .cards p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.45; }
+.feats b, .cards b { color: var(--fg); font-weight: 500; }
+.ill { width: 100%; max-width: 280px; display: flex; flex-direction: column; gap: 8px; }
+.ill .b { font-size: 13px; }
+.ill .star { gap: 6px; }
+.ill.brew .draft { border: 1px dashed #3A3A3A; border-radius: 12px; padding: 10px 12px; font-size: 13px; display: grid; gap: 4px; background: #050505; }
+.ill.brew .draft small { color: var(--accent); font-size: 11px; font-weight: 600; }
+.ill.circle .tabs { display: flex; gap: 6px; font-size: 11px; color: var(--soft); }
+.ill.circle .tabs span { padding: 4px 8px; border-radius: 999px; display: inline-flex; gap: 4px; align-items: center; }
+.ill.circle .tabs .on { background: #1A1A1A; color: var(--fg); }
+.ill.circle .q { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 4px; background: #050505; font-size: 13px; }
+.ill.circle .q small { color: var(--soft); font-size: 11px; }
+.ill.circle em { color: var(--good); font-style: normal; font-weight: 600; }
+.cards { list-style: none; padding: 0; margin: 44px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.cards li { padding: 28px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-height: 150px; }
+.final { text-align: center; padding: 140px 0 120px; }
+.final h2, .final .sub { margin-left: auto; margin-right: auto; }
+footer { border-top: 1px solid var(--line); padding: 28px 0 44px; font-size: 13px; color: var(--soft); }
+footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; }
+footer a { color: var(--soft); }
+footer a:hover { color: var(--fg); }
+footer .sp { margin-left: auto; }
+@media (max-width: 860px) {
+  .links { display: none; }
+  .stage, .feats, .cards { grid-template-columns: minmax(0, 1fr); }
+  .hero { min-height: auto; padding-top: 88px; }
+  section.block { padding-top: 88px; }
+  .strip ul { justify-content: center; gap: 14px 28px; }
+  .strip li { font-size: 16px; }
+  footer .sp { margin-left: 0; }
+}
+`;
+
 const CUP = (size: number) =>
   html`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="translate(0 -2)"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9z"></path><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16"></path></g></svg>`;
 
@@ -836,77 +941,90 @@ export function button(action: string, label: string, csrf: string, kind?: 'prim
 export function landing(github: boolean, hasLegal = false, mcpUrl = '', guest = false) {
   const t = copy.landing;
   const signIn = github ? t.signInGitHub : t.signIn;
+  const e = t.example;
   const dots = html`<i></i><i></i><i></i>`;
   const win = (title: string, body: unknown) => html`<div class="win"><div class="bar">${dots}<span>${title}</span></div>${body}</div>`;
-  const steps = t.how.steps.map(
-    (step, index) => html`<li class="step">
-      <div class="copy"><span class="num">${String(index + 1).padStart(2, '0')}</span><h3>${step.title}</h3><p>${step.line}</p></div>
-      ${win(step.window, html`<div class="card" aria-hidden="true">${step.example}</div>`)}
-    </li>`,
-  );
-  const tiles = (list: readonly { title: string; line: string }[]) =>
-    html`<ul class="grid3">${list.map((tile) => html`<li class="tile"><h3>${tile.title}</h3><p>${tile.line}</p></li>`)}</ul>`;
+  // Each feature's card shows a small drawing of it, made of the page's own shapes (no images).
+  const drawing = (kind: string) =>
+    kind === 'chat'
+      ? html`<div class="ill chat"><span class="b in">Saturday still on?</span><span class="b out">Yes! 11 at the museum.</span><span class="b in voice">${ic('mic', 14)}<i class="wave"></i><small>0:07</small></span><span class="b out star">See you there ${ic('star', 12)}</span></div>`
+      : kind === 'brew'
+        ? html`<div class="ill brew"><span class="b in">Can you send me the slides?</span><div class="draft"><small>Draft</small>Sure, here they are. Shout if anything is missing.</div><div class="row2"><span class="pill solid">Send</span><span class="pill">Brew again</span></div></div>`
+        : html`<div class="ill circle"><div class="tabs"><span class="on">Ask around</span><span># general</span><span>${ic('pin', 11)} news</span></div><div class="q"><b>Brunch on Sunday, where?</b><small>Bob · 3 answers · <em>solved</em></small></div><div class="q"><b>Who has a ladder?</b><small>Carol · 1 answer</small></div></div>`;
+  const cards = (list: readonly { title: string; line: string }[], cls = '') =>
+    html`<ul class="cards${cls}">${list.map((x) => html`<li><p><b>${x.title}</b> ${x.line}</p></li>`)}</ul>`;
   return document(
     t.title,
-    LANDING_STYLE,
+    VLANDING_STYLE,
     html`<header class="nav"><div class="wrap">
       ${brand('#top')}
-      <nav class="links" aria-label="${t.nav.label}"><a href="#how">${t.nav.how}</a><a href="#safe">${t.nav.privacy}</a><a href="#tools">${t.nav.tools}</a><a href="#self">${t.nav.selfHost}</a></nav>
-      <a class="btn primary" href="/ui">${signIn}</a>
+      <nav class="links" aria-label="${t.nav.label}"><a href="#how">${t.nav.how}</a><a href="#features">${t.nav.features}</a><a href="#safe">${t.nav.privacy}</a><a href="#tools">${t.nav.tools}</a><a href="#self">${t.nav.selfHost}</a></nav>
+      <a class="btn outline" href="/ui">${signIn}</a>
     </div></header>`,
     html`<main id="top">
       <section class="hero wrap">
-        <p class="wordmark">${t.name}</p>
-        <p class="eyebrow"><b>${t.eyebrow[0]}</b> ${t.eyebrow[1]}</p>
         <h1>${t.headline[0]} <span>${t.headline[1]}</span></h1>
         <p class="lead">${t.lead}</p>
-        <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a>${guest ? html`<a class="btn quiet lg" href="/ui/guest">${copy.guest.landing}</a>` : html`<a class="btn quiet lg" href="#how">${t.howLink}</a>`}</div>
+        <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a>${guest ? html`<a class="btn outline lg" href="/ui/guest">${copy.guest.landing}</a>` : html`<a class="btn outline lg" href="#how">${t.howLink}</a>`}</div>
         ${mcpUrl ? html`<p class="cmd"><code>${t.connector(mcpUrl)[0]}</code><span>${t.connector(mcpUrl)[1]}</span></p>` : ''}
-        <p class="cmd"><code>${t.demo[0]}</code><span>${t.demo[1]}</span></p>
+      </section>
+
+      <section class="strip wrap" aria-label="${t.worksIn}"><ul>${t.apps.map((name) => html`<li>${name}</li>`)}</ul></section>
+
+      <section class="block wrap" id="how" aria-labelledby="how-title">
+        <h2 id="how-title">${e.heading}</h2>
+        <p class="sub">${e.sub}</p>
         <figure>
-          <figcaption>${t.example.caption}</figcaption>
+          <figcaption>${e.caption}</figcaption>
           <div class="stage" aria-hidden="true">
-            ${win(t.example.terminalTitle, html`<pre class="term">${t.example.terminal}</pre>`)}
             ${win(
-              t.example.pageTitle,
-              html`<div class="shot">
-                <span class="k">${t.example.pageKicker}</span>
-                <h3>${t.example.summary}</h3>
-                ${tagList([...t.example.tags])}
-                <div class="quote">${t.example.pageNote}</div>
-                <div class="row2"><span class="btn primary">${t.example.share}</span><span class="btn quiet">${t.example.notNow}</span></div>
-                <p class="small">${t.example.circle}</p>
+              e.chatTitle,
+              html`<div class="convo">
+                <p class="me">${e.you}</p>
+                <p class="ai">${e.assistant}</p>
+                <div class="kcard"><span class="k"><span class="cup">${CUP(12)}</span> Klatsch · ${e.cardTo}</span><p>${e.cardText}</p><div class="row2"><span class="pill solid">${e.send}</span><span class="pill">${e.edit}</span></div></div>
+              </div>`,
+            )}
+            ${win(
+              e.phoneTitle,
+              html`<div class="phone">
+                <p class="who">${avatarMini(e.friend)} ${e.friend}</p>
+                <span class="b in">${e.incoming}</span>
+                <span class="b out">${e.reply}</span>
+                <span class="b out voice">${ic('mic', 14)}<i class="wave"></i><small>${e.voice}</small></span>
               </div>`,
             )}
           </div>
         </figure>
       </section>
 
-      <section class="block wrap" id="how" aria-labelledby="how-title">
-        <span class="kicker">${t.how.kicker}</span>
-        <h2 id="how-title">${t.how.heading[0]} <span>${t.how.heading[1]}</span></h2>
-        <p class="sub">${t.how.sub}</p>
-        <ol class="steps">${steps}</ol>
+      <section class="block wrap" id="features" aria-labelledby="features-title">
+        <h2 id="features-title">${t.features.heading}</h2>
+        <p class="sub">${t.features.sub}</p>
+        <ul class="feats">${t.features.cards.map(
+          (x) => html`<li><div class="art" aria-hidden="true">${drawing(x.kind)}</div><p><b>${x.title}</b> ${x.line}</p></li>`,
+        )}</ul>
       </section>
 
-      <section class="band" id="safe" aria-labelledby="safe-title"><div class="wrap">
-        <span class="kicker">${t.privacy.kicker}</span>
+      <section class="block wrap" id="safe" aria-labelledby="safe-title">
         <h2 id="safe-title">${t.privacy.heading[0]} <span>${t.privacy.heading[1]}</span></h2>
-        ${tiles(t.privacy.tiles)}
-      </div></section>
+        ${cards(t.privacy.tiles)}
+      </section>
 
       <section class="block wrap" id="tools" aria-labelledby="tools-title">
-        <span class="kicker">${t.tools.kicker}</span>
         <h2 id="tools-title">${t.tools.heading}</h2>
-        ${tiles(t.tools.tiles)}
+        ${cards(t.tools.tiles, ' six')}
+        <p class="cmd left"><code>${t.demo[0]}</code><span>${t.demo[1]}</span></p>
       </section>
 
       <section class="final wrap" id="self" aria-labelledby="self-title">
         <h2 id="self-title">${t.selfHost.heading[0]} <span>${t.selfHost.heading[1]}</span></h2>
         <p class="sub">${t.selfHost.sub}</p>
-        <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a><a class="btn quiet lg" href="${t.links.selfHosting}">${t.selfHost.guide}</a></div>
+        <div class="ctas"><a class="btn primary lg" href="/ui">${signIn}</a><a class="btn outline lg" href="${t.links.selfHosting}">${t.selfHost.guide}</a></div>
       </section>
     </main>`,
     html`<footer><div class="wrap"><span>${t.footer.line}</span><a class="sp" href="${t.links.github}">${t.footer.github}</a><a href="${t.links.security}">${t.footer.security}</a><a href="${t.links.docs}">${t.footer.docs}</a>${hasLegal ? html`<a href="/privacy">${legal.footerPrivacy}</a><a href="/terms">${legal.footerTerms}</a><a href="/support">${legal.footerSupport}</a>` : ''}</div></footer>`,
   );
 }
+
+const avatarMini = (name: string) => html`<span class="av">${[...name][0]}</span>`;
