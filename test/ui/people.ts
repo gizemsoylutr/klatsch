@@ -29,7 +29,7 @@ export interface Person {
   /** No CSP violation, and every form post carried this relay's Origin and was not refused for it. */
   expectCleanBrowser(): Promise<void>;
   /** Goes to another page from Home's menu (⋯), or from a page's own tabs where it has them. */
-  goTo(label: 'Notes' | 'Circle' | 'Tokens' | 'Settings'): Promise<Response>;
+  goTo(label: 'Notes' | 'People & invites' | 'Tokens' | 'Settings'): Promise<Response>;
   /** Signs out from Home's menu. */
   signOut(): Promise<Response>;
 }

@@ -606,7 +606,7 @@ export const copy = {
   },
 
   circle: {
-    title: 'Your circles',
+    title: 'People & invites',
     none: 'You are not in a circle yet.',
     people: (count: number) => (count === 1 ? '· 1 person' : `· ${count} people`),
     owner: 'owner',

@@ -262,7 +262,7 @@ describe('Home: what needs the person first', () => {
   it('Home is a messenger: the other pages and Sign out in its menu; Settings keeps its tab', async () => {
     const t = setup();
     const page = await (await t.human(t.alice)).page();
-    assert.match(page, /<details class="menu">[\s\S]*<nav aria-label="Main"><a href="\/ui\/notes">Notes<\/a><a href="\/ui\/circle">Circle<\/a><a href="\/ui\/tokens">Tokens<\/a><a href="\/ui\/settings">Settings<\/a>/);
+    assert.match(page, /<details class="menu">[\s\S]*<nav aria-label="Main"><a href="\/ui\/notes">Notes<\/a><a href="\/ui\/circle">People &amp; invites<\/a><a href="\/ui\/tokens">Tokens<\/a><a href="\/ui\/settings">Settings<\/a>/);
     assert.match(page, /<form method="post" action="\/ui\/logout">[\s\S]*?Sign out<\/button><\/form>/);
     assert.match(await (await t.human(t.alice)).settings(), /<a href="\/ui\/settings" aria-current="page">Settings<\/a>/);
   });

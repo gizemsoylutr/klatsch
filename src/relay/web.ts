@@ -1228,7 +1228,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       user.display_name,
       chatSide(conversations, asks, c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto'),
       // On the first Home after signing in, the script opens the browser's own passkey dialog by itself, once.
-      html`<div class="scroll"><div class="inner"><div class="pick"><h1>${copy.chat.pick}</h1><p>${copy.chat.pickLine}</p></div>${guestLeft !== undefined ? guestBanner(guestLeft, c.get('csrf')) : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
+      html`<div class="scroll"><div class="inner dash"><div class="pick"><h1>${copy.chat.pick}</h1><p>${copy.chat.pickLine}</p></div>${guestLeft !== undefined ? guestBanner(guestLeft, c.get('csrf')) : ''}${offer ? passkeyOffer(c.get('csrf'), takeFirstHome(db, secret, c.get('session'))) : ''}${pushOffer ? pushOfferBox(vapidFromSecret(secret).publicKey, c.get('csrf')) : ''}${pushSync ? html`<span data-push-sync data-key="${vapidFromSecret(secret).publicKey}" data-csrf="${c.get('csrf')}" hidden></span><script src="/ui/push.js" defer></script>` : ''}${dashboard(
         user,
         klatsch.sipsOf(userId),
         klatsch.introsOf(userId),
@@ -1458,7 +1458,18 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
 
   web.get('/notes', (c) => show(c, copy.notesPage.title, 'notes', notesPage(klatsch.feedNotes(c.get('userId')), c.get('csrf'))));
 
-  web.get('/circle', (c) => show(c, copy.circle.title, 'circle', circlePage(c.get('userId'), klatsch.circlesOf(c.get('userId')), base(c), c.get('csrf'))));
+  // People and invites (friends, circles' members and links), in the messenger with the Circles tab open.
+  web.get('/circle', (c) =>
+    c.html(
+      messenger(
+        copy.circle.title,
+        circlesSide(c),
+        html`<header class="chathead"><a class="iconbtn back" href="/ui/circles" aria-label="${copy.circles.back}">${ic('back')}</a><div class="who"><h1>${copy.circle.title}</h1></div></header>
+          <div class="scroll"><div class="inner people">${circlePage(c.get('userId'), klatsch.circlesOf(c.get('userId')), base(c), c.get('csrf'))}</div></div>`,
+        true,
+      ),
+    ),
+  );
 
   // The owner turns the public join link off (new joins stop, members stay). Only the operator turns one on.
   web.post('/circles/:id/public', (c) => attempt(c, () => void klatsch.setJoinLink(c.get('userId'), c.req.param('id'), false), '/ui/circle'));
@@ -2724,7 +2735,7 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
       <a class="lockup" href="/ui"><span class="cup" aria-hidden="true">${CUP_MARK}</span>${copy.layout.brand}</a>
       <form method="post" action="/ui/friends/invite"><input type="hidden" name="csrf" value="${csrf}" /><button class="iconbtn" aria-label="${copy.circle.addFriend}" title="${copy.circle.addFriend}">${ic('plus')}</button></form>
       <details class="menu"><summary aria-label="${t.menu}" title="${t.menu}">${ic('more')}</summary>
-        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${nav.circle}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/starred">${ic('star', 16)} ${copy.chat.starred}</a><a href="/ui/device">${copy.chat.enterCode}</a>
+        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${copy.circle.title}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/starred">${ic('star', 16)} ${copy.chat.starred}</a><a href="/ui/device">${copy.chat.enterCode}</a>
           <form class="theme" method="post" action="/ui/theme" aria-label="${t.theme}"><input type="hidden" name="csrf" value="${csrf}" />${(['light', 'dark', 'auto'] as const).map(
             (v) => html`<button name="theme" value="${v}"${theme === v ? html` aria-pressed="true"` : ''} title="${t.themes[v]}" aria-label="${t.themes[v]}">${ic(v === 'light' ? 'sun' : v === 'dark' ? 'moon' : 'auto', 18)}</button>`,
           )}</form>
@@ -2736,7 +2747,7 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
       <a href="/ui/circles"${circles ? html` aria-current="page"` : ''}>${copy.circles.tab}</a>
     </nav>
     ${circles
-      ? circleList(circles.spaces, csrf, circles.current)
+      ? html`<a class="peoplelink" href="/ui/circle">${ic('plus', 16)} ${copy.circle.title}</a>${circleList(circles.spaces, csrf, circles.current)}`
       : conversations.length
       ? html`<ul class="chats">${conversations.map((x) => {
           const ask = asking.get(x.other.handle);

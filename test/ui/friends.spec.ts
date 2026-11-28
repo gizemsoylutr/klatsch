@@ -31,7 +31,7 @@ for (const viewport of [
     test('Alice adds a friend; Eve opens the link and adds her back', async () => {
       const w = viewport.width;
       await alice.open(`${relay.base}/ui/circle`);
-      await alice.click(alice.page.getByRole('button', { name: 'Add a friend' }));
+      await alice.click(alice.page.locator('.pane').getByRole('button', { name: 'Add a friend' }));
       await expect(alice.page.getByText('Send this link to your friend, by any messenger.')).toBeVisible();
       link = await alice.page.locator('code').innerText();
       expect(link).toMatch(new RegExp(`^${relay.base}/ui/invite/[\\w-]+$`));
@@ -54,7 +54,7 @@ for (const viewport of [
       await eve.click(eve.page.getByRole('button', { name: 'Remove friend' }));
       await eve.open(`${relay.base}/ui/circle`);
       await expect(eve.page.getByText('@alice')).toHaveCount(0);
-      await expect(eve.page.getByRole('button', { name: 'Add a friend' })).toBeVisible();
+      await expect(eve.page.locator('.pane').getByRole('button', { name: 'Add a friend' })).toBeVisible();
     });
   });
 }

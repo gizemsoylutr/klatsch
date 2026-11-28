@@ -422,7 +422,10 @@ ol.starred a:hover { text-decoration: none; filter: brightness(1.05); }
 .replyto q { color: var(--muted); quotes: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .replyto small { color: var(--muted); font-size: 12px; }
 /* Home inside the messenger: the pane's own heading says it; the old greeting and counts would repeat it. */
-.mess .pane .scroll .ph, .mess .pane .scroll .chips { display: none; }
+.mess .pane .scroll .dash .ph, .mess .pane .scroll .dash .chips { display: none; }
+.mess .people > .ph h1 { display: none; }
+.peoplelink { display: flex; align-items: center; gap: 8px; margin: 0 12px 6px; padding: 10px 12px; border-radius: 12px; color: var(--fg); font-size: 14px; }
+.peoplelink:hover { background: var(--sunk); text-decoration: none; }
 form.typebar { display: flex; align-items: flex-end; gap: 6px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
 .typebar textarea { flex: 1; min-width: 0; min-height: 42px; max-height: 160px; resize: none; border: 0; border-radius: 21px; padding: 10px 16px; background: var(--sunk); color: var(--fg); font: inherit; field-sizing: content; }
 .typebar textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
