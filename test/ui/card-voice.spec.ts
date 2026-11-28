@@ -45,7 +45,8 @@ test.describe.serial('voice notes in the card', () => {
     relay.klatsch.addMember(relay.klatsch.friendCircle(alice), eve, alice);
     aliceChat = await agent(relay, relay.chatAppToken(alice), { dialogs: false, cards: true });
     const resource = (await aliceChat.readResource('ui://klatsch/card.html')).contents[0] as { text: string; _meta?: { ui?: { permissions?: unknown } } };
-    expect(resource._meta?.ui?.permissions).toEqual({ microphone: {}, clipboardWrite: {} });
+    // Not asked for while the directories review Klatsch; a host may still give it, as the second test does.
+    expect(resource._meta?.ui?.permissions).toBeUndefined();
     cardPage = resource.text;
   });
   test.afterAll(async () => {
@@ -90,7 +91,7 @@ test.describe.serial('voice notes in the card', () => {
     await expect(card.getByText(/^Sent/)).toBeVisible();
     await expect(card.getByRole('list', { name: 'Messages' })).toContainText('Voice note');
     const last = relay.klatsch.conversation(eve, '@alice').messages.at(-1)!;
-    expect(last.text).toBe('🎤 Voice note');
+    expect(last.text).toBe('Voice note');
     expect(last.files[0]!.mime).toMatch(/^audio\//);
     expect(last.files[0]!.size).toBeGreaterThan(1000);
     await context.close();

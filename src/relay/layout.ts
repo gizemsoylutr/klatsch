@@ -158,6 +158,7 @@ button.link:hover { text-decoration: underline; }
 button.mic { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 999px; font-size: 20px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 button.mic.on { background: #FF3B30; color: #FFFFFF; transform: scale(1.15); }
 .msg audio { width: 260px; height: 40px; display: block; }
+svg.ic { display: inline-block; vertical-align: -0.2em; flex-shrink: 0; }
 .lg, .sheet button, .sheet a.button { min-height: 44px; padding: 10px 22px; font-size: 15px; }
 input[type="email"], input[name="code"], input[name="handle"], input[name="how"] { font: inherit; width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px;
   border: 1px solid var(--line); background: var(--sunk); color: var(--fg); }
@@ -286,8 +287,8 @@ form.composer:has(input:valid) button.send { background: var(--accent); color: #
 details.keeps { font-size: 13px; color: var(--muted); }
 details.keeps summary { cursor: pointer; list-style: none; width: fit-content; }
 details.keeps summary::-webkit-details-marker { display: none; }
-details.keeps summary::after { content: " ›"; }
-details.keeps[open] summary::after { content: " ⌄"; }
+details.keeps summary::after { content: " ›"; display: inline-block; transition: transform 150ms; }
+details.keeps[open] summary::after { transform: rotate(90deg); }
 details.keeps > *:not(summary) { margin-top: 8px; }
 .chat form:not(.composer) { display: grid; gap: 10px; }
 .chat form:not(.composer) button { min-height: 46px; font-size: 15px; border-radius: 999px; }
@@ -370,6 +371,7 @@ details.menu > nav form.theme button[aria-pressed="true"] { background: var(--su
 .msgmenu .pop form { display: block; }
 .msgmenu .pop button, .msgmenu .pop summary { display: block; width: 100%; text-align: left; padding: 9px 12px; border-radius: 8px; background: transparent; color: var(--fg); box-shadow: none; font: 400 14px/1.2 var(--sans); min-height: 0; cursor: pointer; list-style: none; }
 .msgmenu .pop summary::-webkit-details-marker { display: none; }
+.msgmenu .pop button { display: flex; align-items: center; justify-content: flex-start; gap: 10px; }
 .msgmenu .pop button:hover, .msgmenu .pop summary:hover { background: var(--chip); }
 .msgmenu .del[open] > summary { color: var(--muted); }
 .msgmenu .del form button { color: #FF3B30; padding-left: 20px; }
@@ -555,6 +557,31 @@ export const heart = (size = 14) =>
 
 /** The cup on top of a sheet. */
 export const icon = () => html`<span class="cup lg" aria-hidden="true">${CUP(28)}</span>`;
+/**
+ * The interface's icons: one line weight, one colour (the text's), the same on every device, unlike emoji. Drawn on a
+ * 24-unit grid; `ICON_PATHS` is shared with the chat card's script, which builds the same icons.
+ */
+export const ICON_PATHS = {
+  clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/>',
+  star: '<path d="m12 2.5 2.94 5.96 6.56.95-4.75 4.63 1.12 6.54L12 17.5l-5.87 3.08 1.12-6.54L2.5 9.41l6.56-.95z"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+  ban: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  auto: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/>',
+  send: '<path d="M14.54 21.69a.5.5 0 0 0 .94-.03l6.5-19a.5.5 0 0 0-.64-.63l-19 6.5a.5.5 0 0 0-.02.93l7.93 3.18a2 2 0 0 1 1.11 1.11z"/><path d="m21.85 2.15-10.94 10.94"/>',
+  back: '<path d="m15 18-6-6 6-6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+  down: '<path d="m6 9 6 6 6-6"/>',
+  reply: '<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+  close: '<path d="M18 6 6 18M6 6l12 12"/>',
+} as const;
+export type IconName = keyof typeof ICON_PATHS;
+/** One icon, hidden from screen readers (the button or link around it carries the words). */
+export const ic = (name: IconName, size = 20) =>
+  html`<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${raw(ICON_PATHS[name])}</svg>`;
 /** The cup at the size of a chat list's sign. */
 export const CUP_MARK = CUP(16);
 

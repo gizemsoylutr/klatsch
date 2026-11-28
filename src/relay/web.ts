@@ -53,7 +53,7 @@ import { PASSKEY_SCRIPT } from './passkey-script.ts';
 import { ICON_SVG, MANIFEST, PUSH_SCRIPT, SERVICE_WORKER } from './push-script.ts';
 import { RECORD_SCRIPT } from './record-script.ts';
 import { vapidFromSecret } from '../notify/push.ts';
-import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer, chip, GITHUB_ICON, GOOGLE_ICON, KEY_ICON, messenger, CUP_MARK } from './layout.ts';
+import { avatar, button, dialog, githubLink, googleLink, heart, icon, outcome, pair, screen, signInScreen, tagList, type Tab, type Viewer, chip, GITHUB_ICON, GOOGLE_ICON, KEY_ICON, messenger, CUP_MARK, ic, type IconName } from './layout.ts';
 
 const COOKIE = 'klatsch_session';
 /** A key to the page a visitor without a session wanted, for the redirect after the login link. */
@@ -1137,7 +1137,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
                 ? html`<form class="composer" method="post" action="${EMAIL_PATH}">
                     <input type="hidden" name="csrf" value="${token}" />
                     <input type="email" name="email" maxlength="254" required autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="${t.composer}" aria-label="${t.emailLabel}" />
-                    <button class="primary send" aria-label="${t.email}">➤</button>
+                    <button class="primary send" aria-label="${t.email}">${ic('send', 18)}</button>
                   </form>`
                 : ''}
               ${passkey ? passkeyScript() : ''}
@@ -2343,7 +2343,7 @@ export function webRoutes(klatsch: Klatsch, secret: Buffer): Hono<Env> {
       messenger(
         t.starredTitle,
         chatSide(klatsch.conversationsOf(userId), klatsch.asksOf(userId), c.get('csrf'), undefined, getCookie(c, THEME_COOKIE) ?? 'auto'),
-        html`<header class="chathead"><a class="iconbtn back" href="/ui" aria-label="${t.back}">‹</a><div class="who"><h1>${t.starredTitle}</h1></div></header>
+        html`<header class="chathead"><a class="iconbtn back" href="/ui" aria-label="${t.back}">${ic('back')}</a><div class="who"><h1>${t.starredTitle}</h1></div></header>
           <div class="scroll"><div class="inner">${starred.length
             ? html`<ol class="starred">${starred.map(
                 (m) => html`<li><a href="/ui/chat/${encodeURIComponent(m.other.handle)}#m-${m.id}"><span class="m">${m.mine ? t.you : m.other.name} · ${shortWhen(m.at)}</span><p>${m.text}</p></a></li>`,
@@ -2597,11 +2597,11 @@ function chatSide(conversations: ConversationSummary[], asks: AskView[], csrf: s
   const asking = new Map(asks.filter((k) => k.role === 'helper' && k.state === 'open').map((k) => [k.other.handle, k.question]));
   return html`<div class="head">
       <a class="lockup" href="/ui"><span class="cup" aria-hidden="true">${CUP_MARK}</span>${copy.layout.brand}</a>
-      <form method="post" action="/ui/friends/invite"><input type="hidden" name="csrf" value="${csrf}" /><button class="iconbtn" aria-label="${copy.circle.addFriend}" title="${copy.circle.addFriend}">＋</button></form>
-      <details class="menu"><summary aria-label="${t.menu}" title="${t.menu}">⋯</summary>
-        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${nav.circle}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/starred">${copy.chat.starred}</a><a href="/ui/device">${copy.chat.enterCode}</a>
+      <form method="post" action="/ui/friends/invite"><input type="hidden" name="csrf" value="${csrf}" /><button class="iconbtn" aria-label="${copy.circle.addFriend}" title="${copy.circle.addFriend}">${ic('plus')}</button></form>
+      <details class="menu"><summary aria-label="${t.menu}" title="${t.menu}">${ic('more')}</summary>
+        <nav aria-label="${nav.label}"><a href="/ui/notes">${nav.notes}</a><a href="/ui/circle">${nav.circle}</a><a href="/ui/tokens">${nav.tokens}</a><a href="/ui/settings">${nav.settings}</a><a href="/ui/starred">${ic('star', 16)} ${copy.chat.starred}</a><a href="/ui/device">${copy.chat.enterCode}</a>
           <form class="theme" method="post" action="/ui/theme" aria-label="${t.theme}"><input type="hidden" name="csrf" value="${csrf}" />${(['light', 'dark', 'auto'] as const).map(
-            (v) => html`<button name="theme" value="${v}"${theme === v ? html` aria-pressed="true"` : ''} title="${t.themes[v]}" aria-label="${t.themes[v]}">${t.themeIcons[v]}</button>`,
+            (v) => html`<button name="theme" value="${v}"${theme === v ? html` aria-pressed="true"` : ''} title="${t.themes[v]}" aria-label="${t.themes[v]}">${ic(v === 'light' ? 'sun' : v === 'dark' ? 'moon' : 'auto', 18)}</button>`,
           )}</form>
           <form method="post" action="/ui/logout"><input type="hidden" name="csrf" value="${csrf}" /><button>${copy.dashboard.signOut}</button></form></nav>
       </details>
@@ -2648,11 +2648,11 @@ function askBubble(k: AskView, csrf: string) {
  */
 function msgMenu(m: ConversationView['messages'][number], csrf: string) {
   const t = copy.chat;
-  const act = (action: string, label: string) =>
-    html`<form method="post" action="/ui/messages/${m.id}/${action}"><input type="hidden" name="csrf" value="${csrf}" /><button>${label}</button></form>`;
+  const act = (action: string, label: string, icon?: IconName) =>
+    html`<form method="post" action="/ui/messages/${m.id}/${action}"><input type="hidden" name="csrf" value="${csrf}" /><button>${icon ? ic(icon, 16) : ''}<span>${label}</span></button></form>`;
   const forAll = m.mine && !m.deleted && Date.now() - m.at < 2 * DAY_MS;
-  return html`<details class="msgmenu"><summary aria-label="${t.options}" title="${t.options}">⌄</summary><div class="pop">
-    ${m.deleted ? '' : html`${act(m.starred ? 'unstar' : 'star', m.starred ? t.unstar : t.star)}${act(m.pinned ? 'unpin' : 'pin', m.pinned ? t.unpin : t.pin)}`}
+  return html`<details class="msgmenu"><summary aria-label="${t.options}" title="${t.options}">${ic('down', 16)}</summary><div class="pop">
+    ${m.deleted ? '' : html`${act(m.starred ? 'unstar' : 'star', m.starred ? t.unstar : t.star, 'star')}${act(m.pinned ? 'unpin' : 'pin', m.pinned ? t.unpin : t.pin, 'pin')}`}
     <details class="del"><summary>${t.del}</summary>${act('hide', t.delForMe)}${forAll ? act('delete', t.delForAll) : ''}</details>
   </div></details>`;
 }
@@ -2664,26 +2664,26 @@ function chatPane(view: ConversationView, csrf: string, files = true, asks: AskV
   const answering = asks.find((k) => k.role === 'helper' && k.state === 'open');
   const handle = encodeURIComponent(view.other.handle);
   return html`<header class="chathead">
-      <a class="iconbtn back" href="/ui" aria-label="${t.back}">‹</a>
+      <a class="iconbtn back" href="/ui" aria-label="${t.back}">${ic('back')}</a>
       ${avatar(view.other.name, { blue: true })}
       <div class="who"><h1>${view.other.name}</h1><span>@${view.other.handle}</span></div>
     </header>
-    ${view.pinned && !view.pinned.deleted ? html`<a class="pinbar" href="#m-${view.pinned.id}"><span>📌 ${t.pinnedLabel}</span><q>${view.pinned.text}</q></a>` : ''}
+    ${view.pinned && !view.pinned.deleted ? html`<a class="pinbar" href="#m-${view.pinned.id}"><span>${ic('pin', 15)} ${t.pinnedLabel}</span><q>${view.pinned.text}</q></a>` : ''}
     <div class="stream">
       ${view.messages.length
         ? html`<ol class="thread" aria-label="${t.heading}">
             ${view.messages.map(
               (m) => html`<li class="msg${m.mine ? ' mine' : ''}${m.deleted ? ' gone' : ''}" id="m-${m.id}">
                 ${msgMenu(m, csrf)}
-                <p>${m.deleted ? t.deleted : m.text}</p>
+                <p>${m.deleted ? html`${ic('ban', 15)} ${t.deleted}` : m.text}</p>
                 ${m.files.length
                   ? html`<span class="files">${m.files.map((f) =>
                       f.mime.startsWith('audio/')
                         ? html`<audio controls preload="metadata" src="/ui/attachments/${f.id}" aria-label="${f.name}"></audio>`
-                        : html`<a href="/ui/attachments/${f.id}">📎 ${f.name}</a> `,
+                        : html`<a href="/ui/attachments/${f.id}">${ic('clip', 15)} ${f.name}</a> `,
                     )}</span>`
                   : ''}
-                <time datetime="${new Date(m.at).toISOString()}">${m.pinned ? '📌 ' : ''}${m.starred ? '⭐ ' : ''}${shortWhen(m.at)}</time>
+                <time datetime="${new Date(m.at).toISOString()}">${m.pinned ? ic('pin', 12) : ''}${m.starred ? ic('star', 12) : ''} ${shortWhen(m.at)}</time>
               </li>`,
             )}
             ${asks.map((k) => askBubble(k, csrf))}
@@ -2696,12 +2696,12 @@ function chatPane(view: ConversationView, csrf: string, files = true, asks: AskV
       ? html`<details class="chatmore"><summary>${t.draftMore}</summary>${howForm(`/ui/chat/${handle}/agent`, t.toAgent, t.how, t.howPlaceholder, csrf)}<p>${t.toAgentNote}</p></details>`
       : ''}
     ${files && !answering ? html`<p class="recstatus" data-record-status aria-live="polite"></p>` : ''}
-    ${answering ? html`<div class="replyto"><span>↩ ${t.answering(view.other.name)}</span><q>${answering.question}</q><small>${copy.asks.answerGoes(view.other.handle)}</small></div>` : ''}
+    ${answering ? html`<div class="replyto"><span>${ic('reply', 15)} ${t.answering(view.other.name)}</span><q>${answering.question}</q><small>${copy.asks.answerGoes(view.other.handle)}</small></div>` : ''}
     <form id="end" class="typebar" method="post" action="${answering ? `/ui/asks/${answering.id}/answer` : `/ui/chat/${handle}`}" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="${csrf}" />
       ${answering ? html`<input type="hidden" name="back" value="/ui/chat/${handle}" />` : ''}
       ${files
-        ? html`<label class="attach" title="${t.attach}">📎<input id="file" type="file" name="file" multiple aria-label="${t.attachLabel}" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" /></label>`
+        ? html`<label class="attach" title="${t.attach}">${ic('clip')}<input id="file" type="file" name="file" multiple aria-label="${t.attachLabel}" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,audio/*,.m4a,.mp3,.ogg,.wav,.webm" /></label>`
         : ''}
       ${answering
         ? html`<textarea id="text" name="answer" maxlength="500" required rows="1" placeholder="${copy.asks.yourAnswer}" aria-label="${copy.asks.yourAnswer}"></textarea>`
@@ -2709,10 +2709,10 @@ function chatPane(view: ConversationView, csrf: string, files = true, asks: AskV
       ${files && !answering
         ? html`<button type="button" class="mic" data-record data-action="/ui/chat/${handle}" data-csrf="${csrf}"
             data-hint="${t.recordHint}" data-recording="${t.recording}" data-locked="${t.recordLocked}" data-sending="${t.recordSending}" data-cancelled="${t.recordCancelled}"
-            data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">🎤</button>`
+            data-denied="${t.recordDenied}" data-failed="${t.recordFailed}" data-too-long="${t.recordTooLong}" aria-label="${t.record}" title="${t.record}">${ic('mic')}</button>`
         : ''}
-      ${files && !answering ? html`<button type="button" class="iconbtn reccancel" data-record-cancel hidden aria-label="${t.recordCancel}" title="${t.recordCancel}">✕</button>` : ''}
-      <button class="primary send" aria-label="${answering ? copy.asks.sendAnswer : t.send}">➤</button>
+      ${files && !answering ? html`<button type="button" class="iconbtn reccancel" data-record-cancel hidden aria-label="${t.recordCancel}" title="${t.recordCancel}">${ic('close')}</button>` : ''}
+      <button class="primary send" aria-label="${answering ? copy.asks.sendAnswer : t.send}">${ic('send', 18)}</button>
     </form><script src="/ui/record.js" defer></script>`;
 }
 

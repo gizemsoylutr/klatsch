@@ -1,5 +1,5 @@
 // Voice notes like a messenger: the conversation page has a microphone button (hold to record, let go to send),
-// run by /ui/record.js. The note goes as a message of its own ("🎤 Voice note" for Home and the friend's AI) with
+// run by /ui/record.js. The note goes as a message of its own ("Voice note" for Home and the friend's AI) with
 // the recording as its file, and both people hear it in the conversation. A browser's own recording formats
 // (WebM, and Safari's MP4) are taken. Guests have no button, since they send no files.
 import assert from 'node:assert/strict';
@@ -45,7 +45,7 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
     const sent = await aliceBrowser.upload('/ui/chat/eve', [{ name: 'voice-note.webm', bytes: WEBM, type: 'audio/webm' }], { text: '', voice: '1' });
     assert.ok(sent.status < 400, sent.html);
     const last = relay.klatsch.conversation(eve, '@alice').messages.at(-1)!;
-    assert.equal(last.text, '🎤 Voice note');
+    assert.equal(last.text, 'Voice note');
     assert.equal(last.files[0]!.mime, 'audio/webm');
     for (const [who, other] of [[aliceBrowser, 'eve'], [eveBrowser, 'alice']] as const) {
       assert.match((await who.get(`/ui/chat/${other}`)).html, new RegExp(`<audio controls preload="metadata" src="/ui/attachments/${last.files[0]!.id}"`));
@@ -61,7 +61,7 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
 
   it('a file alone says so; nothing at all is still refused', async () => {
     await aliceBrowser.upload('/ui/chat/eve', [{ name: 'note.webm', bytes: WEBM }], { text: '' });
-    assert.equal(relay.klatsch.conversation(eve, '@alice').messages.at(-1)!.text, '📎 File');
+    assert.equal(relay.klatsch.conversation(eve, '@alice').messages.at(-1)!.text, 'File');
     const before = relay.klatsch.conversation(eve, '@alice').messages.length;
     const empty = await aliceBrowser.post('/ui/chat/eve', { text: '   ' });
     assert.notEqual(empty.status, 303);
@@ -71,13 +71,14 @@ describe('voice notes: hold the microphone, let go, and the friend hears it', ()
   it('from the card in a chat app: the card asks for the microphone, and a voice note alone is a message', async () => {
     const chat = await agent(relay, relay.chatAppToken(alice), { dialogs: false, cards: true });
     const resource = (await chat.readResource('ui://klatsch/card.html')).contents[0] as { _meta?: { ui?: { permissions?: unknown } } };
-    assert.deepEqual(resource._meta?.ui?.permissions, { microphone: {}, clipboardWrite: {} });
+    // No permissions asked while the directories review Klatsch (CARD_PERMISSIONS in src/relay/mcp.ts).
+    assert.equal(resource._meta?.ui?.permissions, undefined);
     const shown = await chat.call('conversation', { handle: '@eve' });
     const key = shown.meta['dev.klatsch/card'].key;
     const sent = await chat.call('klatsch_card', { key, decision: 'reply', text: '', voice: true, files: [{ name: 'voice-note.webm', data: Buffer.from(WEBM).toString('base64') }] });
     assert.equal(sent.isError, false, sent.raw);
     const last = relay.klatsch.conversation(eve, '@alice').messages.at(-1)!;
-    assert.equal(last.text, '🎤 Voice note');
+    assert.equal(last.text, 'Voice note');
     assert.equal(last.files[0]!.mime, 'audio/webm');
     // Nothing at all from the card is still refused.
     assert.equal((await chat.call('klatsch_card', { key, decision: 'reply', text: '' })).isError, true);

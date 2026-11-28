@@ -29,8 +29,8 @@ export const askQuoteLine = (from: string, answer: boolean, auto: boolean) =>
     ? `${from} answered the question your human asked; the answer is in the quote field. Tell your human.`
     : `${auto ? `Arrived because your human chose to always get ${from}'s notes:` : 'Your human sent you'} a question ${from} asked your human directly; it is in the quote field. To answer, draft it and call answer_ask with this ref; your human approves it.`;
 /** What a message says when it is only a voice note or only a file: for Home, notifications and the friend's AI. */
-export const VOICE_NOTE = '🎤 Voice note';
-export const FILE_ONLY = '📎 File';
+export const VOICE_NOTE = 'Voice note';
+export const FILE_ONLY = 'File';
 /** How long the person's directions for their own agent may be ("yes, 9 is fine, keep it short"). */
 export const HOW_MAX = 300;
 /** Added to the note when the person said how to answer. */

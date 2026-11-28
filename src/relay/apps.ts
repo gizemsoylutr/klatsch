@@ -6,6 +6,7 @@ import type { Approval } from '../auth/approvals.ts';
 import { keyedHash, randomToken } from '../crypto.ts';
 import type { ApprovalView } from '../service.ts';
 import type { Db } from '../store/db.ts';
+import { ICON_PATHS } from './layout.ts';
 
 /**
  * Cards in the chat (MCP Apps, extension `io.modelcontextprotocol/ui`). In a chat app that shows them (ChatGPT,
@@ -207,7 +208,7 @@ export function questionCard(key: string, from: { name: string; handle: string }
     answerBox: { label: 'Your answer', placeholder: 'Write your answer', max: 500 },
     actions: [
       { decision: 'declined', label: 'Decline' },
-      { decision: 'draft', label: '☕ Brew a reply' },
+      { decision: 'draft', label: 'Brew a reply' },
       { decision: 'answer', label: 'Send answer', primary: true },
     ],
   };
@@ -297,6 +298,9 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
   const app = new App({ name: 'Klatsch card', version: '1' });
   const root = document.getElementById('card');
   const el = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
+  // The page's own line icons (constants, never anyone's text), before a label.
+  const ICONS = ${JSON.stringify(ICON_PATHS)};
+  const withIcon = (n, name) => { n.insertAdjacentHTML('afterbegin', '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>'); return n; };
   let current = null;
   /** After a decision: chat apps cannot say when an answer arrives, so the card offers notifications. */
   const notifyOffer = () => {
@@ -426,7 +430,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
         li.append(el('span', (m.mine ? 'You' : chat.with.name) + ' · ' + new Date(m.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'who'));
         if (m.text) li.append(el('span', m.text, 'text'));
         for (const f of m.files || []) {
-          const b = el('button', '📎 ' + f.name); b.type = 'button';
+          const b = withIcon(el('button', ' ' + f.name), 'clip'); b.type = 'button';
           b.addEventListener('click', () => app.openLink({ url: f.url }).catch(() => {}));
           li.append(b);
         }
@@ -449,13 +453,13 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
     }
     const said = el('p', '', 'note');
     const send = el('button', 'Send', 'primary'); send.type = 'button';
-    const draft = el('button', '☕ Brew a reply'); draft.type = 'button';
+    const draft = el('button', 'Brew a reply'); draft.type = 'button';
     const page = el('button', 'Open in Klatsch'); page.type = 'button';
     page.addEventListener('click', () => app.openLink({ url: chat.page }).catch(() => {}));
     const fail = (result) => { let why = 'That did not work.'; try { why = JSON.parse(result.content[0].text).message || why; } catch {} said.textContent = why; };
     // Hold to talk, like a messenger. Where the chat app gives the card no microphone, the same button opens the
     // conversation on the Klatsch page, which records.
-    const mic = chat.files === false ? null : el('button', '🎤', 'mic');
+    const mic = chat.files === false ? null : withIcon(el('button', undefined, 'mic'), 'mic');
     if (mic) {
       mic.type = 'button'; mic.title = 'Hold to record a voice note'; mic.setAttribute('aria-label', mic.title);
       const perms = ((app.getHostCapabilities() || {}).sandbox || {}).permissions;
@@ -559,7 +563,7 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent);
       const list = el('div', undefined, 'row');
       list.style.justifyContent = 'flex-start';
       for (const f of card.files) {
-        const b = el('button', '📎 ' + f.name); b.type = 'button';
+        const b = withIcon(el('button', ' ' + f.name), 'clip'); b.type = 'button';
         b.addEventListener('click', () => app.openLink({ url: f.url }).catch(() => {}));
         list.append(b);
       }

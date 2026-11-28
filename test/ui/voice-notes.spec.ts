@@ -43,7 +43,7 @@ test('Alice holds the microphone, talks, lets go, and Eve hears the voice note',
 
   // Hands-free: a tap starts recording without holding; a second tap sends.
   await mic.click();
-  await expect(a.page.getByText(/tap 🎤 to send/)).toBeVisible();
+  await expect(a.page.getByText(/tap the microphone to send/)).toBeVisible();
   await a.page.waitForTimeout(1200);
   await Promise.all([a.page.waitForEvent('load'), mic.click()]);
   await expect(a.page.locator('.msg.mine audio')).toHaveCount(2);
@@ -57,9 +57,9 @@ test('Alice holds the microphone, talks, lets go, and Eve hears the voice note',
   await expect(a.page.locator('.msg.mine p').last()).toHaveText('First line\nsecond line');
 
   const voice = relay.klatsch.conversation(eve, '@alice').messages.filter((m) => m.files.length).at(-1)!;
-  expect(voice.text).toBe('🎤 Voice note');
+  expect(voice.text).toBe('Voice note');
   const sent = voice;
-  expect(sent.text).toBe('🎤 Voice note');
+  expect(sent.text).toBe('Voice note');
   expect(sent.files[0]!.mime).toMatch(/^audio\//);
   expect(sent.files[0]!.size).toBeGreaterThan(1000);
   await a.expectCleanBrowser();

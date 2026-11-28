@@ -122,6 +122,13 @@ function failure(error: unknown): CallToolResult {
  * that renders dialogs the code waits in a dialog until the human is done;
  * elsewhere the agent shows the code itself.
  */
+/**
+ * What the card asks the chat app for. Off while the app directories review Klatsch (a card asking for the microphone
+ * needs a reason in the submission): without it, the card's microphone opens the conversation on the Klatsch page,
+ * which records. Set to { microphone: {}, clipboardWrite: {} } once the listing is approved.
+ */
+const CARD_PERMISSIONS: Record<string, Record<string, never>> | undefined = undefined;
+
 export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthInfo | undefined, era: 'legacy' | 'modern', base: string): McpServer {
   // What a chat app shows about the server: its name, site and icon.
   const server = new McpServer(
@@ -620,7 +627,7 @@ export function buildMcpServer(klatsch: Klatsch, secret: Buffer, authInfo: AuthI
     'Klatsch card',
     CARD_URI,
     { title: 'Klatsch card', description: 'Where your human decides a Klatsch request, or answers a question, inside the chat.', mimeType: RESOURCE_MIME_TYPE },
-    async () => ({ contents: [{ uri: CARD_URI, mimeType: RESOURCE_MIME_TYPE, text: cardHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] }, permissions: { microphone: {}, clipboardWrite: {} } } } }] }),
+    async () => ({ contents: [{ uri: CARD_URI, mimeType: RESOURCE_MIME_TYPE, text: cardHtml(), _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] }, ...(CARD_PERMISSIONS ? { permissions: CARD_PERMISSIONS } : {}) } } }] }),
   );
 
   {
